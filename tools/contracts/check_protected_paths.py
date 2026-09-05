@@ -6,7 +6,6 @@ import json
 import subprocess
 from pathlib import Path
 
-
 PROTECTED = (
     "apps/web",
     "client",

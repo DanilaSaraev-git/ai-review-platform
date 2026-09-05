@@ -1,6 +1,6 @@
 # HTTP v1 implementation clarifications
 
-Status: normative for feature 003. Baseline payload schema is `review-platform-contract-v1.0.1`; changes below are additive/documentary and must become root contract `v1.0.2` before implementation depends on them.
+Status: normative for the feature-003 public HTTP surface. Baseline payload schema is `review-platform-contract-v1.0.1`; the additive/documentary changes below became root contract `v1.0.2`. Internal execution follows [runtime-semantics.md](runtime-semantics.md): the local MVP is synchronous, while queue/outbox/lease behavior is deferred.
 
 ## Required v1.0.2 delta
 
@@ -30,13 +30,13 @@ If a change requires a new mandatory request/response field, removes a field/enu
 | `createReviewProfile` | create family/version | malformed/system target `400`, namespace/missing ref `404`, stale/unchanged `409` |
 | `listModelProfiles` | list safe selectable metadata | namespace `404`; never credentials |
 | `listReviewRuns` | stable cursor history | invalid cursor `400`, namespace `404` |
-| `createReviewRun` | requested sources + exact config snapshot and outbox | malformed request/ref `400`, missing/namespace ref `404`, idempotency/body conflict `409` |
+| `createReviewRun` | requested sources + exact config snapshot + synchronous local execution | malformed request/ref `400`, missing/namespace ref `404`, idempotency/body conflict `409` |
 | `getReviewRun` | read state/progress/error | resource/namespace `404` |
 | `cancelReviewRun` | request cooperative cancel | resource/namespace `404`, terminal/publish-won `409` |
 | `getReviewReport` | stream exact canonical bytes | resource/namespace `404`, not published `409`; stable ETag |
 | `listFindingStates` | mutable overlay list | resource/namespace `404`, report unavailable `409` |
 | `getFindingDialogue` | read ordered dialogue projection | resource/namespace `404`, report unavailable `409` |
-| `createFindingDialogueTurn` | create one member turn + outbox | malformed body `400`, resource/namespace `404`, stale/blocked/key conflict `409` |
+| `createFindingDialogueTurn` | create one member turn + synchronous local response | malformed body `400`, resource/namespace `404`, stale/blocked/key conflict `409` |
 | `retryFindingDialogueTurn` | add attempt to failed turn | malformed body `400`, resource/namespace `404`, stale/non-failed/key conflict `409` |
 | `putFindingDecision` | CAS human decision | malformed/invalid decision body `400`, resource/namespace `404`, stale/state conflict `409` |
 
@@ -72,10 +72,8 @@ Client cannot choose SemVer in v1. A future major/minor workflow requires an add
 
 ## Document extraction projection
 
-- Upload response `201` means exact bytes are durable and metadata registered.
-- It normally returns `pending`; no parsing is promised inside the HTTP request.
-- Create run first snapshots requested source identity/order/role plus exact config refs; terminal status and fragment IDs are not invented at this stage.
-- `preparing` calls single-writer, idempotent and crash-recoverable extraction for every pending source, then fixes its prepared-source status/fragment IDs/diagnostics append-once before `reviewing`.
+- Upload response `201` means exact bytes, metadata and deterministic extraction result are durable in the synchronous local MVP. The canonical `pending` value remains reserved for a future asynchronous profile.
+- Create run snapshots requested source identity/order/role, immutable extraction fragments and exact config refs before synchronous review execution.
 - `completed|partial|failed` extraction results are immutable and visible on subsequent `get/list`.
 - A partial primary with usable fragments contributes source-level `CoverageGap(code=source_partial, fragment_id=null, reason=primary_source_partial)` plus the exact reviewed-or-gap partition of every known primary fragment. A primary with no usable fragment makes run failed. Optional context partial/failed becomes provenance/gap as defined by the skill contract.
 - In deterministic mode, input outside the trusted fixture digest/config allowlist yields a zero-finding partial report: every known primary target fragment is a fragment-level `CoverageGap(code=other, reason=semantic_analysis_not_performed)` and `reviewed_fragment_ids` is empty.

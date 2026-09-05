@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from tests.contract.contract_helpers import load_json_no_duplicates, validate_schema
-
 
 ROOT = Path(__file__).parents[2]
 SCHEMA = load_json_no_duplicates(
@@ -17,21 +15,37 @@ SCHEMA = load_json_no_duplicates(
 @pytest.mark.parametrize(
     ("kind", "payload"),
     [
-        ("execute_review", {"review_run_id": "00000000-0000-4000-8000-000000000001", "review_execution_id": "00000000-0000-4000-8000-000000000002"}),
-        ("generate_dialogue_turn", {"dialogue_id": "00000000-0000-4000-8000-000000000003", "dialogue_turn_id": "00000000-0000-4000-8000-000000000004", "generation_attempt_id": "00000000-0000-4000-8000-000000000005"}),
+        (
+            "execute_review",
+            {
+                "review_run_id": "00000000-0000-4000-8000-000000000001",
+                "review_execution_id": "00000000-0000-4000-8000-000000000002",
+            },
+        ),
+        (
+            "generate_dialogue_turn",
+            {
+                "dialogue_id": "00000000-0000-4000-8000-000000000003",
+                "dialogue_turn_id": "00000000-0000-4000-8000-000000000004",
+                "generation_attempt_id": "00000000-0000-4000-8000-000000000005",
+            },
+        ),
     ],
 )
 def test_attempt_specific_envelope(kind: str, payload: dict[str, str]) -> None:
-    validate_schema(SCHEMA, {
-        "schema_version": "job-envelope.v1",
-        "job_id": "00000000-0000-4000-8000-000000000006",
-        "organization_id": "00000000-0000-4000-8000-000000000007",
-        "workspace_id": "00000000-0000-4000-8000-000000000008",
-        "kind": kind,
-        "payload": payload,
-        "requested_by": "00000000-0000-4000-8000-000000000009",
-        "trace_id": "trace-1",
-    })
+    validate_schema(
+        SCHEMA,
+        {
+            "schema_version": "job-envelope.v1",
+            "job_id": "00000000-0000-4000-8000-000000000006",
+            "organization_id": "00000000-0000-4000-8000-000000000007",
+            "workspace_id": "00000000-0000-4000-8000-000000000008",
+            "kind": kind,
+            "payload": payload,
+            "requested_by": "00000000-0000-4000-8000-000000000009",
+            "trace_id": "trace-1",
+        },
+    )
 
 
 def test_duplicate_json_keys_are_rejected(tmp_path: Path) -> None:

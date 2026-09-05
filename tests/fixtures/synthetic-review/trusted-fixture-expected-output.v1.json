@@ -1,0 +1,30 @@
+{
+  "schema_version": "trusted-fixture-expected-output.v1",
+  "resource_id": "synthetic-review-v1",
+  "summary": "The synthetic retry rule needs a bounded terminal outcome.",
+  "reviewed_primary_fragment_ordinals": [1, 2, 3, 4],
+  "unreviewed_primary_fragments": [],
+  "findings": [
+    {
+      "local_id": "F-001",
+      "kind": "ambiguity",
+      "title": "Retry boundary is not defined",
+      "problem": "The retry rule does not define an attempt limit or terminal outcome.",
+      "reason": "Different implementations can stop or continue at different times.",
+      "question": "How many retry attempts are allowed and what terminal state follows exhaustion?",
+      "priority": {
+        "level": "medium",
+        "rationale": "The rule affects failure handling and testability."
+      },
+      "anchors": [
+        {
+          "primary_fragment_ordinal": 3,
+          "quote": "Retries continue regularly",
+          "occurrence": 1
+        }
+      ],
+      "scope_primary_fragment_ordinals": [3]
+    }
+  ],
+  "limitations": ["Synthetic expected output is a contract fixture, not an expert evaluation."]
+}

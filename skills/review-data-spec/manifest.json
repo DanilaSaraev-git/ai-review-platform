@@ -1,0 +1,29 @@
+{
+  "manifest_version": "review-skill.v1",
+  "id": "review-data-spec",
+  "version": "1.0.0",
+  "display_name": "Data specification review",
+  "description": "Reviews data-flow and data-mart requirements with explicit evidence and coverage.",
+  "operations": {
+    "review": {
+      "input": "review-input.v1",
+      "output": "review-output.v1",
+      "instructions": "SKILL.md"
+    },
+    "finding_dialogue": {
+      "input": "finding-dialogue-input.v1",
+      "output": "finding-dialogue-output.v1",
+      "instructions": "references/finding-dialogue.md"
+    }
+  },
+  "references": ["references/review-rules.md"],
+  "requires": {
+    "engine": ">=0.1.0",
+    "model_capabilities": ["text_generation"]
+  },
+  "files": [
+    {"path": "SKILL.md", "sha256": "ea6f863828592229097a8090ccf0bca14533d9891b4785c3254a5098322b901b"},
+    {"path": "references/review-rules.md", "sha256": "5fe088383c390526457678521e2119dba0603948996db6c855cf27b0901e4316"},
+    {"path": "references/finding-dialogue.md", "sha256": "bec510abad7e65940898ab1b08b724415bd2b85d81c456788dfeb58f4b3d5369"}
+  ]
+}

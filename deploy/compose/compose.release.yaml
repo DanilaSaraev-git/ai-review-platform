@@ -1,0 +1,10 @@
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${REVIEW_TEST_POSTGRES_PORT:-55440}:5432"
+    networks:
+      - internal
+      - release-db-edge
+
+networks:
+  release-db-edge: {}

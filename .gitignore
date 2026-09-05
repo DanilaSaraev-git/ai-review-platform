@@ -15,12 +15,18 @@ build/
 dist/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
+.uv-cache/
+.local/
+*.whl
 
 # Scratch runs and visual QA
 .local-runs/
 .local-qa/
 .env
 .env.*
+!deploy/compose/env.example
 
 # Web dependencies and reproducible test/build output
 node_modules/

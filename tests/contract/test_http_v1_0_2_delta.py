@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[2]
 OPENAPI = ROOT / "contracts/review-platform/v1/openapi.yaml"
 
@@ -40,9 +39,7 @@ def test_semantics_are_documented_without_new_public_enum() -> None:
     assert "Requested source" in text
     assert "degraded, unknown, missing, or expired" in text
     assert "YYYY-MM-DDTHH:mm:ss.ffffffZ" in text
-    assert "primary_source_partial" not in re.findall(
-        r"code:\s*\{enum:\s*\[([^]]+)\]", text
-    )[0]
+    assert "primary_source_partial" not in re.findall(r"code:\s*\{enum:\s*\[([^]]+)\]", text)[0]
 
 
 def test_swagger_runtime_is_fully_offline() -> None:
@@ -56,7 +53,11 @@ def test_swagger_runtime_is_fully_offline() -> None:
 
 def test_only_allowlisted_contract_files_changed_from_v1_0_1() -> None:
     changed = subprocess_output(
-        "git", "diff", "--name-only", "review-platform-contract-v1.0.1", "--",
+        "git",
+        "diff",
+        "--name-only",
+        "review-platform-contract-v1.0.1",
+        "--",
         "contracts/review-platform/v1",
     )
     allowed = {

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "review-api"
+version = "0.1.0"
+requires-python = "==3.14.7"
+dependencies = [
+  "fastapi==0.141.1",
+  "python-multipart==0.0.20",
+  "review-core",
+  "review-runtime",
+  "uvicorn[standard]==0.52.4",
+]
+
+[tool.uv.sources]
+review-core = { workspace = true }
+review-runtime = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/review_api"]

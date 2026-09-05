@@ -1,0 +1,79 @@
+[project]
+name = "review-platform-backend"
+version = "0.1.0"
+requires-python = "==3.14.7"
+dependencies = [
+  "review-api",
+  "review-cli",
+  "review-core",
+  "review-runtime",
+  "review-worker",
+]
+
+[dependency-groups]
+dev = [
+  "build==1.3.0",
+  "jsonschema[format-nongpl]==4.25.1",
+  "mypy==1.18.2",
+  "pytest==9.0.2",
+  "pytest-asyncio==1.3.0",
+  "pytest-cov==7.0.0",
+  "ruff==0.13.3",
+  "types-jsonschema==4.26.0.20260518",
+  "types-pyyaml==6.0.12.20260815",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+  "packages/review-core",
+  "packages/review-runtime",
+  "apps/api",
+  "apps/worker",
+  "apps/cli",
+]
+
+[tool.uv.sources]
+review-core = { workspace = true }
+review-runtime = { workspace = true }
+review-api = { workspace = true }
+review-worker = { workspace = true }
+review-cli = { workspace = true }
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests", "packages/review-core/tests", "packages/review-runtime/tests", "apps/cli/tests"]
+markers = [
+  "integration: requires PostgreSQL or Compose",
+  "local_model: opt-in existing local model smoke",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"apps/api/src/review_api/routes/*.py" = ["B008"]
+"apps/cli/src/review_cli/commands/*.py" = ["B008"]
+"packages/review-runtime/src/review_runtime/artifacts/posix.py" = ["S112"]
+"packages/review-runtime/src/review_runtime/postgres/platform.py" = ["E501"]
+"packages/review-runtime/migrations/versions/*.py" = ["E501"]
+"tests/**/*.py" = ["S105", "S603", "S607"]
+"tools/contracts/*.py" = ["S603", "S607"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+packages = ["review_core", "review_runtime", "review_api", "review_worker", "review_cli"]
+
+[[tool.mypy.overrides]]
+module = ["review_runtime.postgres.durable", "review_runtime.postgres.repositories.*"]
+ignore_errors = true

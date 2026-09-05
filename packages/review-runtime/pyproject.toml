@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "review-runtime"
+version = "0.1.0"
+requires-python = "==3.14.7"
+dependencies = [
+  "alembic==1.19.1",
+  "httpx==0.28.1",
+  "jsonschema[format-nongpl]==4.25.1",
+  "pdfplumber==0.11.10",
+  "procrastinate==3.9.0",
+  "psycopg[binary,pool]==3.3.5",
+  "pydantic==2.13.5",
+  "pydantic-settings==2.15.0",
+  "pyyaml==6.0.3",
+  "review-core",
+  "sqlalchemy[asyncio]==2.0.52",
+]
+
+[project.scripts]
+review-config-check = "review_runtime.config.verify:main"
+
+[tool.uv.sources]
+review-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/review_runtime"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/review_runtime/py.typed" = "review_runtime/py.typed"

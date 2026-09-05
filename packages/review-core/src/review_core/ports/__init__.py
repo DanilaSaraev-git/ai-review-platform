@@ -1,0 +1,26 @@
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class ArtifactStore(Protocol):
+    async def put(self, namespace: str, data: bytes, *, expected_sha256: str | None = None) -> str: ...
+    async def get(self, key: str) -> bytes: ...
+
+
+class DocumentParser(Protocol):
+    def parse(self, data: bytes, media_type: str) -> Any: ...
+
+
+class ModelGateway(Protocol):
+    async def generate(self, request: Any) -> Any: ...
+
+
+class JobQueue(Protocol):
+    async def publish(self, envelope: dict[str, Any]) -> None: ...
+
+
+class UnitOfWork(Protocol):
+    async def __aenter__(self) -> UnitOfWork: ...
+    async def __aexit__(self, *exc: object) -> None: ...
+    async def commit(self) -> None: ...
