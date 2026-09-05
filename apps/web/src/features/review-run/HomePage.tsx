@@ -8,7 +8,7 @@ export function HomePage() {
   const { workspace, actor, limits, workspaceId, isLoading } = useBootstrap();
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-5 p-6">
+    <main className="mx-auto flex max-w-4xl flex-col gap-5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-ink">Проверки ТЗ</h1>
         <Link

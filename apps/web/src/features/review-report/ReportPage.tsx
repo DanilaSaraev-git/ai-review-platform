@@ -24,7 +24,7 @@ export function ReportPage() {
   // Незавершённый или неуспешный запуск не показывает пустой отчёт (FR-018, US2-7).
   if (isUnavailable) {
     return (
-      <main className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
+      <main className="mx-auto flex max-w-4xl flex-col gap-4 p-6">
         <Callout tone="warn" title="Отчёта пока нет">
           Проверка не завершилась успешно, поэтому отчёт не опубликован. Откройте состояние проверки, чтобы увидеть
           причину.
@@ -38,7 +38,7 @@ export function ReportPage() {
 
   if (isLoading || !report) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <main className="mx-auto max-w-4xl p-6">
         <Spinner label="Загружаем отчёт…" />
       </main>
     );

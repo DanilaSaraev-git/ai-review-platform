@@ -49,14 +49,14 @@ export function NewReviewPage() {
 
   if (isLoading || !limits) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <main className="mx-auto max-w-4xl p-6">
         <Spinner label="Загружаем рабочее пространство…" />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-5 p-6">
+    <main className="mx-auto flex max-w-4xl flex-col gap-5 p-6">
       <h1 className="text-xl font-semibold text-ink">Новая проверка</h1>
 
       <WorkspaceSummary workspace={workspace} actor={actor} limits={limits} isLoading={isLoading} />

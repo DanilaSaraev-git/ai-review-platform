@@ -33,14 +33,14 @@ export function RunPage() {
 
   if (isLoading || !run) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <main className="mx-auto max-w-4xl p-6">
         <Spinner label="Загружаем состояние проверки…" />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
+    <main className="mx-auto flex max-w-4xl flex-col gap-4 p-6">
       <nav aria-label="Навигация">
         <Link className="text-sm text-accent underline" to="/">
           К списку проверок

@@ -42,7 +42,7 @@ export function FindingPage() {
 
   if (isUnavailable) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <main className="mx-auto max-w-4xl p-6">
         <Callout tone="warn" title="Отчёта пока нет">
           Проверка не завершилась успешно, поэтому замечаний нет.
         </Callout>
@@ -52,7 +52,7 @@ export function FindingPage() {
 
   if (isLoading || !report) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <main className="mx-auto max-w-4xl p-6">
         <Spinner label="Загружаем отчёт…" />
       </main>
     );

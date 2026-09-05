@@ -12,7 +12,7 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-surface-muted">
       <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-3">
+        <div className="flex items-center gap-4 px-6 py-3">
           <span
             aria-hidden="true"
             className="flex size-7 items-center justify-center rounded bg-accent text-xs font-bold text-white"
@@ -22,14 +22,14 @@ export function AppLayout() {
           <Link to="/" className="text-base font-semibold text-ink">
             AI Review
           </Link>
-          <span className="text-sm text-ink-muted">предварительное ревью ТЗ на данные</span>
+          <span className="text-sm text-ink-muted">AI-ревью технического задания</span>
         </div>
       </header>
 
       <Outlet />
 
-      <footer className="mx-auto max-w-7xl px-6 py-8 text-xs text-ink-muted">
-        Замечания — кандидаты на уточнение, а не подтверждённые дефекты. Итоговое решение по каждому принимает аналитик.
+      <footer className="mx-auto max-w-4xl px-6 py-8 text-xs text-ink-muted">
+        Замечания - это кандидаты на уточнение, а не подтверждённые дефекты. Принимайте итоговые решения самостоятельно.
       </footer>
     </div>
   );

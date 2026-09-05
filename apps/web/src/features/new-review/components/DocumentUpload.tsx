@@ -64,7 +64,7 @@ export function DocumentUpload({
             aria-describedby={describedBy}
             type="file"
             accept={SUPPORTED_EXTENSIONS.join(',')}
-            className="text-sm text-ink file:mr-3 file:rounded file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm"
+            className="text-sm text-ink file:mr-3 file:cursor-pointer file:rounded file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:transition hover:file:bg-surface-muted"
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) {
@@ -100,7 +100,6 @@ export function DocumentUpload({
           </div>
           <Button
             className="mt-3"
-            variant="ghost"
             onClick={() => {
               inputRef.current?.click();
             }}

@@ -47,7 +47,7 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' }) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded border px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50';
+    'inline-flex items-center justify-center gap-2 rounded border px-3 py-1.5 text-sm font-medium transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50';
   const styles = {
     primary: 'border-accent bg-accent text-white hover:bg-red-800',
     secondary: 'border-line bg-surface text-ink hover:bg-surface-muted',
@@ -148,11 +148,11 @@ export function RadioCards({
                 id={itemId}
                 value={option.value}
                 disabled={option.disabled}
-                className="mt-1 size-4 shrink-0 rounded-full border border-line bg-surface disabled:opacity-40"
+                className="mt-1 size-4 shrink-0 cursor-pointer rounded-full border border-line bg-surface disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <RadioGroup.Indicator className="block size-full rounded-full border-4 border-accent" />
               </RadioGroup.Item>
-              <Label.Root htmlFor={itemId} className="text-sm text-ink">
+              <Label.Root htmlFor={itemId} className="cursor-pointer text-sm text-ink">
                 <span className="font-medium">{option.label}</span>
                 {option.description ? <span className="block text-xs text-ink-muted">{option.description}</span> : null}
                 {option.disabled && option.disabledReason ? (
