@@ -38,4 +38,8 @@ def ready(request: Request) -> Any:
         checks["artifact_store"] = False
     if not all(checks.values()):
         return JSONResponse(status_code=503, content={"status": "not_ready", "checks": checks})
-    return {"status": "ready", "composition": "durable", "checks": checks}
+    return {
+        "status": "ready",
+        "composition": getattr(request.app.state.platform, "composition", "durable"),
+        "checks": checks,
+    }

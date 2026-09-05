@@ -10,6 +10,7 @@ from review_core.application.platform import ReviewPlatform
 from review_runtime.composition import compose_model_runtime
 from review_runtime.config.model_profiles import ModelProfile
 from review_runtime.config.settings import OperatorSettings
+from review_runtime.config.verify import verify
 from review_runtime.fakes.review_executor import TrustedFixtureReviewExecutor
 from review_runtime.ml_runtime import LLMReviewRuntime
 from review_runtime.models.config import FileSecretProvider
@@ -24,15 +25,30 @@ def build_components(
 ) -> tuple[Any, LLMReviewRuntime | None]:
     root = Path(__file__).resolve().parents[4]
     selected = os.environ.get("REVIEW_COMPOSITION", composition)
-    if selected in {"durable", "ml"}:
+    if selected in {"durable", "ml", "unconfigured"}:
         settings = OperatorSettings()  # type: ignore[call-arg]
+        policy = verify(settings.runtime_config_path)
+        if selected == "unconfigured":
+            platform = PostgresReviewPlatform(
+                None,
+                settings,
+                runtime_policy=policy,
+                semantic_execution_available=False,
+                composition="unconfigured",
+            )
+            return platform, None
+        if settings.expected_output_path is None:
+            raise ValueError("durable fixture composition requires expected output path")
         executor = TrustedFixtureReviewExecutor(
             root,
             runtime_config_path=settings.runtime_config_path,
             expected_output_path=settings.expected_output_path,
         )
         if selected == "durable":
-            return PostgresReviewPlatform(executor, settings), None
+            platform = PostgresReviewPlatform(
+                executor, settings, runtime_policy=policy, composition="durable"
+            )
+            return platform, None
         if settings.model_profile_path is None or settings.skill_package_path is None:
             raise ValueError("ML composition requires model profile and skill package paths")
         profile = ModelProfile.model_validate(
@@ -48,6 +64,8 @@ def build_components(
             settings,
             model_profiles=(profile,),
             resolved_skill=skill,
+            runtime_policy=policy,
+            composition="ml",
         )
         secrets = None
         if profile.secret_ref is not None:
@@ -68,8 +86,10 @@ def build_components(
             root=root,
         )
         return platform, runtime
-    executor = TrustedFixtureReviewExecutor(root)
-    return ReviewPlatform(executor), None
+    if selected in {"fixture", "real"}:
+        executor = TrustedFixtureReviewExecutor(root)
+        return ReviewPlatform(executor), None
+    raise ValueError(f"unsupported review composition: {selected}")
 
 
 def build_platform(composition: str = "fixture") -> Any:

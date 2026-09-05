@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import Response
 from review_core.canonical import strong_etag
+from review_core.domain.errors import PayloadTooLarge
 
 router = APIRouter(prefix="/v1/workspaces/{workspace_id}")
 
@@ -18,13 +19,21 @@ def list_documents(
 async def upload_document(request: Request, workspace_id: str, file: UploadFile = File(...)):  # type: ignore[no-untyped-def]
     import anyio
 
-    content = await file.read()
+    limit = request.app.state.platform.max_upload_bytes
+    content = bytearray()
+    while len(content) <= limit:
+        chunk = await file.read(min(1024 * 1024, limit + 1 - len(content)))
+        if not chunk:
+            break
+        content.extend(chunk)
+    if len(content) > limit:
+        raise PayloadTooLarge("Document exceeds configured byte limit.")
     return await anyio.to_thread.run_sync(
         request.app.state.platform.upload,
         workspace_id,
         file.filename or "document",
         file.content_type or "application/octet-stream",
-        content,
+        bytes(content),
     )
 
 
@@ -36,12 +45,14 @@ def get_document(request: Request, workspace_id: str, document_id: str):  # type
 
 @router.get("/documents/{document_id}/content")
 def download_document(request: Request, workspace_id: str, document_id: str):  # type: ignore[no-untyped-def]
+    from urllib.parse import quote
+
     record = request.app.state.platform.get_document(workspace_id, document_id)
     return Response(
         content=record.content,
         media_type="application/octet-stream",
         headers={
             "ETag": strong_etag(record.content),
-            "Content-Disposition": f'attachment; filename="{record.filename}"',
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(record.filename, safe='')}",
         },
     )
