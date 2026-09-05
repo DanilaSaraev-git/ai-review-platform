@@ -347,15 +347,6 @@ class LLMReviewRuntime:
         self, workspace_id: str, body: dict[str, Any], idempotency_key: str
     ) -> dict[str, Any]:
         reference = body["model_profile"]
-        if reference == {
-            "id": self.platform.model_profile["id"],
-            "version": self.platform.model_profile["version"],
-        }:
-            import anyio
-
-            return await anyio.to_thread.run_sync(
-                self.platform.create_run, workspace_id, body, idempotency_key
-            )
         if reference != {"id": self.model_profile.id, "version": self.model_profile.version}:
             self.platform.exact_model_profile(reference)
             raise RuntimeError("runtime was not composed for the requested model profile")

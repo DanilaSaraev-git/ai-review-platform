@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol, Self
 
+import httpx
+
 from review_runtime.config.model_profiles import ModelProfile
+from review_runtime.models.config import SecretProvider
 
 AvailabilityState = Literal["available", "unavailable", "degraded", "unknown"]
 ObservationSource = Literal["probe", "manual", "generation"]
@@ -65,6 +69,55 @@ class ProbeResponse:
 
 class ProbeTransport(Protocol):
     async def observe(self, request: ProbeRequest) -> ProbeResponse: ...
+
+
+class HTTPProbeTransport:
+    """Bounded, non-generative transport for one operator-declared availability URL."""
+
+    def __init__(
+        self,
+        *,
+        secrets: SecretProvider | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+        max_response_bytes: int = 1_048_576,
+    ) -> None:
+        if max_response_bytes <= 0:
+            raise ValueError("probe response byte limit must be positive")
+        self._secrets = secrets
+        self._transport = transport
+        self._max_response_bytes = max_response_bytes
+
+    async def observe(self, request: ProbeRequest) -> ProbeResponse:
+        headers = {"Accept": "application/json"}
+        if request.secret_ref is not None:
+            if self._secrets is None:
+                raise ValueError("model probe credential is unavailable")
+            headers["Authorization"] = f"Bearer {self._secrets.resolve(request.secret_ref)}"
+        try:
+            async with httpx.AsyncClient(
+                transport=self._transport,
+                follow_redirects=False,
+            ) as client:
+                async with client.stream(
+                    "GET",
+                    request.url,
+                    headers=headers,
+                    timeout=request.timeout_seconds,
+                ) as response:
+                    content = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        content.extend(chunk)
+                        if len(content) > self._max_response_bytes:
+                            return ProbeResponse(status_code=502)
+                    json_value = None
+                    if request.mode == "models" and response.status_code == 200:
+                        try:
+                            json_value = json.loads(content)
+                        except (UnicodeDecodeError, json.JSONDecodeError):
+                            return ProbeResponse(status_code=502)
+                    return ProbeResponse(status_code=response.status_code, json_value=json_value)
+        except httpx.HTTPError:
+            return ProbeResponse(status_code=503)
 
 
 class AvailabilityService:

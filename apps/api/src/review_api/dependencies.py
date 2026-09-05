@@ -37,14 +37,14 @@ def build_components(
                 composition="unconfigured",
             )
             return platform, None
-        if settings.expected_output_path is None:
-            raise ValueError("durable fixture composition requires expected output path")
-        executor = TrustedFixtureReviewExecutor(
-            root,
-            runtime_config_path=settings.runtime_config_path,
-            expected_output_path=settings.expected_output_path,
-        )
         if selected == "durable":
+            if settings.expected_output_path is None:
+                raise ValueError("durable fixture composition requires expected output path")
+            executor = TrustedFixtureReviewExecutor(
+                root,
+                runtime_config_path=settings.runtime_config_path,
+                expected_output_path=settings.expected_output_path,
+            )
             platform = PostgresReviewPlatform(
                 executor, settings, runtime_policy=policy, composition="durable"
             )
@@ -60,7 +60,7 @@ def build_components(
             model_capabilities=frozenset(profile.capabilities),
         ).resolve(settings.skill_package_path)
         platform = PostgresReviewPlatform(
-            executor,
+            None,
             settings,
             model_profiles=(profile,),
             resolved_skill=skill,

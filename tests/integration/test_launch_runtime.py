@@ -1,14 +1,25 @@
 from __future__ import annotations
 
 import json
+from functools import partial
 from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
 
+import anyio
+import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from review_api.app import create_app
+from review_cli.commands.model_probe import probe_configured_model
+from review_runtime.config.settings import OperatorSettings
+
+from tests.integration.fake_model_provider import (
+    FakeModelProvider,
+    ScriptedReply,
+    chat_completion,
+)
 
 ROOT = Path(__file__).parents[2]
 
@@ -19,12 +30,15 @@ def _configure(
     tmp_path: Path,
     *,
     unconfigured: bool,
+    max_upload_bytes: int | None = None,
 ) -> None:
     config = json.loads(
         (ROOT / "deploy/compose/config/runtime-config.synthetic.v1.json").read_text()
     )
     config["budgets"].update(
-        max_upload_bytes=32 if unconfigured else 52_428_800,
+        max_upload_bytes=(
+            max_upload_bytes if max_upload_bytes is not None else 32 if unconfigured else 52_428_800
+        ),
         max_context_documents=1,
         max_dialogue_message_codepoints=5,
         max_dialogue_turns=1,
@@ -292,3 +306,125 @@ def test_review_history_is_chronological_and_paginated(
         malformed = client.get(url, params={"cursor": "not-a-cursor"})
         assert malformed.status_code == 400
         assert malformed.json()["code"] == "invalid_cursor"
+
+
+def test_unconfigured_deployment_can_select_probe_and_run_one_external_model(
+    monkeypatch: pytest.MonkeyPatch,
+    operator_settings,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+) -> None:
+    _configure(
+        monkeypatch,
+        operator_settings,
+        tmp_path,
+        unconfigured=True,
+        max_upload_bytes=52_428_800,
+    )
+    unconfigured = create_app(composition="unconfigured")
+    with TestClient(unconfigured) as client:
+        workspace_id = unconfigured.state.platform.workspace_id
+        initial = client.get(f"/v1/workspaces/{workspace_id}/model-profiles").json()["items"]
+        assert len(initial) == 1
+        assert initial[0]["availability"] == "unavailable"
+
+    external_id = f"production-test-{uuid4().hex}"
+    profile = json.loads(
+        (ROOT / "deploy/compose/config/model-profile.external.example.json").read_text()
+    )
+    profile.update(
+        id=external_id,
+        provider="test-provider",
+        model="test-model",
+        chat_url="https://provider.test/chat/completions",
+        probe={
+            "mode": "health",
+            "url": "https://provider.test/health",
+            "timeout_seconds": 5,
+            "success_ttl_seconds": 300,
+        },
+    )
+    profile_path = tmp_path / "model-profile.json"
+    profile_path.write_text(json.dumps(profile), encoding="utf-8")
+    credential_path = tmp_path / "model-credential"
+    credential_path.write_text("probe-secret", encoding="utf-8")
+    monkeypatch.setenv("REVIEW_COMPOSITION", "ml")
+    monkeypatch.setenv("REVIEW_MODEL_PROFILE_ID", external_id)
+    monkeypatch.setenv("REVIEW_MODEL_PROFILE_PATH", str(profile_path))
+    monkeypatch.setenv("REVIEW_MODEL_CREDENTIAL_PATH", str(credential_path))
+    monkeypatch.setenv("REVIEW_SKILL_PACKAGE_PATH", str(ROOT / "tests/fixtures/ml-integration/skill"))
+
+    generation = FakeModelProvider(
+        [
+            ScriptedReply(
+                chat_completion(
+                    (ROOT / "tests/fixtures/ml-integration/review-response.json").read_text()
+                )
+            )
+        ]
+    )
+    app = create_app(composition="ml", model_transport=generation.transport)
+    probe_requests: list[httpx.Request] = []
+
+    def probe_handler(request: httpx.Request) -> httpx.Response:
+        probe_requests.append(request)
+        return httpx.Response(200, json={"status": "ok"})
+
+    with TestClient(app) as client:
+        listed = client.get(f"/v1/workspaces/{workspace_id}/model-profiles").json()["items"]
+        assert [(item["id"], item["availability"]) for item in listed] == [
+            (external_id, "unavailable")
+        ]
+        assert generation.call_count == 0
+
+        observation = anyio.run(
+            partial(
+                probe_configured_model,
+                settings=OperatorSettings(),  # type: ignore[call-arg]
+                transport=httpx.MockTransport(probe_handler),
+            )
+        )
+        assert observation.state == "available"
+        assert [(request.method, request.url.path) for request in probe_requests] == [
+            ("GET", "/health")
+        ]
+        assert probe_requests[0].headers["authorization"] == "Bearer probe-secret"
+        assert generation.call_count == 0
+        listed = client.get(f"/v1/workspaces/{workspace_id}/model-profiles").json()["items"]
+        assert [(item["id"], item["availability"]) for item in listed] == [
+            (external_id, "available")
+        ]
+
+        document = _upload(
+            client,
+            workspace_id,
+            (ROOT / "tests/fixtures/ml-integration/primary.md").read_bytes(),
+            "primary.md",
+        ).json()
+        review_profile = client.get(f"/v1/workspaces/{workspace_id}/profiles").json()["items"][0]
+        run = client.post(
+            f"/v1/workspaces/{workspace_id}/review-runs",
+            headers={"Idempotency-Key": f"external-run-{uuid4().hex}"},
+            json={
+                "document_id": document["id"],
+                "context_document_ids": [],
+                "profile": {"id": review_profile["id"], "version": review_profile["version"]},
+                "model_profile": {"id": external_id, "version": profile["version"]},
+                "locale": "ru-RU",
+            },
+        )
+        assert run.status_code == 202
+        assert run.json()["state"] == "completed"
+        assert generation.call_count == 1
+
+        failed = anyio.run(
+            partial(
+                probe_configured_model,
+                settings=OperatorSettings(),  # type: ignore[call-arg]
+                transport=httpx.MockTransport(lambda _request: httpx.Response(503)),
+            )
+        )
+        assert failed.state == "unavailable"
+        listed = client.get(f"/v1/workspaces/{workspace_id}/model-profiles").json()["items"]
+        assert [(item["id"], item["availability"]) for item in listed] == [
+            (external_id, "unavailable")
+        ]

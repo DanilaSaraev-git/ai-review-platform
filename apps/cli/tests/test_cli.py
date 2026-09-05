@@ -35,3 +35,19 @@ def test_read_poc_failure_is_safe_and_leaves_no_output(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert not output.exists()
     assert str(tmp_path) not in result.output
+
+
+def test_model_probe_refuses_non_ml_composition_without_traceback(
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    monkeypatch.setenv("REVIEW_COMPOSITION", "unconfigured")
+
+    result = CliRunner().invoke(app, ["model-probe"])
+
+    assert result.exit_code == 2
+    assert json.loads(result.output) == {
+        "action": "check the declared probe and mounted model files",
+        "code": "invalid_configuration",
+        "status": "failed",
+    }
+    assert "Traceback" not in result.output

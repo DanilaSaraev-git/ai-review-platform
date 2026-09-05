@@ -77,6 +77,25 @@ Readiness проверяет БД, миграцию, seed и artifact store; г�
 запускает. Успешный health probe сам по себе не доказывает поддержку schema, budget или
 предметного навыка.
 
+После явного включения внешнего профиля оператор обновляет его availability отдельной
+негенеративной командой:
+
+```sh
+review-cli model-probe
+```
+
+Команда работает только с `REVIEW_COMPOSITION=ml`, проверяет точную пару model profile
+`id/version`, обращается только к объявленному в профиле `probe.url` методом GET и сохраняет
+наблюдение в deployment database. Секрет читается из mounted file. Команда возвращает `0`
+только для свежего состояния `available`; отсутствующий probe, ошибка конфигурации, сети,
+авторизации или ответа возвращает `2` и безопасный JSON без credential и DSN. Probe не вызывает
+генерацию и не входит в `/health/ready`.
+
+Availability ограничена `probe.success_ttl_seconds`. После успешного enable операторский таймер
+должен запускать ту же команду чаще TTL; production deployment использует интервал 60 секунд.
+До явного enable таймер отключён. Просроченное или неуспешное наблюдение снова делает профиль
+недоступным для новых review и требует исправить endpoint/credential, затем повторить probe.
+
 ## Runtime limits
 
 `REVIEW_RUNTIME_CONFIG_PATH` задаёт server-side границы admission. При старте конфигурация

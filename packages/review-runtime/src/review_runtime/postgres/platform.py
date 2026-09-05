@@ -945,6 +945,14 @@ class PostgresReviewPlatform:
         self.configured_model_profiles = {
             (profile.id, profile.version): profile for profile in model_profiles
         }
+        selected_external_profiles = [
+            profile for profile in model_profiles if profile.id == settings.model_profile_id
+        ]
+        if composition == "ml" and len(selected_external_profiles) != 1:
+            raise ValueError("ML composition requires one selected external model profile")
+        self.selected_external_model_profile = (
+            selected_external_profiles[0] if composition == "ml" else None
+        )
         self.resolved_skill = resolved_skill
         self.runtime_policy = runtime_policy or RuntimePolicy()
         self.semantic_execution_available = semantic_execution_available
@@ -956,18 +964,31 @@ class PostgresReviewPlatform:
             self.runtime_policy.budgets.max_dialogue_message_codepoints
         )
         self.max_dialogue_turns = self.runtime_policy.budgets.max_dialogue_turns
-        self.model_profile = {
-            "id": settings.model_profile_id,
-            "version": "1.0.0",
-            "name": "Deterministic offline" if semantic_execution_available else "Модель не подключена",
-            "description": (
-                "Offline technical conformance profile without semantic model claims."
-                if semantic_execution_available
-                else "Подключите модель, чтобы запускать проверку документов."
-            ),
-            "capabilities": ["text_generation", "native_structured_output"],
-            "availability": "available" if semantic_execution_available else "unavailable",
-        }
+        if self.selected_external_model_profile is None:
+            self.model_profile = {
+                "id": settings.model_profile_id,
+                "version": "1.0.0",
+                "name": (
+                    "Deterministic offline" if semantic_execution_available else "Модель не подключена"
+                ),
+                "description": (
+                    "Offline technical conformance profile without semantic model claims."
+                    if semantic_execution_available
+                    else "Подключите модель, чтобы запускать проверку документов."
+                ),
+                "capabilities": ["text_generation", "native_structured_output"],
+                "availability": "available" if semantic_execution_available else "unavailable",
+            }
+        else:
+            selected_profile = self.selected_external_model_profile
+            self.model_profile = {
+                "id": selected_profile.id,
+                "version": selected_profile.version,
+                "name": selected_profile.model,
+                "description": f"Подключенная модель {selected_profile.provider}.",
+                "capabilities": list(selected_profile.capabilities),
+                "availability": "unavailable",
+            }
         dialogue_policy_payload = {"max_member_turns": self.max_dialogue_turns}
         self.dialogue_policy = {
             "id": settings.dialogue_policy_id,
@@ -1136,10 +1157,17 @@ class PostgresReviewPlatform:
     def _seed_exact(self) -> None:
         now = utc_now()
         semantic = RELEASE_PROFILE_SEMANTIC
-        model_payload = {
-            "adapter_kind": "deterministic" if self.semantic_execution_available else "unconfigured",
-            "capabilities": ["text_generation"],
-        }
+        model_payload = (
+            self.selected_external_model_profile.model_dump(mode="json")
+            if self.selected_external_model_profile is not None
+            else {
+                "adapter_kind": (
+                    "deterministic" if self.semantic_execution_available else "unconfigured"
+                ),
+                "capabilities": ["text_generation"],
+            }
+        )
+        model_version = self.model_profile["version"]
         skill_payload: dict[str, Any] = {
             "package_sha256": self.settings.skill_package_sha256
         }
@@ -1210,7 +1238,7 @@ class PostgresReviewPlatform:
                 (family_row,),
             )
             for table, config_id, config_version, payload in (
-                ("model_profile_versions", self.settings.model_profile_id, "1.0.0", model_payload),
+                ("model_profile_versions", self.settings.model_profile_id, model_version, model_payload),
                 ("skill_versions", skill_id, skill_version, skill_payload),
                 ("dialogue_policy_versions", self.settings.dialogue_policy_id, "1.0.0", policy_payload),
             ):
@@ -1251,15 +1279,28 @@ class PostgresReviewPlatform:
             connection.execute(
                 """INSERT INTO model_profile_availability
                 (deployment_id,model_profile_id,model_profile_version,state,reason_code,checked_at,
-                expires_at,revision) VALUES(%s,%s,'1.0.0',%s,%s,%s,%s,0)
+                expires_at,revision) VALUES(%s,%s,%s,%s,%s,%s,%s,0)
                 ON CONFLICT DO NOTHING""",
                 (
                     str(self.settings.deployment_id),
                     self.settings.model_profile_id,
-                    "available" if self.semantic_execution_available else "unavailable",
-                    None if self.semantic_execution_available else "not_configured",
+                    model_version,
+                    (
+                        "unavailable"
+                        if self.selected_external_model_profile is not None
+                        else "available" if self.semantic_execution_available else "unavailable"
+                    ),
+                    (
+                        "not_observed"
+                        if self.selected_external_model_profile is not None
+                        else None if self.semantic_execution_available else "not_configured"
+                    ),
                     now,
-                    now + timedelta(days=3650) if self.semantic_execution_available else now,
+                    (
+                        now
+                        if self.selected_external_model_profile is not None
+                        else now + timedelta(days=3650) if self.semantic_execution_available else now
+                    ),
                 ),
             )
             checks = connection.execute(
@@ -1270,7 +1311,7 @@ class PostgresReviewPlatform:
                 JOIN review_profile_families f ON f.deployment_id=d.id
                 JOIN review_profile_heads h ON h.family_row_id=f.row_id
                 JOIN review_profile_versions pv ON pv.family_row_id=h.family_row_id AND pv.version=h.head_version
-                JOIN model_profile_versions m ON m.id=%s AND m.version='1.0.0'
+                JOIN model_profile_versions m ON m.id=%s AND m.version=%s
                 JOIN skill_versions s ON s.id=%s AND s.version=%s
                 JOIN dialogue_policy_versions p ON p.id=%s AND p.version='1.0.0'
                 JOIN model_profile_availability av ON av.deployment_id=d.id
@@ -1281,6 +1322,7 @@ class PostgresReviewPlatform:
                 WHERE d.id=%s AND o.id=%s AND w.id=%s AND a.id=%s AND f.public_id=%s""",
                 (
                     self.settings.model_profile_id,
+                    model_version,
                     skill_id,
                     skill_version,
                     self.settings.dialogue_policy_id,
@@ -1301,10 +1343,16 @@ class PostgresReviewPlatform:
                 and checks["model_digest"] == digest_value(model_payload)
                 and checks["skill_digest"] == skill_digest
                 and checks["policy_digest"] == digest_value(policy_payload)
-                and checks["state"]
-                == ("available" if self.semantic_execution_available else "unavailable")
                 and (
-                    checks["expires_at"] > now
+                    checks["state"] in {"available", "unavailable", "degraded", "unknown"}
+                    if self.selected_external_model_profile is not None
+                    else checks["state"]
+                    == ("available" if self.semantic_execution_available else "unavailable")
+                )
+                and (
+                    True
+                    if self.selected_external_model_profile is not None
+                    else checks["expires_at"] > now
                     if self.semantic_execution_available
                     else checks["expires_at"] <= now
                 )
@@ -1694,17 +1742,20 @@ class PostgresReviewPlatform:
         return self._snapshot(profile)
 
     def exact_model_profile(self, reference: dict[str, str]) -> ModelProfile | None:
-        if reference == {"id": self.settings.model_profile_id, "version": "1.0.0"}:
-            return None
         profile = self.configured_model_profiles.get((reference["id"], reference["version"]))
-        if profile is None:
-            raise NotFound()
-        return profile
+        if profile is not None:
+            return profile
+        if self.selected_external_model_profile is None and reference == {
+            "id": self.settings.model_profile_id,
+            "version": "1.0.0",
+        }:
+            return None
+        raise NotFound()
 
     def list_model_profiles(self, workspace_id: str) -> dict[str, Any]:
         self._workspace(workspace_id)
         now = utc_now()
-        values = [self.model_profile]
+        values = [] if self.selected_external_model_profile is not None else [self.model_profile]
         with self._connect() as connection:
             for profile in self.configured_model_profiles.values():
                 observation = connection.execute(
@@ -1740,7 +1791,7 @@ class PostgresReviewPlatform:
         self.exact_model_profile(reference)
         now = utc_now()
         with self._connect() as connection:
-            connection.execute(
+            result = connection.execute(
                 """UPDATE model_profile_availability
                    SET state=%s,reason_code=%s,checked_at=%s,expires_at=%s,revision=revision+1
                    WHERE deployment_id=%s AND model_profile_id=%s AND model_profile_version=%s""",
@@ -1754,6 +1805,8 @@ class PostgresReviewPlatform:
                     reference["version"],
                 ),
             )
+            if result.rowcount != 1:
+                raise RuntimeError("configured model availability row is missing")
 
     def _exact_profile(
         self, connection: psycopg.Connection[dict[str, Any]], reference: dict[str, str]
