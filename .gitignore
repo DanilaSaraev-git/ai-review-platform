@@ -31,3 +31,6 @@ htmlcov/
 # Web dependencies and reproducible test/build output
 test-results/
 playwright-report/
+
+# Локальные разрешения Claude Code — машинная настройка, не общий файл.
+.claude/settings.local.json

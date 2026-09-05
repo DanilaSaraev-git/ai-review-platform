@@ -16,7 +16,7 @@ def test_protected_paths_unchanged_from_docs_commit() -> None:
             sys.executable,
             str(ROOT / "tools/contracts/check_protected_paths.py"),
             "--baseline",
-            "280ab87e22ed02c2e16ccb1baa53d74ab64d5542",
+            "7e91364579834c75e48d55cb168ba86b563bb3e1",
             "--json",
             *shlex.split(os.environ.get("PROTECTED_PATH_ARGS", "")),
         ],

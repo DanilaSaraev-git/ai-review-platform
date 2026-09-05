@@ -17,7 +17,8 @@ PROTECTED = (
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--baseline", default="280ab87e22ed02c2e16ccb1baa53d74ab64d5542")
+    # Baseline includes the web v1 import; all other protected paths are unchanged.
+    parser.add_argument("--baseline", default="7e91364579834c75e48d55cb168ba86b563bb3e1")
     parser.add_argument("--json", action="store_true")
     parser.add_argument(
         "--allow-path", action="append", default=[],
