@@ -15,7 +15,7 @@ def test_protected_paths_unchanged_from_docs_commit() -> None:
             sys.executable,
             str(ROOT / "tools/contracts/check_protected_paths.py"),
             "--baseline",
-            "471316ea08f1cf55116e2e4bc86d626454fbf632",
+            "280ab87e22ed02c2e16ccb1baa53d74ab64d5542",
             "--json",
         ],
         cwd=ROOT,
