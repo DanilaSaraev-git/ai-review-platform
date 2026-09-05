@@ -1,14 +1,21 @@
 @import 'tailwindcss';
 
+/* Палитра веб-интерфейса v1. */
 @theme {
+  --color-canvas: #f1f2f4;
   --color-surface: #ffffff;
-  --color-surface-muted: #f5f5f4;
-  --color-ink: #1c1917;
-  --color-ink-muted: #57534e;
-  --color-line: #d6d3d1;
-  --color-accent: #b91c1c;
-  --color-warn: #b45309;
-  --color-ok: #15803d;
+  --color-surface-muted: #fafbfc;
+  --color-ink: #1d2125;
+  --color-ink-muted: #44546f;
+  --color-ink-subtle: #626f86;
+  --color-line: #dcdfe4;
+  --color-accent: #e30611;
+  --color-accent-strong: #b80d18;
+  --color-accent-tint: #fff0f1;
+  --color-rail: #7a0d16;
+  --color-rail-active: #5b0710;
+  --color-warn: #a54800;
+  --color-ok: #216e4e;
 }
 
 :root {
@@ -17,7 +24,7 @@
 
 body {
   margin: 0;
-  background: var(--color-surface-muted);
+  background: var(--color-canvas);
   color: var(--color-ink);
   font-family:
     system-ui,

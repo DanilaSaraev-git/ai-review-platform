@@ -49,7 +49,7 @@ export function Button({
   const base =
     'inline-flex items-center justify-center gap-2 rounded border px-3 py-1.5 text-sm font-medium transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50';
   const styles = {
-    primary: 'border-accent bg-accent text-white hover:bg-red-800',
+    primary: 'border-accent bg-accent text-white hover:border-accent-strong hover:bg-accent-strong',
     secondary: 'border-line bg-surface text-ink hover:bg-surface-muted',
     ghost: 'border-transparent bg-transparent text-ink hover:bg-surface-muted',
   } as const;
