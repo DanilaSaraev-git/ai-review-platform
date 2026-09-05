@@ -21,3 +21,6 @@ htmlcov/
 .local-qa/
 .env
 .env.*
+
+# Локальные разрешения Claude Code — машинная настройка, не общий файл.
+.claude/settings.local.json
