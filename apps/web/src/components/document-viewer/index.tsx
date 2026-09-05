@@ -70,12 +70,7 @@ export function DocumentViewer({
 
   return (
     <section aria-labelledby="document-viewer-title" className="mx-auto flex h-full w-full max-w-4xl flex-col gap-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="document-viewer-title" className="text-[13px] font-semibold text-ink">Исходный документ</h2>
-        {document ? (
-          <p className="max-w-full truncate text-xs text-ink-subtle" title={document.filename}>{document.filename}</p>
-        ) : null}
-      </div>
+      <h2 id="document-viewer-title" className="text-[13px] font-semibold text-ink">Исходный документ</h2>
 
       {/* Несопоставленный фрагмент называется прямо: произвольное место
           документа не подсвечивается (SC-003). */}

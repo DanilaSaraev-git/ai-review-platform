@@ -104,9 +104,8 @@ export function ReportPage() {
           ) : null}
           <ReportSummary report={report} reviewedCount={reviewedCount} />
           <section aria-labelledby="findings-title" className="px-4 py-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="mb-3">
               <h2 id="findings-title" className="text-[15px] font-semibold text-ink">Замечания</h2>
-              <span className="text-xs font-medium text-ink-subtle">{report.findings.length}</span>
             </div>
             <FindingList findings={report.findings} states={byFindingId} runId={runId} />
           </section>

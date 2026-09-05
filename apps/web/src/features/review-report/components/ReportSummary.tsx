@@ -18,7 +18,6 @@ export function isTestReport(report: ReviewReport): boolean {
  * рядом с результатом по запросу.
  */
 export function ReportSummary({ report }: { report: ReviewReport; reviewedCount: number }) {
-  const findingsLabel = report.findings.length === 1 ? '1 замечание' : `${report.findings.length} замечаний`;
   return (
     <section aria-labelledby="report-summary-title" className="border-b border-line px-4 py-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -28,8 +27,6 @@ export function ReportSummary({ report }: { report: ReviewReport; reviewedCount:
         {isTestReport(report) ? <StatusBadge tone="warn">Тестовый результат</StatusBadge> : null}
       </div>
       <p className="mt-1.5 text-[13px] leading-5 text-ink-muted">{report.summary}</p>
-      <p className="mt-2 text-xs font-medium text-ink-subtle">{findingsLabel}</p>
-
       {report.limitations.length > 0 ? (
         <details className="mt-3 text-xs">
           <summary className="cursor-pointer font-semibold text-ink-muted hover:text-ink">Ограничения результата</summary>
