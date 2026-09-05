@@ -1,0 +1,32 @@
+# Зависимости
+node_modules/
+
+# Сгенерированный Orval клиент: источник истины — contracts/review-platform/v1/openapi.yaml.
+# Файлы не коммитятся, CI перегенерирует их и проверяет отсутствие diff (принцип II).
+src/api/generated/
+
+# Сборка
+dist/
+build/
+
+# Тесты и отчёты
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# Окружение и логи
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+
+# Служебное
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/

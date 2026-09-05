@@ -1,0 +1,67 @@
+name: web
+
+# Проверки web-контура (apps/web).
+# Сгенерированный Orval клиент не коммитится: CI перегенерирует его из
+# зафиксированного контракта и убеждается, что diff отсутствует (принцип II).
+on:
+  push:
+    branches: [main, 'codex/**']
+    paths:
+      - 'apps/web/**'
+      - 'contracts/review-platform/v1/**'
+      - '.github/workflows/web-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'contracts/review-platform/v1/**'
+      - '.github/workflows/web-ci.yml'
+
+defaults:
+  run:
+    working-directory: apps/web
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Установка зависимостей
+        run: npm ci
+
+      - name: Генерация клиента из зафиксированного контракта
+        run: npm run api:generate
+
+      - name: Повторная генерация не даёт diff
+        run: |
+          npm run api:generate
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Повторная генерация изменила файлы: сгенерированный клиент правили вручную либо он разошёлся с контрактом."
+            git status --porcelain
+            git diff
+            exit 1
+          fi
+
+      - name: Проверка типов
+        run: npm run typecheck
+
+      - name: Линтер
+        run: npm run lint
+
+      - name: Модульные и компонентные тесты
+        run: npm test
+
+      - name: Установка браузера для E2E
+        run: npx playwright install --with-deps chromium
+
+      - name: Сквозные проверки против MSW
+        run: npm run test:e2e
+
+      - name: Сборка
+        run: npm run build
