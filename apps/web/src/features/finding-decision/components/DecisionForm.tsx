@@ -71,8 +71,8 @@ export function DecisionForm({
   const otherError = error && !isRevisionConflict(error) ? error : null;
 
   return (
-    <section aria-labelledby="decision-title" className="flex flex-col gap-3 rounded border border-line bg-surface p-4">
-      <h2 id="decision-title" className="text-sm font-semibold text-ink">
+    <section aria-labelledby="decision-title" className="flex flex-col gap-3 border-b border-line bg-surface p-4">
+      <h2 id="decision-title" className="text-[15px] font-semibold text-ink">
         Ваше решение
       </h2>
 
@@ -82,24 +82,23 @@ export function DecisionForm({
         value={values.status}
         onValueChange={(next) => setValues((current) => ({ ...current, status: next as DecisionFormValues['status'] }))}
         options={[
-          { value: 'confirmed', label: DECISION_STATUS_TEXT.confirmed, description: 'Замечание принято в работу.' },
-          { value: 'rejected', label: DECISION_STATUS_TEXT.rejected, description: 'Замечание не относится к делу.' },
+          { value: 'confirmed', label: DECISION_STATUS_TEXT.confirmed },
+          { value: 'rejected', label: DECISION_STATUS_TEXT.rejected },
           {
             value: 'needs_context',
             label: DECISION_STATUS_TEXT.needs_context,
-            description: 'Нужны дополнительные материалы, чтобы решить.',
           },
           {
             value: 'unreviewed',
             label: DECISION_STATUS_TEXT.unreviewed,
-            description: 'Вернуть замечание в работу: обоснование и резолюция будут очищены.',
+            description: 'Сбросить сохранённое решение.',
           },
         ]}
       />
 
       <Field
         label="Обоснование"
-        hint={values.status === 'unreviewed' ? 'При сбросе обоснование очищается.' : 'Обязательно для сохранения.'}
+        hint={values.status === 'unreviewed' ? undefined : 'Обязательно для сохранения.'}
         error={validationError}
       >
         {(id, describedBy) => (
@@ -113,7 +112,7 @@ export function DecisionForm({
         )}
       </Field>
 
-      <Field label="Формулировка резолюции" hint="Необязательно: как именно поправить ТЗ.">
+      <Field label="Формулировка резолюции" hint="Необязательно.">
         {(id, describedBy) => (
           <TextArea
             id={id}

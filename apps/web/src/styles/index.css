@@ -2,20 +2,23 @@
 
 /* Палитра веб-интерфейса v1. */
 @theme {
-  --color-canvas: #f1f2f4;
+  --color-canvas: #f4f5f7;
   --color-surface: #ffffff;
-  --color-surface-muted: #fafbfc;
-  --color-ink: #1d2125;
-  --color-ink-muted: #44546f;
-  --color-ink-subtle: #626f86;
-  --color-line: #dcdfe4;
-  --color-accent: #e30611;
-  --color-accent-strong: #b80d18;
-  --color-accent-tint: #fff0f1;
-  --color-rail: #7a0d16;
-  --color-rail-active: #5b0710;
-  --color-warn: #a54800;
-  --color-ok: #216e4e;
+  --color-surface-muted: #f8f9fb;
+  --color-ink: #172033;
+  --color-ink-muted: #4b5870;
+  --color-ink-subtle: #718096;
+  --color-line: #dfe3e9;
+  --color-line-strong: #c7ced8;
+  --color-accent: #d71920;
+  --color-accent-strong: #b10f17;
+  --color-accent-tint: #fff3f3;
+  --color-rail: #760d16;
+  --color-rail-active: #570810;
+  --color-warn: #9a4c08;
+  --color-warn-tint: #fff8e7;
+  --color-ok: #1e704e;
+  --color-ok-tint: #edf9f3;
 }
 
 :root {
@@ -32,6 +35,26 @@ body {
     'Segoe UI',
     Roboto,
     sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+a {
+  text-decoration-thickness: from-font;
+  text-underline-position: from-font;
+}
+
+::selection {
+  background: #ffd9dc;
+  color: var(--color-ink);
 }
 
 /* Фокус остаётся видимым: весь сценарий проходится с клавиатуры (FR-041). */

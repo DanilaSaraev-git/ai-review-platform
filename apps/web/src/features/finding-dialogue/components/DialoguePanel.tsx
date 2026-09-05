@@ -28,8 +28,8 @@ export function DialoguePanel({
   }
 
   return (
-    <section aria-labelledby="dialogue-title" className="flex flex-col gap-4 rounded border border-line bg-surface p-4">
-      <h2 id="dialogue-title" className="text-sm font-semibold text-ink">
+    <section aria-labelledby="dialogue-title" className="flex flex-col gap-4 bg-surface p-4">
+      <h2 id="dialogue-title" className="text-[15px] font-semibold text-ink">
         Диалог по замечанию
       </h2>
 

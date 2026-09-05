@@ -33,20 +33,20 @@ export function RunPage() {
 
   if (isLoading || !run) {
     return (
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
         <Spinner label="Загружаем состояние проверки…" />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-4 p-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
       <nav aria-label="Навигация">
-        <Link className="text-sm text-accent underline" to="/">
-          К списку проверок
+        <Link className="text-xs font-medium text-ink-muted hover:text-accent" to="/">
+          ← Проверки
         </Link>
       </nav>
-      <h1 className="text-xl font-semibold text-ink">Проверка документа</h1>
+      <h1 className="text-2xl font-semibold tracking-[-0.025em] text-ink">Проверка документа</h1>
       <RunStatePanel run={run} progress={progress} isOffline={isOffline} />
     </main>
   );

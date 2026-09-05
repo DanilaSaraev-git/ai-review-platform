@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 /**
  * Общие шаги E2E-проверок.
@@ -31,13 +31,15 @@ export async function uploadSyntheticDocument(page: Page): Promise<void> {
 }
 
 export async function selectProfiles(page: Page): Promise<void> {
+  await page.getByText('Параметры проверки', { exact: true }).click();
   await page.getByRole('radio').first().check();
   await page.getByRole('radio', { name: /Сбалансированный/ }).check();
 }
 
 export async function startRun(page: Page): Promise<void> {
-  await selectProfiles(page);
-  await page.getByRole('button', { name: /Запустить проверку/ }).click();
+  const button = page.getByRole('button', { name: /Запустить проверку/ });
+  await expect(button).toBeEnabled();
+  await button.click();
 }
 
 /** Быстрый путь к отчёту готового запуска. */

@@ -51,7 +51,7 @@ export function AssistantResponseCard({
   }
 
   return (
-    <div className="rounded border border-line bg-surface p-3">
+    <div className="mr-5 rounded-[6px] border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(23,32,51,0.04)]">
       <StatusBadge>{ASSISTANT_ACTION_TEXT[response.action]}</StatusBadge>
       <p className="mt-2 text-sm text-ink">{response.content}</p>
 

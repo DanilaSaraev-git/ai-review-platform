@@ -18,7 +18,7 @@ export function DocumentUpload({
   document,
   onUploaded,
   label = 'Файл документа',
-  hint = 'Один документ — один запуск. Исходный файл остаётся без изменений.',
+  hint = 'PDF, Markdown или TXT.',
 }: {
   workspaceId: string;
   limits: PublicLimits;
@@ -58,34 +58,48 @@ export function DocumentUpload({
     <div className="flex flex-col gap-3">
       <Field label={label} hint={hint} error={localError ?? serverError}>
         {(id, describedBy) => (
-          <input
-            id={id}
-            ref={inputRef}
-            aria-describedby={describedBy}
-            type="file"
-            accept={SUPPORTED_EXTENSIONS.join(',')}
-            className="text-sm text-ink file:mr-3 file:cursor-pointer file:rounded file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:transition hover:file:bg-surface-muted"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void handleFile(file);
-              }
-            }}
-          />
+          <div>
+            <input
+              id={id}
+              ref={inputRef}
+              aria-describedby={describedBy}
+              type="file"
+              accept={SUPPORTED_EXTENSIONS.join(',')}
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  void handleFile(file);
+                }
+              }}
+            />
+            {!document ? (
+              <label
+                htmlFor={id}
+                className="inline-flex min-h-9 cursor-pointer items-center rounded-[5px] border border-line-strong bg-surface px-3 py-1.5 text-[13px] font-semibold text-ink shadow-sm transition-[background-color,border-color,transform] duration-100 hover:border-ink-subtle hover:bg-surface-muted active:scale-[0.96]"
+              >
+                Выбрать документ
+              </label>
+            ) : null}
+          </div>
         )}
       </Field>
 
-      <p className="text-xs text-ink-muted">Поддерживаются {SUPPORTED_FORMATS_TEXT}.</p>
+      {hint !== 'PDF, Markdown или TXT.' ? (
+        <p className="text-xs text-ink-muted">Поддерживаются {SUPPORTED_FORMATS_TEXT}.</p>
+      ) : null}
 
       {upload.isPending ? <Callout title="Загружаем документ…" tone="progress" /> : null}
 
       {document ? (
-        <div className="rounded border border-line bg-surface p-3">
-          <p className="text-sm font-medium text-ink">{document.filename}</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            {formatMediaType(document.media_type)} · {formatBytes(document.size_bytes)}
-          </p>
-          <div className="mt-2">
+        <div className="flex flex-wrap items-center gap-3 rounded-[5px] border border-line bg-surface-muted p-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold text-ink" title={document.filename}>{document.filename}</p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              {formatMediaType(document.media_type)} · {formatBytes(document.size_bytes)}
+            </p>
+          </div>
+          <div>
             <StatusBadge
               tone={
                 document.extraction_state === 'completed'
@@ -99,7 +113,7 @@ export function DocumentUpload({
             </StatusBadge>
           </div>
           <Button
-            className="mt-3"
+            className="min-h-8"
             onClick={() => {
               inputRef.current?.click();
             }}

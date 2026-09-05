@@ -40,16 +40,16 @@ export function RunList({ workspaceId }: { workspaceId: string }) {
   }
 
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="overflow-hidden rounded-[6px] border border-line bg-surface">
       {runs.map((run) => (
-        <li key={run.id} className="rounded border border-line bg-surface p-3">
+        <li key={run.id} className="border-b border-line p-3.5 last:border-b-0 hover:bg-surface-muted">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Link className="text-sm font-medium text-accent underline" to={`/runs/${run.id}`}>
+            <Link className="text-[13px] font-semibold text-ink hover:text-accent" to={`/runs/${run.id}`}>
               Проверка от {formatDateTime(run.created_at)}
             </Link>
             <StatusBadge tone={TONE[run.state]}>{RUN_STATE_TEXT[run.state].label}</StatusBadge>
           </div>
-          <p className="mt-1 text-xs text-ink-muted">
+          <p className="mt-1 text-xs leading-5 text-ink-muted">
             {run.progress?.message || RUN_STATE_TEXT[run.state].hint} · создал {run.created_by.display_name}
           </p>
         </li>

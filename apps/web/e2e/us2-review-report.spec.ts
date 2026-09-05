@@ -34,8 +34,10 @@ test.describe('Разбор замечаний в неизменяемом от�
     await openReport(page);
 
     await expect(page.getByText('Неполный охват')).toBeVisible();
+    await page.getByRole('heading', { name: 'Охват проверки' }).click();
     await expect(page.getByText('Результат неполный')).toBeVisible();
     await expect(page.getByText(/Источник не удалось прочитать/)).toBeVisible();
+    await page.getByRole('heading', { name: /Источники проверки/ }).click();
     await expect(page.getByText('Недоступен').first()).toBeVisible();
   });
 

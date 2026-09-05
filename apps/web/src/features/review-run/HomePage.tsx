@@ -8,12 +8,12 @@ export function HomePage() {
   const { workspace, actor, limits, workspaceId, isLoading } = useBootstrap();
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-5 p-6">
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-ink">Проверки ТЗ</h1>
+        <h1 className="text-2xl font-semibold tracking-[-0.025em] text-ink">Проверки</h1>
         <Link
           to="/new"
-          className="inline-flex items-center rounded border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white"
+          className="inline-flex min-h-9 items-center rounded-[5px] border border-accent bg-accent px-3 py-1.5 text-[13px] font-semibold text-white shadow-sm transition-[background-color,border-color,transform] duration-100 hover:border-accent-strong hover:bg-accent-strong active:scale-[0.96]"
         >
           Новая проверка
         </Link>

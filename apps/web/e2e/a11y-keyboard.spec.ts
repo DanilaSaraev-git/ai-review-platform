@@ -50,18 +50,7 @@ test('основной сценарий проходится только с к�
     .setInputFiles({ name: 'synthetic-spec.md', mimeType: 'text/markdown', buffer: Buffer.from(SYNTHETIC_SPEC) });
   await expect(page.getByText('Текст извлечён')).toBeVisible();
 
-  // Выбор профилей стрелками и пробелом.
-  const reviewProfile = page.getByRole('radio').first();
-  await reviewProfile.focus();
-  await page.keyboard.press('Space');
-  await expect(reviewProfile).toBeChecked();
-
-  const modelProfile = page.getByRole('radio', { name: /Сбалансированный/ });
-  await modelProfile.focus();
-  await page.keyboard.press('Space');
-  await expect(modelProfile).toBeChecked();
-
-  // Запуск проверки с клавиатуры.
+  // Единственные доступные профили выбраны автоматически; запуск доступен с клавиатуры.
   const startButton = page.getByRole('button', { name: /Запустить проверку/ });
   await startButton.focus();
   await page.keyboard.press('Enter');

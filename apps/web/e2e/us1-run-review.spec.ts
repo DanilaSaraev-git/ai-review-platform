@@ -10,7 +10,8 @@ test.describe('Запуск проверки загруженного ТЗ', () 
     await page.goto('/');
 
     // Рабочее пространство и лимиты видны сразу (FR-001).
-    await expect(page.getByRole('heading', { name: 'Рабочее пространство' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Рабочее пространство/ })).toBeVisible();
+    await page.getByRole('heading', { name: /Рабочее пространство/ }).click();
     await expect(page.getByText(/файл до/)).toBeVisible();
 
     await page.getByRole('link', { name: 'Новая проверка' }).click();

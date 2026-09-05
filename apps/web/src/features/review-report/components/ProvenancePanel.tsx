@@ -11,10 +11,10 @@ export function ProvenancePanel({ model }: { model: ModelExecution }) {
   const safeParameters = Object.entries(model.safe_parameters ?? {});
 
   return (
-    <section aria-labelledby="provenance-title" className="rounded border border-line bg-surface p-4">
-      <h2 id="provenance-title" className="text-sm font-semibold text-ink">
-        Чем выполнена проверка
-      </h2>
+    <details className="px-4 py-3">
+      <summary className="cursor-pointer">
+        <h2 id="provenance-title" className="inline text-sm font-semibold text-ink">Чем выполнена проверка</h2>
+      </summary>
       <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
         <div>
           <dt className="text-ink-muted">Провайдер</dt>
@@ -48,6 +48,6 @@ export function ProvenancePanel({ model }: { model: ModelExecution }) {
           </ul>
         </div>
       ) : null}
-    </section>
+    </details>
   );
 }

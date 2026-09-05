@@ -33,9 +33,9 @@ export function RunStatePanel({
   const snapshot = run.execution_snapshot;
 
   return (
-    <section aria-labelledby="run-state-title" className="rounded border border-line bg-surface p-4">
+    <section aria-labelledby="run-state-title" className="rounded-[7px] border border-line bg-surface p-5 shadow-[0_1px_2px_rgba(23,32,51,0.04)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="run-state-title" className="text-sm font-semibold text-ink">
+        <h2 id="run-state-title" className="text-[15px] font-semibold text-ink">
           Состояние проверки
         </h2>
         <StatusBadge tone={TONE[run.state]}>{text.label}</StatusBadge>
@@ -86,9 +86,7 @@ export function RunStatePanel({
 
       {run.state === 'completed' && run.report_available ? (
         <p className="mt-3">
-          <Link className="text-accent underline" to={`/runs/${run.id}/report`}>
-            Открыть отчёт
-          </Link>
+          <Link className="inline-flex min-h-9 items-center rounded-[5px] bg-accent px-3 text-[13px] font-semibold text-white shadow-sm transition-[background-color,transform] duration-100 hover:bg-accent-strong active:scale-[0.96]" to={`/runs/${run.id}/report`}>Открыть отчёт</Link>
         </p>
       ) : null}
 

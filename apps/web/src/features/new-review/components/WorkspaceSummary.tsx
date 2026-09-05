@@ -29,11 +29,13 @@ export function WorkspaceSummary({
   }
 
   return (
-    <section aria-labelledby="workspace-summary-title" className="rounded border border-line bg-surface p-4">
-      <h2 id="workspace-summary-title" className="text-sm font-semibold text-ink">
-        Рабочее пространство
-      </h2>
-      <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+    <details className="rounded-[6px] border border-line bg-surface px-4 py-3">
+      <summary className="cursor-pointer">
+        <h2 id="workspace-summary-title" className="inline text-[13px] font-semibold text-ink">
+          Рабочее пространство · {workspace.name}
+        </h2>
+      </summary>
+      <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <dt className="text-xs text-ink-muted">Пространство</dt>
           <dd className="text-sm text-ink">{workspace.name}</dd>
@@ -54,6 +56,6 @@ export function WorkspaceSummary({
           </dd>
         </div>
       </dl>
-    </section>
+    </details>
   );
 }

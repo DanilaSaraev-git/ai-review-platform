@@ -9,13 +9,13 @@ import { SOURCE_ROLE_TEXT, SOURCE_STATUS_TEXT } from '@/lib/error-messages';
  */
 export function SourceList({ sources }: { sources: readonly SourceProvenance[] }) {
   return (
-    <section aria-labelledby="sources-title" className="rounded border border-line bg-surface p-4">
-      <h2 id="sources-title" className="text-sm font-semibold text-ink">
-        Источники проверки
-      </h2>
+    <details className="border-b border-line px-4 py-3">
+      <summary className="cursor-pointer">
+        <h2 id="sources-title" className="inline text-sm font-semibold text-ink">Источники проверки · {sources.length}</h2>
+      </summary>
       <ul className="mt-3 flex flex-col gap-2">
         {sources.map((source) => (
-          <li key={source.source_id} className="rounded border border-line p-2">
+          <li key={source.source_id} className="rounded-[5px] border border-line p-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm text-ink">{source.filename}</span>
               <StatusBadge
@@ -35,6 +35,6 @@ export function SourceList({ sources }: { sources: readonly SourceProvenance[] }
           </li>
         ))}
       </ul>
-    </section>
+    </details>
   );
 }

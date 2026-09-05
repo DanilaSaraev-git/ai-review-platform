@@ -12,6 +12,7 @@ import { DialoguePanel } from '@/features/finding-dialogue/components/DialoguePa
 import { useFindingStates } from './api/use-finding-states';
 import { useReviewReport } from './api/use-review-report';
 import { FindingCard } from './components/FindingCard';
+import { ReviewWorkspace } from './components/ReviewWorkspace';
 
 /**
  * Разбор одного замечания: фрагмент документа, решение человека и диалог
@@ -42,7 +43,7 @@ export function FindingPage() {
 
   if (isUnavailable) {
     return (
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
         <Callout tone="warn" title="Отчёта пока нет">
           Проверка не завершилась успешно, поэтому замечаний нет.
         </Callout>
@@ -52,7 +53,7 @@ export function FindingPage() {
 
   if (isLoading || !report) {
     return (
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
         <Spinner label="Загружаем отчёт…" />
       </main>
     );
@@ -65,22 +66,32 @@ export function FindingPage() {
   const state = byFindingId.get(finding.id);
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-4 p-6">
-      <nav aria-label="Навигация" className="flex flex-wrap items-center gap-3">
-        <Link className="text-sm text-accent underline" to={`/runs/${runId}/report`}>
-          К списку замечаний
-        </Link>
-        <DecisionProgress reviewed={reviewedCount} total={report.findings.length} />
-      </nav>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="flex flex-col gap-4">
-          <FindingCard finding={finding} state={state} runId={runId} isSelected />
-          <div className="rounded border border-line bg-surface p-3">
-            <h3 className="text-xs font-semibold text-ink">Текущее решение</h3>
-            <div className="mt-2">
-              <DecisionSummary decision={state?.decision} />
-            </div>
+    <ReviewWorkspace
+      toolbar={
+        <>
+          <nav aria-label="Навигация">
+            <Link aria-label="К списку замечаний" className="text-xs font-medium text-ink-muted hover:text-accent" to={`/runs/${runId}/report`}>
+              ← Все замечания
+            </Link>
+          </nav>
+          <div className="min-w-0">
+            <h1 className="truncate text-[15px] font-semibold text-ink">{finding.title}</h1>
+            <p className="text-xs text-ink-subtle">Замечание {finding.ordinal}</p>
+          </div>
+          <div className="ml-auto">
+            <DecisionProgress reviewed={reviewedCount} total={report.findings.length} />
+          </div>
+        </>
+      }
+      document={<DocumentViewer workspaceId={workspaceId} document={documentQuery.data} finding={finding} />}
+      panel={
+        <div className="flex flex-col">
+          <div className="border-b border-line p-4">
+            <FindingCard finding={finding} state={state} runId={runId} isSelected />
+          </div>
+          <div className="border-b border-line px-4 py-3">
+            <h3 className="mb-2 text-xs font-semibold text-ink">Текущее решение</h3>
+            <DecisionSummary decision={state?.decision} />
           </div>
           <DecisionForm
             workspaceId={workspaceId}
@@ -96,12 +107,8 @@ export function FindingPage() {
             onUseResolution={setPrefilledResolution}
           />
         </div>
-
-        <div>
-          <DocumentViewer workspaceId={workspaceId} document={documentQuery.data} finding={finding} />
-        </div>
-      </div>
-    </main>
+      }
+    />
   );
 }
 
