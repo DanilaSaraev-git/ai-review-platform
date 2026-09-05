@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://review-data-spec.local/specs/model-output.review.v1.schema.json",
+  "title": "Compact review model output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "coverage", "findings", "limitations"],
+  "properties": {
+    "summary": {"type": "string", "minLength": 1, "maxLength": 5000},
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewed_fragment_ids", "unreviewed", "source_gaps"],
+      "properties": {
+        "reviewed_fragment_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        },
+        "unreviewed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/unreviewed_fragment"}
+        },
+        "source_gaps": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/source_gap"}
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "limitations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 2000}
+    }
+  },
+  "$defs": {
+    "unreviewed_fragment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fragment_id", "reason"],
+      "properties": {
+        "fragment_id": {"type": "string", "minLength": 1, "maxLength": 160},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000}
+      }
+    },
+    "source_gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "fragment_id", "code", "reason"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "fragment_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 160},
+        "code": {
+          "enum": [
+            "source_unavailable",
+            "source_partial",
+            "context_budget",
+            "context_limit",
+            "processing_failed",
+            "unsupported_content",
+            "other"
+          ]
+        },
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000}
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "fragment_id", "quote"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "fragment_id": {"type": "string", "minLength": 1, "maxLength": 160},
+        "quote": {"type": "string", "minLength": 1, "maxLength": 4000}
+      }
+    },
+    "priority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "rationale"],
+      "properties": {
+        "level": {"enum": ["high", "medium", "low"]},
+        "rationale": {"type": "string", "minLength": 1, "maxLength": 2000}
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "title",
+        "problem",
+        "reason",
+        "question",
+        "priority",
+        "anchors",
+        "scope"
+      ],
+      "properties": {
+        "kind": {"enum": ["ambiguity", "contradiction", "missing", "inconsistency", "other"]},
+        "title": {"type": "string", "minLength": 1, "maxLength": 500},
+        "problem": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "question": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "priority": {"$ref": "#/$defs/priority"},
+        "anchors": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/anchor"}
+        },
+        "scope": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 160}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "missing"}}, "required": ["kind"]},
+          "then": {
+            "properties": {
+              "anchors": {"maxItems": 0},
+              "scope": {"minItems": 1}
+            }
+          },
+          "else": {"properties": {"anchors": {"minItems": 1}}}
+        }
+      ]
+    }
+  }
+}

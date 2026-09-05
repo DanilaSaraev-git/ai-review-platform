@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://review-data-spec.local/specs/model-output.dialogue.v1.schema.json",
+  "title": "Compact finding dialogue model output v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action", "content", "proposed_resolution", "anchors"],
+  "properties": {
+    "action": {"enum": ["clarify", "propose_resolution", "escalate"]},
+    "content": {"type": "string", "minLength": 1, "maxLength": 8000},
+    "proposed_resolution": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/proposed_resolution"}
+      ]
+    },
+    "anchors": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/anchor"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "propose_resolution"}}, "required": ["action"]},
+      "then": {"properties": {"proposed_resolution": {"$ref": "#/$defs/proposed_resolution"}}},
+      "else": {"properties": {"proposed_resolution": {"type": "null"}}}
+    }
+  ],
+  "$defs": {
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "fragment_id", "quote"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "fragment_id": {"type": "string", "minLength": 1, "maxLength": 160},
+        "quote": {"type": "string", "minLength": 1, "maxLength": 4000}
+      }
+    },
+    "proposed_resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "rationale"],
+      "properties": {
+        "text": {"type": "string", "minLength": 1, "maxLength": 8000},
+        "rationale": {"type": "string", "minLength": 1, "maxLength": 4000}
+      }
+    }
+  }
+}

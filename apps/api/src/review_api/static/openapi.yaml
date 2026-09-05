@@ -1,0 +1,1290 @@
+openapi: 3.1.0
+info:
+  title: Review Platform API
+  version: 1.0.2
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Design-first contract between the React web client and backend for immutable
+    document versions, asynchronous review, immutable reports, per-finding
+    dialogue, and human decisions. The deployment provides one trusted actor and
+    one configured organization/workspace. All timestamps are UTC RFC 3339.
+    Review reports never contain mutable dialogue or decisions.
+servers:
+  - url: /api
+    description: Same-origin reverse proxy
+security: []
+tags:
+  - name: Bootstrap
+    description: Deployment-configured actor, workspace, and public limits
+  - name: Documents
+    description: Immutable uploaded document versions and content
+  - name: Profiles
+    description: Versioned review profiles
+  - name: Model profiles
+    description: Selectable safe model-profile metadata
+  - name: Review runs
+    description: Asynchronous review lifecycle, immutable reports, and finding state
+  - name: Finding dialogue
+    description: Ordered asynchronous turns scoped to one immutable finding
+
+paths:
+  /v1/bootstrap:
+    get:
+      tags: [Bootstrap]
+      operationId: getBootstrap
+      summary: Return the configured actor, workspace, and public limits
+      responses:
+        "200":
+          description: Deployment bootstrap data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bootstrap"
+
+  /v1/workspaces/{workspaceId}/documents:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      tags: [Documents]
+      operationId: listDocuments
+      summary: List immutable document versions in reverse creation order
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
+      responses:
+        "200":
+          description: Page of document versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Documents]
+      operationId: uploadDocument
+      summary: Store one immutable document version
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Document version stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+
+  /v1/workspaces/{workspaceId}/documents/{documentId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/DocumentId"
+    get:
+      tags: [Documents]
+      operationId: getDocument
+      summary: Return immutable document-version metadata
+      responses:
+        "200":
+          description: Document-version metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/workspaces/{workspaceId}/documents/{documentId}/content:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/DocumentId"
+    get:
+      tags: [Documents]
+      operationId: downloadDocument
+      summary: Read the immutable original bytes
+      responses:
+        "200":
+          description: Original document bytes
+          headers:
+            Content-Disposition:
+              schema: {type: string}
+            ETag:
+              schema: {type: string}
+              description: quoted lowercase SHA-256 of the exact immutable content bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/workspaces/{workspaceId}/profiles:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      tags: [Profiles]
+      operationId: listReviewProfiles
+      summary: List active system and workspace review-profile versions
+      responses:
+        "200":
+          description: Available review-profile versions
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReviewProfile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Profiles]
+      operationId: createReviewProfile
+      summary: Create an immutable workspace review-profile version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReviewProfile"
+      responses:
+        "201":
+          description: Review-profile version created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /v1/workspaces/{workspaceId}/model-profiles:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      tags: [Model profiles]
+      operationId: listModelProfiles
+      summary: List selectable model-profile versions without provider secrets
+      responses:
+        "200":
+          description: Available model-profile versions
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ModelProfile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/workspaces/{workspaceId}/review-runs:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      tags: [Review runs]
+      operationId: listReviewRuns
+      summary: List review runs in reverse creation order
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/PageLimit"
+      responses:
+        "200":
+          description: Page of runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRunPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Review runs]
+      operationId: createReviewRun
+      summary: Create an asynchronous review run over immutable inputs
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReviewRun"
+      responses:
+        "202":
+          description: Run accepted or replayed with the same key and body
+          headers:
+            Location:
+              schema: {type: string, format: uri-reference}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /v1/workspaces/{workspaceId}/review-runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Review runs]
+      operationId: getReviewRun
+      summary: Return current run state for polling
+      responses:
+        "200":
+          description: Current run state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Review runs]
+      operationId: cancelReviewRun
+      summary: Request cancellation of a non-terminal run
+      responses:
+        "202":
+          description: Cancellation request accepted; stopping is asynchronous
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/report:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Review runs]
+      operationId: getReviewReport
+      summary: Return the immutable validated report for a completed run
+      responses:
+        "200":
+          description: Immutable validated review report
+          headers:
+            ETag:
+              schema: {type: string}
+              description: quoted lowercase SHA-256 of the exact immutable canonical bytes; decisions and dialogue never change it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewReport"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReportUnavailable"
+
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/finding-states:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Review runs]
+      operationId: listFindingStates
+      summary: Return mutable decisions and dialogue summaries separately from report
+      responses:
+        "200":
+          description: One mutable state per finding in the immutable report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindingStateList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReportUnavailable"
+
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/findings/{findingId}/dialogue:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/FindingId"
+    get:
+      tags: [Finding dialogue]
+      operationId: getFindingDialogue
+      summary: Return ordered dialogue and server-computed ability to send a message
+      responses:
+        "200":
+          description: Current finding dialogue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindingDialogue"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReportUnavailable"
+
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/findings/{findingId}/dialogue/turns:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/FindingId"
+    post:
+      tags: [Finding dialogue]
+      operationId: createFindingDialogueTurn
+      summary: Add one actor message and enqueue exactly one assistant response
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDialogueTurn"
+      responses:
+        "202":
+          description: Turn accepted or replayed; poll the returned dialogue
+          headers:
+            Location:
+              schema: {type: string, format: uri-reference}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindingDialogue"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/findings/{findingId}/dialogue/turns/{turnId}/retry:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/FindingId"
+      - $ref: "#/components/parameters/TurnId"
+    post:
+      tags: [Finding dialogue]
+      operationId: retryFindingDialogueTurn
+      summary: Retry generation for a failed turn without adding a new message
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetryDialogueTurn"
+      responses:
+        "202":
+          description: Retry accepted or replayed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindingDialogue"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/findings/{findingId}/decision:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/FindingId"
+    put:
+      tags: [Review runs]
+      operationId: putFindingDecision
+      summary: Record or reset a human decision with optimistic concurrency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutFindingDecision"
+      responses:
+        "200":
+          description: Current human decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanDecision"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+components:
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      description: >-
+        Must equal the deployment-configured workspace ID. Any other value is an
+        ordinary namespace miss and returns 404.
+      schema: {type: string, format: uuid}
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    FindingId:
+      name: findingId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    TurnId:
+      name: turnId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string}
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Unique within workspace and operation for at least 24 hours. Same key and
+        body replays the original result; same key with a different body returns 409.
+      schema: {type: string, minLength: 8, maxLength: 128}
+  responses:
+    BadRequest:
+      description: Request does not satisfy the contract
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Resource does not exist in the configured workspace namespace
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: State, idempotency, active-turn, or revision conflict
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ReportUnavailable:
+      description: Run has no published report yet
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    PayloadTooLarge:
+      description: File exceeds effective server/workspace limits
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Bootstrap:
+      type: object
+      additionalProperties: false
+      required: [actor, workspace, limits]
+      properties:
+        actor:
+          $ref: "#/components/schemas/Actor"
+        workspace:
+          $ref: "#/components/schemas/Workspace"
+        limits:
+          $ref: "#/components/schemas/PublicLimits"
+
+    PublicLimits:
+      type: object
+      additionalProperties: false
+      required: [document_upload_max_bytes, max_context_documents]
+      properties:
+        document_upload_max_bytes: {type: integer, minimum: 1}
+        max_context_documents: {type: integer, minimum: 0, maximum: 50}
+
+    Actor:
+      type: object
+      additionalProperties: false
+      description: Deployment-configured identity used only for attribution
+      required: [id, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        display_name: {type: string, minLength: 1, maxLength: 255}
+
+    Workspace:
+      type: object
+      additionalProperties: false
+      required: [id, organization_id, organization_name, name]
+      properties:
+        id: {type: string, format: uuid}
+        organization_id: {type: string, format: uuid}
+        organization_name: {type: string, minLength: 1, maxLength: 255}
+        name: {type: string, minLength: 1, maxLength: 255}
+
+    DocumentPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Document"
+        next_cursor: {type: [string, "null"]}
+
+    Document:
+      type: object
+      additionalProperties: false
+      description: An immutable uploaded document version; pending means durable bytes awaiting or undergoing extraction
+      required: [id, workspace_id, filename, media_type, size_bytes, sha256, extraction_state, created_by, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        workspace_id: {type: string, format: uuid}
+        filename: {type: string, minLength: 1, maxLength: 255}
+        media_type: {enum: [application/pdf, text/markdown, text/plain]}
+        size_bytes: {type: integer, minimum: 1}
+        sha256: {type: string, pattern: "^[a-f0-9]{64}$"}
+        extraction_state:
+          enum: [pending, completed, partial, failed]
+          description: Internal pending or extracting projects to pending; terminal states project one-to-one
+        created_by:
+          $ref: "#/components/schemas/Actor"
+        created_at: {type: string, format: date-time}
+
+    CreateReviewProfile:
+      type: object
+      additionalProperties: false
+      required: [name, role, goal, checks]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 255}
+        role: {type: string, minLength: 1, maxLength: 500}
+        goal: {type: string, minLength: 1, maxLength: 2000}
+        checks:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 1000}
+        supersedes:
+          description: Current immutable family head to replace by a server-generated patch version; null creates a new family
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ReviewProfileRef"
+
+    ReviewProfile:
+      type: object
+      additionalProperties: false
+      description: >-
+        Immutable family version. A system-scoped profile is deployment-scoped release data,
+        visible to the configured workspace but neither workspace-owned nor mutable by clients.
+      required: [id, workspace_id, scope, version, digest, name, role, goal, checks, supersedes, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Stable immutable family identity shared by all append-only versions
+        workspace_id: {type: [string, "null"], format: uuid}
+        scope: {enum: [system, workspace]}
+        version:
+          $ref: "#/components/schemas/SemVer"
+          description: Server-generated immutable semantic version; the mutable family-head pointer is stored separately
+        digest: {type: string, pattern: "^[a-f0-9]{64}$"}
+        name: {type: string, minLength: 1, maxLength: 255}
+        role: {type: string, minLength: 1, maxLength: 500}
+        goal: {type: string, minLength: 1, maxLength: 2000}
+        checks:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 1000}
+        supersedes:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ReviewProfileRef"
+        created_at: {type: string, format: date-time}
+
+    ReviewProfileRef:
+      type: object
+      additionalProperties: false
+      required: [id, version]
+      properties:
+        id: {type: string, format: uuid}
+        version: {$ref: "#/components/schemas/SemVer"}
+
+    ModelProfile:
+      type: object
+      additionalProperties: false
+      required: [id, version, name, description, capabilities, availability]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        version: {$ref: "#/components/schemas/SemVer"}
+        name: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, minLength: 1, maxLength: 1000}
+        capabilities:
+          type: array
+          uniqueItems: true
+          items: {enum: [text_generation, vision, native_structured_output]}
+        availability:
+          enum: [available, unavailable]
+          description: >-
+            Only a fresh internal available observation projects to available. Internal
+            unavailable, degraded, unknown, missing, or expired observations project to unavailable.
+
+    ModelProfileRef:
+      type: object
+      additionalProperties: false
+      required: [id, version]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        version: {$ref: "#/components/schemas/SemVer"}
+
+    SkillSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, version, package_sha256]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        version: {$ref: "#/components/schemas/SemVer"}
+        package_sha256: {type: string, pattern: "^[a-f0-9]{64}$"}
+
+    ReviewProfileSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, version, digest]
+      properties:
+        id: {type: string, format: uuid}
+        version: {$ref: "#/components/schemas/SemVer"}
+        digest: {type: string, pattern: "^[a-f0-9]{64}$"}
+
+    ModelProfileSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, version, config_sha256]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        version: {$ref: "#/components/schemas/SemVer"}
+        config_sha256: {type: string, pattern: "^[a-f0-9]{64}$"}
+
+    FindingDialoguePolicy:
+      type: object
+      additionalProperties: false
+      required: [id, version, digest, max_member_turns]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        version: {$ref: "#/components/schemas/SemVer"}
+        digest: {type: string, pattern: "^[a-f0-9]{64}$"}
+        max_member_turns:
+          type: [integer, "null"]
+          minimum: 1
+          description: Null means no numeric limit; other state/access rules still apply
+
+    ExecutionSnapshot:
+      type: object
+      additionalProperties: false
+      description: >-
+        Immutable exact configuration selected when the run is created. Requested source
+        identity, order, and role are snapshotted before enqueue; terminal prepared-source
+        statuses, fragment IDs, and diagnostics are appended once after extraction.
+      required: [profile, skill, model_profile, dialogue_policy, engine_version]
+      properties:
+        profile:
+          $ref: "#/components/schemas/ReviewProfileSnapshot"
+        skill:
+          $ref: "#/components/schemas/SkillSnapshot"
+        model_profile:
+          $ref: "#/components/schemas/ModelProfileSnapshot"
+        dialogue_policy:
+          $ref: "#/components/schemas/FindingDialoguePolicy"
+        engine_version: {$ref: "#/components/schemas/SemVer"}
+
+    CreateReviewRun:
+      type: object
+      additionalProperties: false
+      description: >-
+        Selects immutable requested sources and exact configuration versions. Upload does not
+        imply extraction; preparation fixes terminal source outcomes before semantic review.
+      required: [document_id, context_document_ids, profile, model_profile, locale]
+      properties:
+        document_id: {type: string, format: uuid}
+        context_document_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 50
+          items: {type: string, format: uuid}
+        profile:
+          $ref: "#/components/schemas/ReviewProfileRef"
+        model_profile:
+          $ref: "#/components/schemas/ModelProfileRef"
+        locale:
+          type: string
+          pattern: "^[a-z]{2}(?:-[A-Z]{2})?$"
+
+    ReviewRunPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewRun"
+        next_cursor: {type: [string, "null"]}
+
+    ReviewRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workspace_id
+        - state
+        - progress
+        - document_id
+        - context_document_ids
+        - execution_snapshot
+        - created_by
+        - created_at
+        - started_at
+        - finished_at
+        - cancel_requested_at
+        - report_available
+        - error
+      properties:
+        id: {type: string, format: uuid}
+        workspace_id: {type: string, format: uuid}
+        state: {enum: [queued, preparing, reviewing, validating, completed, failed, cancelled]}
+        progress:
+          type: object
+          additionalProperties: false
+          required: [percent, message]
+          properties:
+            percent: {type: integer, minimum: 0, maximum: 100}
+            message: {type: string, minLength: 1, maxLength: 500}
+        document_id: {type: string, format: uuid}
+        context_document_ids:
+          type: array
+          uniqueItems: true
+          items: {type: string, format: uuid}
+        execution_snapshot:
+          $ref: "#/components/schemas/ExecutionSnapshot"
+        created_by:
+          $ref: "#/components/schemas/Actor"
+        created_at: {type: string, format: date-time}
+        started_at: {type: [string, "null"], format: date-time}
+        finished_at: {type: [string, "null"], format: date-time}
+        cancel_requested_at: {type: [string, "null"], format: date-time}
+        report_available: {type: boolean}
+        error:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/AsyncError"
+
+    AsyncError:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code:
+          enum:
+            - invalid_document
+            - unsupported_document
+            - extraction_failed
+            - context_limit
+            - model_unavailable
+            - model_output_invalid
+            - validation_failed
+            - cancelled
+            - internal_error
+        message: {type: string, minLength: 1, maxLength: 1000}
+        retryable: {type: boolean}
+
+    ReviewReport:
+      type: object
+      additionalProperties: false
+      description: Immutable report; mutable finding states are a separate resource
+      required: [id, run_id, created_at, summary, coverage, findings, limitations, provenance]
+      properties:
+        id: {type: string, format: uuid}
+        run_id: {type: string, format: uuid}
+        created_at:
+          type: string
+          format: date-time
+          description: Canonical UTC timestamp YYYY-MM-DDTHH:mm:ss.ffffffZ with exactly six fractional digits
+        summary: {type: string, minLength: 1, maxLength: 5000}
+        coverage:
+          $ref: "#/components/schemas/Coverage"
+        findings:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/Finding"
+        limitations:
+          type: array
+          items: {type: string, minLength: 1, maxLength: 2000}
+        provenance:
+          $ref: "#/components/schemas/Provenance"
+
+    Coverage:
+      type: object
+      additionalProperties: false
+      required: [status, target_fragment_ids, reviewed_fragment_ids, gaps]
+      properties:
+        status: {enum: [complete, partial]}
+        target_fragment_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 160}
+        reviewed_fragment_ids:
+          type: array
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 160}
+        gaps:
+          type: array
+          items:
+            $ref: "#/components/schemas/CoverageGap"
+
+    CoverageGap:
+      type: object
+      additionalProperties: false
+      required: [source_id, fragment_id, code, reason]
+      properties:
+        source_id: {type: string, minLength: 1, maxLength: 128}
+        fragment_id: {type: [string, "null"], minLength: 1, maxLength: 160}
+        code: {enum: [source_unavailable, source_partial, context_budget, context_limit, processing_failed, unsupported_content, other]}
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: >-
+            Stable implementation reason. A partially extracted primary additionally uses
+            code source_partial with null fragment_id and reason primary_source_partial.
+            Deterministic execution without semantic analysis uses code other and reason
+            semantic_analysis_not_performed for every known primary fragment.
+
+    Finding:
+      type: object
+      additionalProperties: false
+      description: Immutable model result; never contains HumanDecision
+      required: [id, ordinal, kind, title, problem, reason, question, priority, anchors, scope]
+      properties:
+        id: {type: string, format: uuid}
+        ordinal: {type: integer, minimum: 1}
+        kind: {enum: [ambiguity, contradiction, missing, inconsistency, other]}
+        title: {type: string, minLength: 1, maxLength: 500}
+        problem: {type: string, minLength: 1, maxLength: 4000}
+        reason: {type: string, minLength: 1, maxLength: 4000}
+        question: {type: string, minLength: 1, maxLength: 4000}
+        priority:
+          $ref: "#/components/schemas/Priority"
+        anchors:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceAnchor"
+        scope:
+          type: array
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 160}
+      allOf:
+        - if:
+            properties: {kind: {const: missing}}
+            required: [kind]
+          then:
+            properties: {scope: {minItems: 1}}
+          else:
+            properties: {anchors: {minItems: 1}}
+
+    Priority:
+      type: object
+      additionalProperties: false
+      required: [level, rationale]
+      properties:
+        level: {enum: [high, medium, low]}
+        rationale: {type: string, minLength: 1, maxLength: 2000}
+
+    EvidenceAnchor:
+      type: object
+      additionalProperties: false
+      required: [source_id, document_id, source_name, fragment_id, quote, quote_start, quote_end, location]
+      properties:
+        source_id: {type: string, minLength: 1, maxLength: 128}
+        document_id: {type: string, format: uuid}
+        source_name: {type: string, minLength: 1, maxLength: 255}
+        fragment_id: {type: string, minLength: 1, maxLength: 160}
+        quote: {type: string, minLength: 1, maxLength: 4000}
+        quote_start: {type: integer, minimum: 0}
+        quote_end: {type: integer, minimum: 1}
+        location:
+          $ref: "#/components/schemas/SourceLocation"
+
+    SourceLocation:
+      oneOf:
+        - $ref: "#/components/schemas/PdfLocation"
+        - $ref: "#/components/schemas/TextLocation"
+      discriminator:
+        propertyName: kind
+        mapping:
+          pdf: "#/components/schemas/PdfLocation"
+          text: "#/components/schemas/TextLocation"
+
+    PdfLocation:
+      type: object
+      additionalProperties: false
+      required: [kind, page, rects]
+      properties:
+        kind: {const: pdf}
+        page: {type: integer, minimum: 1}
+        rects:
+          type: array
+          minItems: 1
+          items:
+            type: array
+            prefixItems:
+              - {type: number, minimum: 0, maximum: 1}
+              - {type: number, minimum: 0, maximum: 1}
+              - {type: number, minimum: 0, maximum: 1}
+              - {type: number, minimum: 0, maximum: 1}
+            items: false
+        table: {type: [integer, "null"], minimum: 1}
+        row: {type: [integer, "null"], minimum: 1}
+
+    TextLocation:
+      type: object
+      additionalProperties: false
+      required: [kind, line_start, line_end, char_start, char_end]
+      properties:
+        kind: {const: text}
+        line_start: {type: integer, minimum: 1}
+        line_end: {type: integer, minimum: 1}
+        char_start: {type: integer, minimum: 0}
+        char_end: {type: integer, minimum: 1}
+
+    FindingStateList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FindingState"
+
+    FindingState:
+      type: object
+      additionalProperties: false
+      required: [finding_id, decision, dialogue]
+      properties:
+        finding_id: {type: string, format: uuid}
+        decision:
+          $ref: "#/components/schemas/HumanDecision"
+        dialogue:
+          $ref: "#/components/schemas/DialogueSummary"
+
+    HumanDecision:
+      type: object
+      additionalProperties: false
+      required: [status, revision, actor, reason, resolution, decided_at]
+      properties:
+        status: {enum: [unreviewed, confirmed, rejected, needs_context]}
+        revision: {type: integer, minimum: 0}
+        actor:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/Actor"
+        reason: {type: [string, "null"], maxLength: 4000}
+        resolution: {type: [string, "null"], maxLength: 8000}
+        decided_at: {type: [string, "null"], format: date-time}
+      allOf:
+        - if:
+            properties: {status: {const: unreviewed}}
+            required: [status]
+          then:
+            properties:
+              actor: {type: "null"}
+              reason: {type: "null"}
+              resolution: {type: "null"}
+              decided_at: {type: "null"}
+          else:
+            properties:
+              actor: {$ref: "#/components/schemas/Actor"}
+              reason: {type: string, minLength: 1, maxLength: 4000}
+              decided_at: {type: string, format: date-time}
+
+    PutFindingDecision:
+      type: object
+      additionalProperties: false
+      required: [status, reason, resolution, expected_revision]
+      properties:
+        status: {enum: [unreviewed, confirmed, rejected, needs_context]}
+        reason: {type: [string, "null"], maxLength: 4000}
+        resolution: {type: [string, "null"], maxLength: 8000}
+        expected_revision: {type: integer, minimum: 0}
+      allOf:
+        - if:
+            properties: {status: {const: unreviewed}}
+            required: [status]
+          then:
+            properties:
+              reason: {type: "null"}
+              resolution: {type: "null"}
+          else:
+            properties:
+              reason: {type: string, minLength: 1, maxLength: 4000}
+
+    DialogueSummary:
+      type: object
+      additionalProperties: false
+      required: [dialogue_id, revision, state, turn_count, can_send_message, blocked_reason, policy]
+      properties:
+        dialogue_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 0}
+        state: {enum: [open, generating, closed]}
+        turn_count: {type: integer, minimum: 0}
+        can_send_message: {type: boolean}
+        blocked_reason:
+          type: [string, "null"]
+          enum: [generation_in_progress, turn_limit_reached, human_decision_recorded, dialogue_not_supported, model_unavailable, null]
+        policy:
+          $ref: "#/components/schemas/FindingDialoguePolicy"
+
+    FindingDialogue:
+      type: object
+      additionalProperties: false
+      required: [id, run_id, finding_id, revision, state, turn_count, can_send_message, blocked_reason, policy, turns]
+      properties:
+        id: {type: string, format: uuid}
+        run_id: {type: string, format: uuid}
+        finding_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 0}
+        state: {enum: [open, generating, closed]}
+        turn_count: {type: integer, minimum: 0}
+        can_send_message: {type: boolean}
+        blocked_reason:
+          type: [string, "null"]
+          enum: [generation_in_progress, turn_limit_reached, human_decision_recorded, dialogue_not_supported, model_unavailable, null]
+        policy:
+          $ref: "#/components/schemas/FindingDialoguePolicy"
+        turns:
+          type: array
+          items:
+            $ref: "#/components/schemas/DialogueTurn"
+
+    DialogueTurn:
+      type: object
+      additionalProperties: false
+      required: [id, ordinal, state, actor, member_message, created_at, assistant_response, error, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        ordinal: {type: integer, minimum: 1}
+        state: {enum: [queued, generating, completed, failed]}
+        actor:
+          $ref: "#/components/schemas/Actor"
+        member_message: {type: string, minLength: 1, maxLength: 8000}
+        created_at: {type: string, format: date-time}
+        assistant_response:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/AssistantResponse"
+        error:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/DialogueError"
+        finished_at: {type: [string, "null"], format: date-time}
+
+    AssistantResponse:
+      type: object
+      additionalProperties: false
+      required: [action, content, proposed_resolution, anchors, provenance]
+      properties:
+        action: {enum: [clarify, propose_resolution, escalate]}
+        content: {type: string, minLength: 1, maxLength: 8000}
+        proposed_resolution:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ProposedResolution"
+        anchors:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceAnchor"
+        provenance:
+          $ref: "#/components/schemas/AssistantProvenance"
+
+    ProposedResolution:
+      type: object
+      additionalProperties: false
+      required: [text, rationale]
+      properties:
+        text: {type: string, minLength: 1, maxLength: 8000}
+        rationale: {type: string, minLength: 1, maxLength: 4000}
+
+    AssistantProvenance:
+      type: object
+      additionalProperties: false
+      required: [skill, model]
+      properties:
+        skill:
+          $ref: "#/components/schemas/SkillSnapshot"
+        model:
+          $ref: "#/components/schemas/ModelExecution"
+
+    DialogueError:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code: {enum: [model_unavailable, context_limit, content_blocked, model_output_invalid, validation_failed, internal_error]}
+        message: {type: string, minLength: 1, maxLength: 1000}
+        retryable: {type: boolean}
+
+    CreateDialogueTurn:
+      type: object
+      additionalProperties: false
+      required: [message, expected_revision]
+      properties:
+        message: {type: string, minLength: 1, maxLength: 8000}
+        expected_revision: {type: integer, minimum: 0}
+
+    RetryDialogueTurn:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: {type: integer, minimum: 0}
+
+    Provenance:
+      type: object
+      additionalProperties: false
+      required: [execution_snapshot, model, sources]
+      properties:
+        execution_snapshot:
+          $ref: "#/components/schemas/ExecutionSnapshot"
+        model:
+          $ref: "#/components/schemas/ModelExecution"
+        sources:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SourceProvenance"
+
+    ModelExecution:
+      type: object
+      additionalProperties: false
+      required: [provider, model, model_version, safe_parameters, usage]
+      properties:
+        provider: {type: string, minLength: 1, maxLength: 128}
+        model: {type: string, minLength: 1, maxLength: 255}
+        model_version: {type: string, minLength: 1, maxLength: 255}
+        safe_parameters:
+          type: object
+          additionalProperties:
+            type: [string, number, integer, boolean, "null"]
+        usage:
+          type: object
+          additionalProperties: false
+          required: [input_tokens, output_tokens]
+          properties:
+            input_tokens: {type: [integer, "null"], minimum: 0}
+            output_tokens: {type: [integer, "null"], minimum: 0}
+
+    SourceProvenance:
+      type: object
+      additionalProperties: false
+      required: [source_id, document_id, role, filename, sha256, status, diagnostics]
+      properties:
+        source_id: {type: string, minLength: 1, maxLength: 128}
+        document_id: {type: string, format: uuid}
+        role: {enum: [document, context]}
+        filename: {type: string, minLength: 1, maxLength: 255}
+        sha256: {type: string, pattern: "^[a-f0-9]{64}$"}
+        status: {enum: [available, partial, unavailable]}
+        diagnostics:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceDiagnostic"
+
+    SourceDiagnostic:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: {type: string, pattern: "^[a-z][a-z0-9_]*$"}
+        message: {type: string, minLength: 1, maxLength: 2000}
+
+    SemVer:
+      type: string
+      pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, request_id]
+      properties:
+        type: {type: string, format: uri-reference}
+        title: {type: string, minLength: 1, maxLength: 255}
+        status: {type: integer, minimum: 400, maximum: 599}
+        detail: {type: string, maxLength: 4000}
+        instance: {type: string, format: uri-reference}
+        code: {type: string, pattern: "^[a-z][a-z0-9_]*$"}
+        request_id: {type: string, minLength: 1, maxLength: 128}
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [field, message]
+            properties:
+              field: {type: string, minLength: 1, maxLength: 255}
+              message: {type: string, minLength: 1, maxLength: 1000}

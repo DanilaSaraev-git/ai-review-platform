@@ -1,0 +1,20 @@
+{
+  "action": "propose_resolution",
+  "content": "An explicit daily UTC schedule would remove the ambiguity if the author approves it.",
+  "proposed_resolution": {
+    "text": "Refresh runs every day at 04:00 UTC.",
+    "rationale": "This candidate states a period, start time, and the time zone required by the context."
+  },
+  "anchors": [
+    {
+      "source_id": "source-main",
+      "fragment_id": "source-main-lines-1-2",
+      "quote": "Refresh runs regularly."
+    },
+    {
+      "source_id": "source-context-1",
+      "fragment_id": "source-context-1-lines-1-1",
+      "quote": "Use UTC for refresh schedules."
+    }
+  ]
+}

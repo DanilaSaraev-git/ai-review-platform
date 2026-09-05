@@ -1,0 +1,14 @@
+.git/
+.github/
+.venv/
+node_modules/
+**/__pycache__/
+**/*.py[cod]
+*.log*
+.env*
+coverage/
+htmlcov/
+.local/
+client-materials/
+apps/web/
+output/

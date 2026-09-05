@@ -1,0 +1,25 @@
+name: backend
+
+on:
+  pull_request:
+  push:
+    branches: [main, "codex/**"]
+
+jobs:
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.9"
+          python-version: "3.14.7"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "26.5.0"
+          cache: npm
+          cache-dependency-path: tools/contracts/orval/package-lock.json
+      - run: uv sync --locked
+      - run: make release-check-local

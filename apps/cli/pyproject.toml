@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "review-cli"
+version = "0.1.0"
+requires-python = "==3.14.7"
+dependencies = ["httpx==0.28.1", "review-core", "review-runtime", "typer==0.19.2"]
+
+[project.scripts]
+review-cli = "review_cli.main:main"
+
+[tool.uv.sources]
+review-core = { workspace = true }
+review-runtime = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/review_cli"]

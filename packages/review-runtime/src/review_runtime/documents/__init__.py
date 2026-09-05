@@ -1,0 +1,1 @@
+"""Immutable document extraction adapters."""

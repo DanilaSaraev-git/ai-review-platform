@@ -1,0 +1,24 @@
+{
+  "schema_version": "model-profile.v1",
+  "id": "synthetic-external-example",
+  "version": "1.0.0",
+  "adapter_kind": "openai_compatible",
+  "provider": "synthetic-provider",
+  "model": "synthetic-model",
+  "checkpoint": null,
+  "chat_url": "https://model.invalid/exact/chat/completions",
+  "secret_ref": "REVIEW_EXTERNAL_MODEL_TOKEN",
+  "capabilities": ["text_generation"],
+  "context_window_tokens": 32768,
+  "max_input_utf8_bytes": 524288,
+  "max_output_tokens": 4096,
+  "structured_output": "plain_json",
+  "supported_parameters": ["max_tokens"],
+  "request_options": {},
+  "probe": {
+    "mode": "health",
+    "url": "https://model.invalid/health",
+    "timeout_seconds": 5,
+    "success_ttl_seconds": 300
+  }
+}

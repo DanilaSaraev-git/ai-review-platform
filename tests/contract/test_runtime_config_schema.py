@@ -4,11 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from tests.contract.contract_helpers import load_json_no_duplicates, materialize_defaults, validate_runtime_config
-
+from tests.contract.contract_helpers import (
+    load_json_no_duplicates,
+    materialize_defaults,
+    validate_runtime_config,
+)
 
 ROOT = Path(__file__).parents[2]
-SCHEMA = load_json_no_duplicates(ROOT / "specs/003-backend-implementation/contracts/runtime-config.v1.schema.json")
+SCHEMA = load_json_no_duplicates(
+    ROOT / "specs/003-backend-implementation/contracts/runtime-config.v1.schema.json"
+)
 
 
 def test_root_default_materializes_to_valid_unbound_policy() -> None:

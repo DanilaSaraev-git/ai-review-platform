@@ -1,0 +1,30 @@
+{
+  "summary": "The synthetic refresh schedule needs an explicit period and time.",
+  "coverage": {
+    "reviewed_fragment_ids": ["source-main-lines-1-2"],
+    "unreviewed": [],
+    "source_gaps": []
+  },
+  "findings": [
+    {
+      "kind": "ambiguity",
+      "title": "Refresh schedule is unspecified",
+      "problem": "Regularly does not identify the refresh period or start time.",
+      "reason": "Different schedules would satisfy this wording.",
+      "question": "What refresh period and UTC start time should be used?",
+      "priority": {
+        "level": "medium",
+        "rationale": "The schedule needs a repeatable acceptance condition."
+      },
+      "anchors": [
+        {
+          "source_id": "source-main",
+          "fragment_id": "source-main-lines-1-2",
+          "quote": "Refresh runs regularly."
+        }
+      ],
+      "scope": []
+    }
+  ],
+  "limitations": ["Authored synthetic response for engineering tests; not a model-quality result."]
+}

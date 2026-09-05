@@ -1,0 +1,38 @@
+{
+  "manifest_version": "review-skill.v1",
+  "id": "synthetic-ml-integration",
+  "version": "1.0.0",
+  "display_name": "Synthetic ML integration fixture",
+  "description": "Test-only declarative review and dialogue package for local engineering conformance.",
+  "operations": {
+    "review": {
+      "input": "review-input.v1",
+      "output": "review-output.v1",
+      "instructions": "SKILL.md"
+    },
+    "finding_dialogue": {
+      "input": "finding-dialogue-input.v1",
+      "output": "finding-dialogue-output.v1",
+      "instructions": "references/finding-dialogue.md"
+    }
+  },
+  "references": ["references/test-boundary.md"],
+  "requires": {
+    "engine": ">=0.1.0",
+    "model_capabilities": ["text_generation"]
+  },
+  "files": [
+    {
+      "path": "SKILL.md",
+      "sha256": "37563843746212ca7e83b9eb474de191373a30e1ef311700b37b4932917021fc"
+    },
+    {
+      "path": "references/finding-dialogue.md",
+      "sha256": "c9c264186416f122e12a3e05057b3582d4e3cc6c03edf707c59d8c9d46428a91"
+    },
+    {
+      "path": "references/test-boundary.md",
+      "sha256": "fd0cdfefaf52bae3d786f88a6763bfef9fc569b3d6e527118d3f73ec8e73ada3"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "review-worker"
+version = "0.1.0"
+requires-python = "==3.14.7"
+dependencies = ["review-core", "review-runtime"]
+
+[tool.uv.sources]
+review-core = { workspace = true }
+review-runtime = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/review_worker"]

@@ -1,0 +1,19 @@
+{
+  "schema_version": "model-profile.v1",
+  "id": "synthetic-compose-fake",
+  "version": "1.0.0",
+  "adapter_kind": "openai_compatible",
+  "provider": "synthetic-compose-provider",
+  "model": "synthetic-model",
+  "checkpoint": "synthetic-checkpoint",
+  "chat_url": "http://fake-model:9000/v1/chat/completions",
+  "secret_ref": "REVIEW_EXTERNAL_MODEL_TOKEN",
+  "capabilities": ["text_generation"],
+  "context_window_tokens": 32768,
+  "max_input_utf8_bytes": 524288,
+  "max_output_tokens": 4096,
+  "structured_output": "plain_json",
+  "supported_parameters": ["max_tokens"],
+  "request_options": {},
+  "probe": null
+}

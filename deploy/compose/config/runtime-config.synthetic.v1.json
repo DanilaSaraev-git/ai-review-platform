@@ -1,0 +1,73 @@
+{
+  "schema_version": "runtime-config.v1",
+  "canonical_codec_id": "jcs-rfc8785-0.1.4",
+  "retries": {
+    "extraction_max_attempts": 3,
+    "review_execution_max_attempts": 3,
+    "dialogue_execution_max_attempts": 3,
+    "model_call_max_attempts_per_work_item": 3,
+    "outbox_publish_max_attempts": 12,
+    "initial_backoff_seconds": 1,
+    "max_backoff_seconds": 60,
+    "backoff_multiplier": 2,
+    "jitter_ratio": 0.2
+  },
+  "timeouts_seconds": {
+    "parser": 120,
+    "model_call": 90,
+    "outbox_publish": 15,
+    "database_statement": 30,
+    "artifact_io": 120,
+    "graceful_shutdown": 30
+  },
+  "leases": {
+    "extraction": {"lease_seconds": 180, "heartbeat_seconds": 30},
+    "review_execution": {"lease_seconds": 180, "heartbeat_seconds": 30},
+    "dialogue_execution": {"lease_seconds": 180, "heartbeat_seconds": 30},
+    "outbox_claim": {"lease_seconds": 60, "heartbeat_seconds": 10}
+  },
+  "recovery": {
+    "scan_interval_seconds": 30,
+    "staging_orphan_grace_seconds": 3600,
+    "promoted_orphan_grace_seconds": 86400,
+    "collector_batch_size": 100
+  },
+  "budgets": {
+    "max_upload_bytes": 52428800,
+    "max_context_documents": 50,
+    "max_pages_per_document": 1000,
+    "max_fragments_per_document": 20000,
+    "max_fragment_codepoints": 20000,
+    "max_review_input_codepoints": 500000,
+    "max_model_output_bytes": 1048576,
+    "max_dialogue_message_codepoints": 20000,
+    "max_dialogue_turns": 100,
+    "max_parallel_work_items_per_run": 4,
+    "max_parallel_model_calls": 2
+  },
+  "model_gateway": {
+    "release_default": "deterministic",
+    "optional_openai_compatible": {
+      "enabled": false,
+      "endpoint": null,
+      "model": null,
+      "secret_ref": null,
+      "auto_download": false
+    }
+  },
+  "deterministic_gateway": {
+    "default_behavior": "no_semantic_analysis",
+    "trusted_fixture_bindings": [
+      {
+        "binding_id": "synthetic-v1",
+        "primary_document_sha256": "8044904df55432fec84de9f9c4af501fcbe7411b1e9534bf91bbb78a22ba3ee6",
+        "review_profile_semantic_digest": "0e57babad7be4b50803cb2c7cc3c55e1de086a05364ddfa8e2c07ff3b396e536",
+        "skill_package_sha256": "dda6f8e1dbbabb94132ee4530e0f592ec3164347a567999d97a6f613a3ea78e5",
+        "parser_settings_digest": "b9d61d2684668c42be0bafaaa7cce96ad40db0c4d55daff407f65a43a416353f",
+        "engine_version": "1.0.0",
+        "expected_output_resource_id": "synthetic-review-v1",
+        "expected_output_sha256": "7a587745d40f471914d8f7aab11e99dc2b92d564e0866c84322cf5a8af4c8bc2"
+      }
+    ]
+  }
+}

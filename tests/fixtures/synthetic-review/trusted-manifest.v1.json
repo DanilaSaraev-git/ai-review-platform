@@ -1,0 +1,15 @@
+{
+  "schema_version": "trusted-fixture-manifest.v1",
+  "bindings": [
+    {
+      "binding_id": "synthetic-v1",
+      "primary_document_sha256": "8044904df55432fec84de9f9c4af501fcbe7411b1e9534bf91bbb78a22ba3ee6",
+      "review_profile_semantic_digest": "0e57babad7be4b50803cb2c7cc3c55e1de086a05364ddfa8e2c07ff3b396e536",
+      "skill_package_sha256": "dda6f8e1dbbabb94132ee4530e0f592ec3164347a567999d97a6f613a3ea78e5",
+      "parser_settings_digest": "b9d61d2684668c42be0bafaaa7cce96ad40db0c4d55daff407f65a43a416353f",
+      "engine_version": "1.0.0",
+      "expected_output_resource_id": "synthetic-review-v1",
+      "expected_output_sha256": "7a587745d40f471914d8f7aab11e99dc2b92d564e0866c84322cf5a8af4c8bc2"
+    }
+  ]
+}

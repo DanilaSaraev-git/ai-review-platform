@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://review-data-spec.local/specs/model-profile.v1.schema.json",
+  "title": "Model profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "version",
+    "adapter_kind",
+    "provider",
+    "model",
+    "checkpoint",
+    "chat_url",
+    "secret_ref",
+    "capabilities",
+    "context_window_tokens",
+    "max_input_utf8_bytes",
+    "max_output_tokens",
+    "structured_output",
+    "supported_parameters",
+    "request_options",
+    "probe"
+  ],
+  "properties": {
+    "schema_version": {"const": "model-profile.v1"},
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$", "maxLength": 128},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
+    "adapter_kind": {"enum": ["deterministic", "openai_compatible"]},
+    "provider": {"type": "string", "minLength": 1, "maxLength": 128},
+    "model": {"type": "string", "minLength": 1, "maxLength": 512},
+    "checkpoint": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+    "chat_url": {"type": ["string", "null"], "format": "uri", "pattern": "^https?://"},
+    "secret_ref": {"type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]{1,127}$"},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "contains": {"const": "text_generation"},
+      "items": {"enum": ["text_generation", "vision", "native_structured_output"]}
+    },
+    "context_window_tokens": {"type": "integer", "minimum": 1},
+    "max_input_utf8_bytes": {"type": "integer", "minimum": 1},
+    "max_output_tokens": {"type": "integer", "minimum": 1},
+    "structured_output": {"enum": ["plain_json", "native_json_schema"]},
+    "supported_parameters": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["max_tokens", "max_completion_tokens", "temperature", "top_p", "reasoning_effort", "seed"]}
+    },
+    "request_options": {
+      "type": "object",
+      "propertyNames": {"enum": ["max_tokens", "max_completion_tokens", "temperature", "top_p", "reasoning_effort", "seed"]},
+      "additionalProperties": {"type": ["boolean", "integer", "number", "string", "null"]}
+    },
+    "probe": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "url", "timeout_seconds", "success_ttl_seconds"],
+          "properties": {
+            "mode": {"enum": ["models", "health"]},
+            "url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+            "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 5},
+            "success_ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 3600}
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"adapter_kind": {"const": "openai_compatible"}}},
+      "then": {
+        "properties": {"chat_url": {"type": "string"}},
+        "oneOf": [
+          {
+            "properties": {
+              "supported_parameters": {
+                "contains": {"const": "max_tokens"},
+                "not": {"contains": {"const": "max_completion_tokens"}}
+              }
+            }
+          },
+          {
+            "properties": {
+              "supported_parameters": {
+                "contains": {"const": "max_completion_tokens"},
+                "not": {"contains": {"const": "max_tokens"}}
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {"properties": {"adapter_kind": {"const": "deterministic"}}},
+      "then": {
+        "properties": {
+          "chat_url": {"type": "null"},
+          "secret_ref": {"type": "null"},
+          "probe": {"type": "null"}
+        }
+      }
+    }
+  ]
+}
