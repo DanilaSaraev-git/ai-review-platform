@@ -14,6 +14,7 @@ require_root
 require_command curl
 require_command docker
 require_command flock
+require_command python3
 commit="$1"
 [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "commit is not a full Git SHA"
 target="$(realpath -e "$REVIEW_RELEASES_DIR/$commit")"
@@ -56,7 +57,40 @@ else
   docker compose "${COMPOSE_ARGS[@]}" up --detach --no-build --wait --remove-orphans postgres api proxy
   proxy_port="$(env_value REVIEW_PROXY_PORT)"
   curl --silent --show-error --fail --max-time 10 "http://127.0.0.1:${proxy_port}/health/ready" >/dev/null
-  curl --silent --show-error --fail --max-time 10 "http://127.0.0.1:${proxy_port}/v1/bootstrap" >/dev/null
+  curl --silent --show-error --fail --max-time 10 \
+    "http://127.0.0.1:${proxy_port}/api/v1/bootstrap" \
+    | python3 -c '
+import json
+import sys
+
+value = json.load(sys.stdin)
+expected = {
+    "actor_id": sys.argv[1],
+    "actor_name": sys.argv[2],
+    "workspace_id": sys.argv[3],
+    "workspace_name": sys.argv[4],
+    "organization_id": sys.argv[5],
+    "organization_name": sys.argv[6],
+}
+actor = value["actor"]
+workspace = value["workspace"]
+actual = {
+    "actor_id": actor["id"],
+    "actor_name": actor["display_name"],
+    "workspace_id": workspace["id"],
+    "workspace_name": workspace["name"],
+    "organization_id": workspace["organization_id"],
+    "organization_name": workspace["organization_name"],
+}
+if actual != expected:
+    raise SystemExit("legacy bootstrap identity is missing or drifted")
+' \
+      "$(env_value REVIEW_ACTOR_ID "$REVIEW_LEGACY_ENV_FILE")" \
+      "$(env_value REVIEW_ACTOR_DISPLAY_NAME "$REVIEW_LEGACY_ENV_FILE")" \
+      "$(env_value REVIEW_WORKSPACE_ID "$REVIEW_LEGACY_ENV_FILE")" \
+      "$(env_value REVIEW_WORKSPACE_NAME "$REVIEW_LEGACY_ENV_FILE")" \
+      "$(env_value REVIEW_ORGANIZATION_ID "$REVIEW_LEGACY_ENV_FILE")" \
+      "$(env_value REVIEW_ORGANIZATION_NAME "$REVIEW_LEGACY_ENV_FILE")"
   if ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq '(^|:)(80|443)$'; then
     die "legacy rollback left a public gateway listener active"
   fi
