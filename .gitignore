@@ -16,8 +16,13 @@ dist/
 .coverage
 htmlcov/
 
-# Scratch runs and visual QA; curated client experiment results remain trackable
+# Scratch runs and visual QA
 .local-runs/
 .local-qa/
 .env
 .env.*
+
+# Web dependencies and reproducible test/build output
+node_modules/
+test-results/
+playwright-report/
