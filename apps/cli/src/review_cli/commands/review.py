@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import anyio
 import typer
 from review_core.application.platform import ReviewPlatform
 from review_runtime.fakes.review_executor import TrustedFixtureReviewExecutor
@@ -15,13 +16,33 @@ def review(
     model_profile: str = typer.Option("deterministic-v1"),
     output: Path = typer.Option(...),
 ) -> None:
+    async def execute() -> None:
+        await anyio.to_thread.run_sync(
+            _review_sync,
+            primary,
+            context or [],
+            profile,
+            model_profile,
+            output,
+        )
+
+    anyio.run(execute)
+
+
+def _review_sync(
+    primary: Path,
+    context: list[Path],
+    profile: str,
+    model_profile: str,
+    output: Path,
+) -> None:
     root = Path(__file__).resolve().parents[5]
     platform = ReviewPlatform(TrustedFixtureReviewExecutor(root))
     workspace = platform.workspace_id
     media = "text/markdown" if primary.suffix.lower() in {".md", ".markdown"} else "text/plain"
     document = platform.upload(workspace, primary.name, media, primary.read_bytes())
     context_ids = []
-    for path in context or []:
+    for path in context:
         context_media = "text/markdown" if path.suffix.lower() in {".md", ".markdown"} else "text/plain"
         context_ids.append(platform.upload(workspace, path.name, context_media, path.read_bytes())["id"])
     selected = platform.system_profile

@@ -126,6 +126,7 @@ class AsyncExecutionCoordinator[RequestT, PreparedT, GeneratedT, PublishedT]:
         monotonic: Callable[[], float] = time.monotonic,
         wall_clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         owner_token_factory: Callable[[], str] = lambda: str(uuid4()),
+        failure_mapper: Callable[[BaseException], ExecutionFailure] | None = None,
     ) -> None:
         if timeout_seconds <= 0 or finalization_timeout_seconds <= 0:
             raise ValueError("execution timeouts must be positive")
@@ -138,8 +139,10 @@ class AsyncExecutionCoordinator[RequestT, PreparedT, GeneratedT, PublishedT]:
         self._monotonic = monotonic
         self._wall_clock = wall_clock
         self._owner_token_factory = owner_token_factory
+        self._failure_mapper = failure_mapper
         self._task_group: anyio.abc.TaskGroup | None = None
         self._operations: dict[str, _OperationState] = {}
+        self._admission_lock = anyio.Lock()
 
     async def __aenter__(self) -> AsyncExecutionCoordinator[RequestT, PreparedT, GeneratedT, PublishedT]:
         if self._task_group is not None:
@@ -187,28 +190,33 @@ class AsyncExecutionCoordinator[RequestT, PreparedT, GeneratedT, PublishedT]:
             monotonic_now=self._monotonic(),
             wall_now=self._wall_clock(),
         )
-        admission = await anyio.to_thread.run_sync(self._storage.admit, request, deadline.wall_at)
-        existing = self._operations.get(admission.resource_id)
-        if existing is not None:
-            return ExecutionHandle(admission.resource_id)
-        if admission.replay:
-            terminal = await anyio.to_thread.run_sync(
-                self._storage.read_terminal, admission.resource_id
+        async with self._admission_lock:
+            admission = await anyio.to_thread.run_sync(
+                self._storage.admit, request, deadline.wall_at
             )
-            if terminal is None:
-                raise RuntimeError("replayed operation is not owned by this process and is not terminal")
-            state = _OperationState(terminal=terminal)
-            state.event.set()
+            existing = self._operations.get(admission.resource_id)
+            if existing is not None:
+                return ExecutionHandle(admission.resource_id)
+            if admission.replay:
+                terminal = await anyio.to_thread.run_sync(
+                    self._storage.read_terminal, admission.resource_id
+                )
+                if terminal is None:
+                    raise RuntimeError(
+                        "replayed operation is not owned by this process and is not terminal"
+                    )
+                state = _OperationState(terminal=terminal)
+                state.event.set()
+                self._operations[admission.resource_id] = state
+                return ExecutionHandle(admission.resource_id)
+            claim = await anyio.to_thread.run_sync(
+                self._storage.claim, admission, self._owner_token_factory()
+            )
+            if claim is None:
+                raise RuntimeError("accepted execution could not be claimed")
+            state = _OperationState()
             self._operations[admission.resource_id] = state
-            return ExecutionHandle(admission.resource_id)
-        claim = await anyio.to_thread.run_sync(
-            self._storage.claim, admission, self._owner_token_factory()
-        )
-        if claim is None:
-            raise RuntimeError("accepted execution could not be claimed")
-        state = _OperationState()
-        self._operations[admission.resource_id] = state
-        task_group.start_soon(self._execute, request, claim, deadline, state)
+            task_group.start_soon(self._execute, request, claim, deadline, state)
         return ExecutionHandle(admission.resource_id)
 
     async def wait(self, handle: ExecutionHandle) -> ExecutionTerminal:
@@ -267,10 +275,14 @@ class AsyncExecutionCoordinator[RequestT, PreparedT, GeneratedT, PublishedT]:
                     retryable=True,
                 )
             else:
-                failure = ExecutionFailure(
-                    code="internal_error",
-                    safe_message="The operation could not be completed.",
-                    retryable=True,
+                failure = (
+                    self._failure_mapper(error)
+                    if self._failure_mapper is not None
+                    else ExecutionFailure(
+                        code="internal_error",
+                        safe_message="The operation could not be completed.",
+                        retryable=True,
+                    )
                 )
             try:
                 state.terminal = await self._finalize_failure(claim, failure)

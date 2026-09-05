@@ -16,9 +16,15 @@ def list_documents(
 
 @router.post("/documents", status_code=201)
 async def upload_document(request: Request, workspace_id: str, file: UploadFile = File(...)):  # type: ignore[no-untyped-def]
+    import anyio
+
     content = await file.read()
-    return request.app.state.platform.upload(
-        workspace_id, file.filename or "document", file.content_type or "application/octet-stream", content
+    return await anyio.to_thread.run_sync(
+        request.app.state.platform.upload,
+        workspace_id,
+        file.filename or "document",
+        file.content_type or "application/octet-stream",
+        content,
     )
 
 

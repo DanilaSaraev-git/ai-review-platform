@@ -22,6 +22,7 @@ def test_external_model_override_is_explicit_and_secret_value_is_not_tracked() -
 
     assert api["environment"]["REVIEW_COMPOSITION"] == "ml"
     assert api["environment"]["REVIEW_MODEL_CREDENTIAL_PATH"] == "/run/secrets/model-api-key"
+    assert api["environment"]["REVIEW_SKILL_PACKAGE_PATH"] == "/app/skills/review-data-spec"
     assert api["networks"] == ["internal", "model-egress"]
     assert api["secrets"] == ["model-api-key"]
     assert override["secrets"]["model-api-key"]["file"].startswith(

@@ -4,6 +4,7 @@ services:
       REVIEW_COMPOSITION: ml
       REVIEW_MODEL_PROFILE_PATH: /run/review/model-profile.json
       REVIEW_MODEL_CREDENTIAL_PATH: /run/secrets/model-api-key
+      REVIEW_SKILL_PACKAGE_PATH: /app/skills/review-data-spec
     volumes:
       - ${REVIEW_MODEL_PROFILE_FILE:-./config/model-profile.external.example.json}:/run/review/model-profile.json:ro
     secrets:

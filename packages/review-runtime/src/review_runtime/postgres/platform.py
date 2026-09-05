@@ -26,13 +26,16 @@ from review_core.application.profiles import ProfileVersion
 from review_core.canonical import canonical_bytes, digest_value, strong_etag
 from review_core.dialogue.engine import deterministic_dialogue_response
 from review_core.domain.errors import Conflict, InvalidRequest, NotFound, PayloadTooLarge
+from review_core.ports.models import GenerationRequest, GenerationResult, ModelAdapterError
 
 from review_runtime.artifacts.posix import PosixArtifactStore
+from review_runtime.config.model_profiles import ModelProfile, profile_config_digest
 from review_runtime.config.settings import OperatorSettings
 from review_runtime.documents.pdf import PdfDocumentParser
 from review_runtime.documents.text import TextDocumentParser
 from review_runtime.postgres.artifact_fence import advisory_fence_key
 from review_runtime.reports import CanonicalReportValidator
+from review_runtime.skills.registry import ResolvedSkill
 
 CODEC = "jcs-rfc8785-0.1.4"
 RELEASE_PROFILE_SEMANTIC = {
@@ -87,6 +90,134 @@ class PostgresReviewExecutionStorage:
 
     def connect(self) -> psycopg.Connection[dict[str, Any]]:
         return psycopg.connect(self.database_url, row_factory=dict_row)
+
+    def work_item_id(self, run_id: str) -> str:
+        with self.connect() as connection:
+            row = connection.execute(
+                """SELECT w.id
+                   FROM review_work_items w
+                   JOIN review_run_executions e
+                     ON (e.organization_id,e.workspace_id,e.id) =
+                        (w.organization_id,w.workspace_id,w.execution_id)
+                   WHERE w.organization_id=%s AND w.workspace_id=%s AND e.run_id=%s
+                   ORDER BY w.ordinal LIMIT 1""",
+                (self.organization_id, self.workspace_id, run_id),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("review execution has no work item")
+        return str(row["id"])
+
+    def begin_model_attempt(self, request: GenerationRequest) -> str:
+        attempt_id = str(uuid4())
+        with self.connect() as connection:
+            owner = connection.execute(
+                """SELECT state FROM review_work_items
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s
+                   FOR UPDATE""",
+                (self.organization_id, self.workspace_id, request.work_item_id),
+            ).fetchone()
+            if owner is None or owner["state"] != "prepared":
+                raise Conflict("execution_owner_conflict", "Review work item is not callable.")
+            ordinal_row = connection.execute(
+                """SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal
+                   FROM model_attempts
+                   WHERE organization_id=%s AND workspace_id=%s AND work_item_id=%s""",
+                (self.organization_id, self.workspace_id, request.work_item_id),
+            ).fetchone()
+            if ordinal_row is None:
+                raise RuntimeError("model attempt ordinal could not be allocated")
+            value = {
+                "request_id": request.request_id,
+                "purpose": request.purpose.value,
+                "profile": {
+                    "id": request.model_profile.id,
+                    "version": request.model_profile.version,
+                    "config_sha256": request.model_profile.config_sha256,
+                },
+                "safe_parameters": {
+                    "max_output_tokens": request.max_output_tokens,
+                    "temperature": request.temperature,
+                    "timeout_seconds": request.timeout_seconds,
+                },
+                "started_at": wire_time(utc_now()),
+            }
+            connection.execute(
+                """INSERT INTO model_attempts(
+                     organization_id,workspace_id,work_item_id,generation_attempt_id,
+                     id,ordinal,state,value
+                   ) VALUES(%s,%s,%s,NULL,%s,%s,'running',%s)""",
+                (
+                    self.organization_id,
+                    self.workspace_id,
+                    request.work_item_id,
+                    attempt_id,
+                    ordinal_row["ordinal"],
+                    Jsonb(value),
+                ),
+            )
+        return attempt_id
+
+    def finish_model_attempt(
+        self,
+        attempt_id: str,
+        *,
+        result: GenerationResult | None = None,
+        error: ModelAdapterError | None = None,
+        unknown_outcome: bool = False,
+    ) -> None:
+        if sum((result is not None, error is not None, unknown_outcome)) != 1:
+            raise ValueError("model attempt requires exactly one terminal outcome")
+        with self.connect() as connection:
+            row = connection.execute(
+                """SELECT value FROM model_attempts
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s
+                   FOR UPDATE""",
+                (self.organization_id, self.workspace_id, attempt_id),
+            ).fetchone()
+            if row is None or not isinstance(row["value"], dict):
+                raise RuntimeError("model attempt is missing")
+            value = row["value"] | {"finished_at": wire_time(utc_now())}
+            state = "succeeded" if result is not None else "failed"
+            if result is not None:
+                value["result"] = {
+                    "provider": result.provider,
+                    "model": result.model,
+                    "model_version": result.model_version,
+                    "finish_reason": result.finish_reason.value,
+                    "provider_request_id": result.provider_request_id,
+                    "latency_ms": result.latency_ms,
+                    "safe_parameters": result.safe_parameters,
+                    "usage": None
+                    if result.usage is None
+                    else {
+                        "input_tokens": result.usage.input_tokens,
+                        "output_tokens": result.usage.output_tokens,
+                    },
+                }
+            elif error is not None:
+                value["error"] = {
+                    "code": error.code.value,
+                    "message": error.message,
+                    "retryable": error.retryable,
+                    "provider_request_id": error.provider_request_id,
+                    "outcome_known": error.outcome_known,
+                }
+            else:
+                value["error"] = {
+                    "code": "internal_error",
+                    "message": "The model attempt ended with an unknown outcome.",
+                    "retryable": True,
+                    "provider_request_id": None,
+                    "outcome_known": False,
+                }
+            updated = connection.execute(
+                """UPDATE model_attempts SET state=%s,value=%s
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s AND state='running'
+                   RETURNING id""",
+                (state, Jsonb(value), self.organization_id, self.workspace_id, attempt_id),
+            ).fetchone()
+            if updated is None:
+                raise Conflict("execution_owner_conflict", "Model attempt is already terminal.")
 
     def admit(self, request: ReviewStorageRequest, deadline_at: datetime) -> ExecutionAdmission:
         if request.workspace_id != self.workspace_id:
@@ -791,7 +922,14 @@ class PostgresReviewExecutionStorage:
 class PostgresReviewPlatform:
     """Normalized PostgreSQL/POSIX composition implementing the canonical application facade."""
 
-    def __init__(self, executor: ReviewExecutor, settings: OperatorSettings) -> None:
+    def __init__(
+        self,
+        executor: ReviewExecutor,
+        settings: OperatorSettings,
+        *,
+        model_profiles: tuple[ModelProfile, ...] = (),
+        resolved_skill: ResolvedSkill | None = None,
+    ) -> None:
         self.executor = executor
         self.settings = settings
         self.database_url = settings.database_url.replace("postgresql+psycopg://", "postgresql://", 1)
@@ -800,6 +938,11 @@ class PostgresReviewPlatform:
         self.organization_id = str(settings.organization_id)
         self.workspace_id = str(settings.workspace_id)
         self.actor = {"id": str(settings.actor_id), "display_name": settings.actor_display_name}
+        self.configured_model_profiles = {
+            (profile.id, profile.version): profile for profile in model_profiles
+        }
+        self.resolved_skill = resolved_skill
+        self._ownership_connection: psycopg.Connection[dict[str, Any]] | None = None
         self.max_upload_bytes = 52_428_800
         self.model_profile = {
             "id": settings.model_profile_id,
@@ -825,6 +968,147 @@ class PostgresReviewPlatform:
             dialogue_policy=self.dialogue_policy,
         )
 
+    def startup(self) -> None:
+        """Own one deployment process and fail interrupted work without regenerating it."""
+        if self._ownership_connection is not None:
+            raise RuntimeError("platform is already started")
+        connection = self._connect()
+        key = advisory_fence_key("deployment-owner", str(self.settings.deployment_id), "v1")
+        try:
+            acquired = connection.execute("SELECT pg_try_advisory_lock(%s)", (key,)).fetchone()
+            if acquired is None or not acquired["pg_try_advisory_lock"]:
+                raise RuntimeError("another process already owns this deployment")
+            self._reconcile_interrupted()
+        except BaseException:
+            connection.close()
+            raise
+        self._ownership_connection = connection
+
+    def shutdown(self) -> None:
+        connection = self._ownership_connection
+        self._ownership_connection = None
+        if connection is None:
+            return
+        key = advisory_fence_key("deployment-owner", str(self.settings.deployment_id), "v1")
+        try:
+            connection.execute("SELECT pg_advisory_unlock(%s)", (key,))
+        finally:
+            connection.close()
+
+    def _reconcile_interrupted(self) -> None:
+        finished_at = wire_time(utc_now())
+        internal_execution_error = {
+            "code": "process_interrupted",
+            "message": "The operation was interrupted during process restart.",
+            "retryable": True,
+        }
+        public_error = {
+            "code": "internal_error",
+            "message": "The operation was interrupted and can be retried.",
+            "retryable": True,
+        }
+        with self._connect() as connection:
+            reviews = connection.execute(
+                """SELECT e.id,e.run_id,e.value AS execution_value,r.value AS run_value
+                   FROM review_run_executions e JOIN review_runs r
+                     ON (r.organization_id,r.workspace_id,r.id)=
+                        (e.organization_id,e.workspace_id,e.run_id)
+                   WHERE e.organization_id=%s AND e.workspace_id=%s
+                     AND e.state IN ('accepted','running')
+                     AND r.state NOT IN ('completed','failed','cancelled')
+                   FOR UPDATE OF e,r""",
+                (self.organization_id, self.workspace_id),
+            ).fetchall()
+            for row in reviews:
+                execution_value = cast(dict[str, Any], row["execution_value"]) | {
+                    "finished_at": finished_at,
+                    "error": internal_execution_error,
+                }
+                run_value = cast(dict[str, Any], row["run_value"]) | {
+                    "state": "failed",
+                    "finished_at": finished_at,
+                    "report_available": False,
+                    "error": public_error,
+                }
+                connection.execute(
+                    """UPDATE review_run_executions SET state='failed',checkpoint='failed',
+                         revision=revision+1,value=%s
+                       WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                    (Jsonb(execution_value), self.organization_id, self.workspace_id, row["id"]),
+                )
+                connection.execute(
+                    """UPDATE review_work_items SET state='failed'
+                       WHERE organization_id=%s AND workspace_id=%s AND execution_id=%s
+                         AND state IN ('accepted','running','prepared')""",
+                    (self.organization_id, self.workspace_id, row["id"]),
+                )
+                connection.execute(
+                    """UPDATE review_runs SET state='failed',revision=revision+1,value=%s
+                       WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                    (Jsonb(run_value), self.organization_id, self.workspace_id, row["run_id"]),
+                )
+            attempts = connection.execute(
+                """SELECT a.id,a.dialogue_turn_id,a.value,t.dialogue_id,t.value AS turn_value,
+                          d.revision AS dialogue_revision,d.value AS dialogue_value
+                   FROM generation_attempts a JOIN dialogue_turns t
+                     ON (t.organization_id,t.workspace_id,t.id)=
+                        (a.organization_id,a.workspace_id,a.dialogue_turn_id)
+                   JOIN finding_dialogues d
+                     ON (d.organization_id,d.workspace_id,d.id)=
+                        (t.organization_id,t.workspace_id,t.dialogue_id)
+                   WHERE a.organization_id=%s AND a.workspace_id=%s
+                     AND a.state IN ('accepted','running')
+                     AND t.active_generation_attempt_id=a.id
+                   ORDER BY d.id,t.ordinal
+                   FOR UPDATE OF a,t,d""",
+                (self.organization_id, self.workspace_id),
+            ).fetchall()
+            for row in attempts:
+                attempt_value = cast(dict[str, Any], row["value"]) | {
+                    "finished_at": finished_at,
+                    "error": internal_execution_error,
+                }
+                turn_value = cast(dict[str, Any], row["turn_value"]) | {
+                    "state": "failed",
+                    "assistant_response": None,
+                    "finished_at": finished_at,
+                    "error": public_error,
+                }
+                dialogue_value = cast(dict[str, Any], row["dialogue_value"])
+                dialogue_value["turns"] = [
+                    turn_value if item["id"] == row["dialogue_turn_id"] else item
+                    for item in dialogue_value["turns"]
+                ]
+                if dialogue_value["state"] != "closed":
+                    dialogue_value.update(state="open",can_send_message=True,blocked_reason=None)
+                dialogue_value["revision"] = row["dialogue_revision"] + 1
+                connection.execute(
+                    """UPDATE generation_attempts SET state='failed',checkpoint='failed',
+                         revision=revision+1,value=%s
+                       WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                    (Jsonb(attempt_value), self.organization_id, self.workspace_id, row["id"]),
+                )
+                connection.execute(
+                    """UPDATE dialogue_turns SET state='failed',value=%s
+                       WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                    (
+                        Jsonb(turn_value),
+                        self.organization_id,
+                        self.workspace_id,
+                        row["dialogue_turn_id"],
+                    ),
+                )
+                connection.execute(
+                    """UPDATE finding_dialogues SET revision=revision+1,value=%s
+                       WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                    (
+                        Jsonb(dialogue_value),
+                        self.organization_id,
+                        self.workspace_id,
+                        row["dialogue_id"],
+                    ),
+                )
+
     def _connect(self) -> psycopg.Connection[dict[str, Any]]:
         return psycopg.connect(self.database_url, row_factory=dict_row)
 
@@ -836,8 +1120,31 @@ class PostgresReviewPlatform:
         now = utc_now()
         semantic = RELEASE_PROFILE_SEMANTIC
         model_payload = {"adapter_kind": "deterministic", "capabilities": ["text_generation"]}
-        skill_payload = {"package_sha256": self.settings.skill_package_sha256}
+        skill_payload: dict[str, Any] = {
+            "package_sha256": self.settings.skill_package_sha256
+        }
         policy_payload = {"max_member_turns": None}
+        external_model_payloads = {
+            identity: profile.model_dump(mode="json")
+            for identity, profile in self.configured_model_profiles.items()
+        }
+        if self.resolved_skill is None:
+            skill_id = self.settings.skill_id
+            skill_version = "1.0.0"
+            skill_digest = self.settings.skill_package_sha256
+            skill_payload = {"package_sha256": skill_digest}
+        else:
+            skill_id = str(self.resolved_skill.manifest["id"])
+            skill_version = str(self.resolved_skill.manifest["version"])
+            skill_digest = self.resolved_skill.package_digest
+            skill_payload = {
+                "package_sha256": skill_digest,
+                "manifest_sha256": self.resolved_skill.manifest_digest,
+                "files": [
+                    {"path": item.path, "sha256": item.sha256}
+                    for item in self.resolved_skill.files.values()
+                ],
+            }
         with self._connect() as connection:
             connection.execute(
                 "INSERT INTO deployments(id, release_version, created_at) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING",
@@ -882,14 +1189,34 @@ class PostgresReviewPlatform:
                 "INSERT INTO review_profile_heads(family_row_id,head_version,revision) VALUES(%s,'1.0.0',0) ON CONFLICT DO NOTHING",
                 (family_row,),
             )
-            for table, config_id, payload in (
-                ("model_profile_versions", self.settings.model_profile_id, model_payload),
-                ("skill_versions", self.settings.skill_id, skill_payload),
-                ("dialogue_policy_versions", self.settings.dialogue_policy_id, policy_payload),
+            for table, config_id, config_version, payload in (
+                ("model_profile_versions", self.settings.model_profile_id, "1.0.0", model_payload),
+                ("skill_versions", skill_id, skill_version, skill_payload),
+                ("dialogue_policy_versions", self.settings.dialogue_policy_id, "1.0.0", policy_payload),
             ):
                 connection.execute(
-                    f"INSERT INTO {table}(id,version,digest,codec_id,payload,created_at) VALUES(%s,'1.0.0',%s,%s,%s,%s) ON CONFLICT DO NOTHING",
-                    (config_id, digest_value(payload), CODEC, Jsonb(payload), now),
+                    f"INSERT INTO {table}(id,version,digest,codec_id,payload,created_at) VALUES(%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                    (config_id, config_version, digest_value(payload), CODEC, Jsonb(payload), now),
+                )
+            for (config_id, config_version), payload in external_model_payloads.items():
+                connection.execute(
+                    """INSERT INTO model_profile_versions(id,version,digest,codec_id,payload,created_at)
+                       VALUES(%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
+                    (config_id, config_version, digest_value(payload), CODEC, Jsonb(payload), now),
+                )
+                connection.execute(
+                    """INSERT INTO model_profile_availability(
+                         deployment_id,model_profile_id,model_profile_version,state,reason_code,
+                         checked_at,expires_at,revision
+                       ) VALUES(%s,%s,%s,'unavailable','not_observed',%s,%s,0)
+                       ON CONFLICT DO NOTHING""",
+                    (
+                        str(self.settings.deployment_id),
+                        config_id,
+                        config_version,
+                        now,
+                        now,
+                    ),
                 )
             connection.execute(
                 """INSERT INTO model_profile_availability
@@ -912,7 +1239,7 @@ class PostgresReviewPlatform:
                 JOIN review_profile_heads h ON h.family_row_id=f.row_id
                 JOIN review_profile_versions pv ON pv.family_row_id=h.family_row_id AND pv.version=h.head_version
                 JOIN model_profile_versions m ON m.id=%s AND m.version='1.0.0'
-                JOIN skill_versions s ON s.id=%s AND s.version='1.0.0'
+                JOIN skill_versions s ON s.id=%s AND s.version=%s
                 JOIN dialogue_policy_versions p ON p.id=%s AND p.version='1.0.0'
                 JOIN model_profile_availability av ON av.deployment_id=d.id
                 AND av.model_profile_id=m.id AND av.model_profile_version=m.version
@@ -922,7 +1249,8 @@ class PostgresReviewPlatform:
                 WHERE d.id=%s AND o.id=%s AND w.id=%s AND a.id=%s AND f.public_id=%s""",
                 (
                     self.settings.model_profile_id,
-                    self.settings.skill_id,
+                    skill_id,
+                    skill_version,
                     self.settings.dialogue_policy_id,
                     str(self.settings.deployment_id),
                     self.organization_id,
@@ -939,7 +1267,7 @@ class PostgresReviewPlatform:
                 and checks["display_name"] == self.settings.actor_display_name
                 and checks["semantic_digest"] == digest_value(semantic)
                 and checks["model_digest"] == digest_value(model_payload)
-                and checks["skill_digest"] == self.settings.skill_package_sha256
+                and checks["skill_digest"] == skill_digest
                 and checks["policy_digest"] == digest_value(policy_payload)
                 and checks["state"] == "available"
                 and checks["expires_at"] > now
@@ -961,6 +1289,8 @@ class PostgresReviewPlatform:
 
     def check_seed(self) -> bool:
         self._seed_exact()
+        if self.resolved_skill is not None:
+            return True
         check_configuration = getattr(self.executor, "check_release_configuration", None)
         if callable(check_configuration):
             check_configuration(
@@ -1279,20 +1609,40 @@ class PostgresReviewPlatform:
             workspace_id,
         )
 
-    def _snapshot(self, profile: ProfileVersion) -> dict[str, Any]:
-        return {
-            "profile": {"id": profile.id, "version": profile.version, "digest": profile.digest},
-            "skill": {
+    def _snapshot(
+        self,
+        profile: ProfileVersion,
+        model_reference: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        reference = model_reference or {"id": self.settings.model_profile_id, "version": "1.0.0"}
+        external = self.configured_model_profiles.get((reference["id"], reference["version"]))
+        if external is None:
+            if reference != {"id": self.settings.model_profile_id, "version": "1.0.0"}:
+                raise NotFound()
+            model_digest = digest_value(
+                {"adapter_kind": "deterministic", "capabilities": ["text_generation"]}
+            )
+        else:
+            model_digest = profile_config_digest(external)
+        if self.resolved_skill is None:
+            skill = {
                 "id": self.settings.skill_id,
                 "version": "1.0.0",
                 "package_sha256": self.settings.skill_package_sha256,
-            },
+            }
+        else:
+            skill = {
+                "id": str(self.resolved_skill.manifest["id"]),
+                "version": str(self.resolved_skill.manifest["version"]),
+                "package_sha256": self.resolved_skill.package_digest,
+            }
+        return {
+            "profile": {"id": profile.id, "version": profile.version, "digest": profile.digest},
+            "skill": skill,
             "model_profile": {
-                "id": self.settings.model_profile_id,
-                "version": "1.0.0",
-                "config_sha256": digest_value(
-                    {"adapter_kind": "deterministic", "capabilities": ["text_generation"]}
-                ),
+                "id": reference["id"],
+                "version": reference["version"],
+                "config_sha256": model_digest,
             },
             "dialogue_policy": self.dialogue_policy,
             "engine_version": "1.0.0",
@@ -1302,6 +1652,68 @@ class PostgresReviewPlatform:
         with self._connect() as connection:
             profile = self._exact_profile(connection, reference)
         return self._snapshot(profile)
+
+    def exact_model_profile(self, reference: dict[str, str]) -> ModelProfile | None:
+        if reference == {"id": self.settings.model_profile_id, "version": "1.0.0"}:
+            return None
+        profile = self.configured_model_profiles.get((reference["id"], reference["version"]))
+        if profile is None:
+            raise NotFound()
+        return profile
+
+    def list_model_profiles(self, workspace_id: str) -> dict[str, Any]:
+        self._workspace(workspace_id)
+        now = utc_now()
+        values = [self.model_profile]
+        with self._connect() as connection:
+            for profile in self.configured_model_profiles.values():
+                observation = connection.execute(
+                    """SELECT state,expires_at FROM model_profile_availability
+                       WHERE deployment_id=%s AND model_profile_id=%s AND model_profile_version=%s""",
+                    (str(self.settings.deployment_id), profile.id, profile.version),
+                ).fetchone()
+                available = bool(
+                    observation
+                    and observation["state"] == "available"
+                    and observation["expires_at"] > now
+                )
+                values.append(
+                    {
+                        "id": profile.id,
+                        "version": profile.version,
+                        "name": profile.model,
+                        "description": f"Configured {profile.provider} model profile.",
+                        "capabilities": list(profile.capabilities),
+                        "availability": "available" if available else "unavailable",
+                    }
+                )
+        return {"items": values}
+
+    def observe_model_profile(
+        self,
+        reference: dict[str, str],
+        *,
+        state: str,
+        reason_code: str | None,
+        expires_at: datetime,
+    ) -> None:
+        self.exact_model_profile(reference)
+        now = utc_now()
+        with self._connect() as connection:
+            connection.execute(
+                """UPDATE model_profile_availability
+                   SET state=%s,reason_code=%s,checked_at=%s,expires_at=%s,revision=revision+1
+                   WHERE deployment_id=%s AND model_profile_id=%s AND model_profile_version=%s""",
+                (
+                    state,
+                    reason_code,
+                    now,
+                    expires_at,
+                    str(self.settings.deployment_id),
+                    reference["id"],
+                    reference["version"],
+                ),
+            )
 
     def _exact_profile(
         self, connection: psycopg.Connection[dict[str, Any]], reference: dict[str, str]
@@ -1842,6 +2254,555 @@ class PostgresReviewPlatform:
 
     def get_dialogue(self, workspace_id: str, run_id: str, finding_id: str) -> dict[str, Any]:
         return self._dialogue(workspace_id, run_id, finding_id)
+
+    def dialogue_model_reference(
+        self, workspace_id: str, run_id: str, finding_id: str
+    ) -> dict[str, str]:
+        self._dialogue(workspace_id, run_id, finding_id)
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT r.graph->'provenance'->'execution_snapshot'->'model_profile' AS profile
+                   FROM findings f
+                   JOIN review_reports r
+                     ON (r.organization_id,r.workspace_id,r.id) =
+                        (f.organization_id,f.workspace_id,f.report_id)
+                   WHERE f.organization_id=%s AND f.workspace_id=%s
+                     AND f.id=%s AND r.run_id=%s""",
+                (self.organization_id, workspace_id, finding_id, run_id),
+            ).fetchone()
+        if row is None or not isinstance(row["profile"], dict):
+            raise NotFound()
+        return {"id": str(row["profile"]["id"]), "version": str(row["profile"]["version"])}
+
+    def admit_external_dialogue(
+        self,
+        workspace_id: str,
+        run_id: str,
+        finding_id: str,
+        body: dict[str, Any],
+        key: str,
+        *,
+        retry_turn_id: str | None = None,
+        deadline_at: datetime,
+    ) -> dict[str, Any]:
+        require_idempotency_key(key)
+        dialogue = self._dialogue(workspace_id, run_id, finding_id)
+        operation = (
+            f"dialogue-retry:{dialogue['id']}"
+            if retry_turn_id is not None
+            else f"dialogue:{dialogue['id']}"
+        )
+        request_value = body | ({"turn_id": retry_turn_id} if retry_turn_id is not None else {})
+        request_digest = digest_value(request_value)
+        lock_key = advisory_fence_key(
+            "dialogue-admission",
+            f"{self.organization_id}:{workspace_id}:{operation}:{key}",
+            "v1",
+        )
+        connection = self._connect()
+        try:
+            connection.execute("SELECT pg_advisory_xact_lock(%s)", (lock_key,))
+            existing = connection.execute(
+                """SELECT request_digest,resource_id FROM idempotency_records
+                   WHERE organization_id=%s AND workspace_id=%s AND operation=%s AND key=%s""",
+                (self.organization_id, workspace_id, operation, key),
+            ).fetchone()
+            if existing is not None:
+                if existing["request_digest"] != request_digest:
+                    raise Conflict(
+                        "idempotency_conflict", "The key was already used with a different request."
+                    )
+                attempt = connection.execute(
+                    """SELECT active_generation_attempt_id FROM dialogue_turns
+                       WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                    (self.organization_id, workspace_id, existing["resource_id"]),
+                ).fetchone()
+                if attempt is None:
+                    raise RuntimeError("replayed dialogue turn is missing")
+                connection.commit()
+                return {
+                    "turn_id": existing["resource_id"],
+                    "attempt_id": attempt["active_generation_attempt_id"],
+                    "replay": True,
+                }
+            row = connection.execute(
+                """SELECT revision,value FROM finding_dialogues
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s FOR UPDATE""",
+                (self.organization_id, workspace_id, dialogue["id"]),
+            ).fetchone()
+            if row is None:
+                raise NotFound()
+            if row["revision"] != body["expected_revision"]:
+                raise Conflict("revision_conflict", "Dialogue revision changed.")
+            current_value = cast(dict[str, Any], row["value"])
+            if retry_turn_id is None:
+                if not current_value["can_send_message"]:
+                    raise Conflict("dialogue_blocked", "Dialogue cannot accept a new turn.")
+                message = body.get("message")
+                if not isinstance(message, str) or not message.strip() or len(message) > 8000:
+                    raise InvalidRequest(
+                        "invalid_message",
+                        "Dialogue message must be non-empty and at most 8000 characters.",
+                    )
+                turn_id = str(uuid4())
+                turn = {
+                    "id": turn_id,
+                    "ordinal": len(current_value["turns"]) + 1,
+                    "state": "generating",
+                    "actor": self.actor,
+                    "member_message": message,
+                    "created_at": wire_time(utc_now()),
+                    "assistant_response": None,
+                    "error": None,
+                    "finished_at": None,
+                }
+                connection.execute(
+                    """INSERT INTO dialogue_turns(
+                         organization_id,workspace_id,id,dialogue_id,ordinal,state,value,
+                         active_generation_attempt_id
+                       ) VALUES(%s,%s,%s,%s,%s,'generating',%s,NULL)""",
+                    (
+                        self.organization_id,
+                        workspace_id,
+                        turn_id,
+                        dialogue["id"],
+                        turn["ordinal"],
+                        Jsonb(turn),
+                    ),
+                )
+                current_value["turns"].append(turn)
+                generation_ordinal = 0
+            else:
+                turn_id = retry_turn_id
+                turn_row = connection.execute(
+                    """SELECT state,value FROM dialogue_turns
+                       WHERE organization_id=%s AND workspace_id=%s AND dialogue_id=%s AND id=%s
+                       FOR UPDATE""",
+                    (self.organization_id, workspace_id, dialogue["id"], turn_id),
+                ).fetchone()
+                if turn_row is None:
+                    raise NotFound()
+                if turn_row["state"] != "failed":
+                    raise Conflict("turn_not_retryable", "Only failed turns can be retried.")
+                generation_row = connection.execute(
+                    """SELECT COALESCE(MAX(ordinal),-1)+1 AS ordinal FROM generation_attempts
+                       WHERE organization_id=%s AND workspace_id=%s AND dialogue_turn_id=%s""",
+                    (self.organization_id, workspace_id, turn_id),
+                ).fetchone()
+                if generation_row is None:
+                    raise RuntimeError("generation attempt ordinal could not be allocated")
+                generation_ordinal = int(generation_row["ordinal"])
+                retry_value = cast(dict[str, Any], turn_row["value"]) | {
+                    "state": "generating",
+                    "assistant_response": None,
+                    "error": None,
+                    "finished_at": None,
+                }
+                connection.execute(
+                    """UPDATE dialogue_turns SET state='generating',value=%s
+                       WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                    (Jsonb(retry_value), self.organization_id, workspace_id, turn_id),
+                )
+                current_value["turns"] = [
+                    retry_value if item["id"] == turn_id else item
+                    for item in current_value["turns"]
+                ]
+            attempt_id = str(uuid4())
+            attempt_value = {
+                "deadline_at": wire_time(deadline_at),
+                "started_at": None,
+                "finished_at": None,
+                "error": None,
+            }
+            connection.execute(
+                """INSERT INTO generation_attempts(
+                     organization_id,workspace_id,id,state,checkpoint,attempt_count,lease_token,
+                     lease_owner,lease_expires_at,heartbeat_at,revision,dialogue_turn_id,ordinal,value
+                   ) VALUES(%s,%s,%s,'accepted','accepted',0,NULL,NULL,NULL,NULL,0,%s,%s,%s)""",
+                (
+                    self.organization_id,
+                    workspace_id,
+                    attempt_id,
+                    turn_id,
+                    generation_ordinal,
+                    Jsonb(attempt_value),
+                ),
+            )
+            connection.execute(
+                """UPDATE dialogue_turns SET active_generation_attempt_id=%s
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                (attempt_id, self.organization_id, workspace_id, turn_id),
+            )
+            current_value.update(
+                revision=row["revision"] + 1,
+                state="generating",
+                turn_count=len(current_value["turns"]),
+                can_send_message=False,
+                blocked_reason="generation_in_progress",
+            )
+            connection.execute(
+                """UPDATE finding_dialogues SET revision=revision+1,value=%s
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s AND revision=%s""",
+                (
+                    Jsonb(current_value),
+                    self.organization_id,
+                    workspace_id,
+                    dialogue["id"],
+                    row["revision"],
+                ),
+            )
+            connection.execute(
+                """INSERT INTO idempotency_records(
+                     organization_id,workspace_id,operation,key,request_digest,codec_id,
+                     resource_kind,resource_id
+                   ) VALUES(%s,%s,%s,%s,%s,%s,'dialogue_turn',%s)""",
+                (
+                    self.organization_id,
+                    workspace_id,
+                    operation,
+                    key,
+                    request_digest,
+                    CODEC,
+                    turn_id,
+                ),
+            )
+            connection.commit()
+            return {"turn_id": turn_id, "attempt_id": attempt_id, "replay": False}
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def claim_external_dialogue(self, attempt_id: str, owner_token: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                """UPDATE generation_attempts SET state='running',checkpoint='generating',
+                     attempt_count=attempt_count+1,lease_token=%s,lease_owner=%s,revision=revision+1,
+                     value=value::jsonb || %s::jsonb
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s AND state='accepted'
+                     AND clock_timestamp() < (value->>'deadline_at')::timestamptz
+                   RETURNING id""",
+                (
+                    owner_token,
+                    owner_token,
+                    Jsonb({"started_at": wire_time(utc_now())}),
+                    self.organization_id,
+                    self.workspace_id,
+                    attempt_id,
+                ),
+            ).fetchone()
+        return row is not None
+
+    def begin_dialogue_model_attempt(
+        self, generation_attempt_id: str, request: GenerationRequest
+    ) -> str:
+        attempt_id = str(uuid4())
+        with self._connect() as connection:
+            owner = connection.execute(
+                """SELECT state FROM generation_attempts
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s FOR UPDATE""",
+                (self.organization_id, self.workspace_id, generation_attempt_id),
+            ).fetchone()
+            if owner is None or owner["state"] != "running":
+                raise Conflict("execution_owner_conflict", "Dialogue attempt is not callable.")
+            ordinal = connection.execute(
+                """SELECT COALESCE(MAX(ordinal),-1)+1 AS ordinal FROM model_attempts
+                   WHERE organization_id=%s AND workspace_id=%s AND generation_attempt_id=%s""",
+                (self.organization_id, self.workspace_id, generation_attempt_id),
+            ).fetchone()
+            if ordinal is None:
+                raise RuntimeError("dialogue model attempt ordinal could not be allocated")
+            value = {
+                "request_id": request.request_id,
+                "purpose": request.purpose.value,
+                "profile": {
+                    "id": request.model_profile.id,
+                    "version": request.model_profile.version,
+                    "config_sha256": request.model_profile.config_sha256,
+                },
+                "started_at": wire_time(utc_now()),
+            }
+            connection.execute(
+                """INSERT INTO model_attempts(
+                     organization_id,workspace_id,work_item_id,generation_attempt_id,id,ordinal,state,value
+                   ) VALUES(%s,%s,NULL,%s,%s,%s,'running',%s)""",
+                (
+                    self.organization_id,
+                    self.workspace_id,
+                    generation_attempt_id,
+                    attempt_id,
+                    ordinal["ordinal"],
+                    Jsonb(value),
+                ),
+            )
+        return attempt_id
+
+    def finish_dialogue_model_attempt(
+        self,
+        attempt_id: str,
+        *,
+        result: GenerationResult | None = None,
+        error: ModelAdapterError | None = None,
+        unknown_outcome: bool = False,
+    ) -> None:
+        if sum((result is not None, error is not None, unknown_outcome)) != 1:
+            raise ValueError("model attempt requires exactly one terminal outcome")
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT value FROM model_attempts WHERE organization_id=%s AND workspace_id=%s
+                   AND id=%s FOR UPDATE""",
+                (self.organization_id, self.workspace_id, attempt_id),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("dialogue model attempt is missing")
+            value = cast(dict[str, Any], row["value"]) | {"finished_at": wire_time(utc_now())}
+            state = "succeeded" if result is not None else "failed"
+            if result is not None:
+                value["result"] = {
+                    "provider": result.provider,
+                    "model": result.model,
+                    "model_version": result.model_version,
+                    "finish_reason": result.finish_reason.value,
+                    "provider_request_id": result.provider_request_id,
+                    "latency_ms": result.latency_ms,
+                    "safe_parameters": result.safe_parameters,
+                    "usage": None
+                    if result.usage is None
+                    else {
+                        "input_tokens": result.usage.input_tokens,
+                        "output_tokens": result.usage.output_tokens,
+                    },
+                }
+            elif error is not None:
+                value["error"] = {
+                    "code": error.code.value,
+                    "message": error.message,
+                    "retryable": error.retryable,
+                    "provider_request_id": error.provider_request_id,
+                    "outcome_known": error.outcome_known,
+                }
+            else:
+                value["error"] = {
+                    "code": "internal_error",
+                    "message": "The model attempt ended with an unknown outcome.",
+                    "retryable": True,
+                    "outcome_known": False,
+                }
+            connection.execute(
+                """UPDATE model_attempts SET state=%s,value=%s
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s AND state='running'""",
+                (state, Jsonb(value), self.organization_id, self.workspace_id, attempt_id),
+            )
+
+    def dialogue_preparation(
+        self, workspace_id: str, run_id: str, finding_id: str, turn_id: str
+    ) -> dict[str, Any]:
+        dialogue = self._dialogue(workspace_id, run_id, finding_id)
+        with self._connect() as connection:
+            finding = connection.execute(
+                """SELECT f.value,r.graph FROM findings f JOIN review_reports r
+                     ON (r.organization_id,r.workspace_id,r.id)=
+                        (f.organization_id,f.workspace_id,f.report_id)
+                   WHERE f.organization_id=%s AND f.workspace_id=%s AND f.id=%s AND r.run_id=%s""",
+                (self.organization_id, workspace_id, finding_id, run_id),
+            ).fetchone()
+            turn = connection.execute(
+                """SELECT ordinal,value,active_generation_attempt_id FROM dialogue_turns
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                (self.organization_id, workspace_id, turn_id),
+            ).fetchone()
+        if finding is None or turn is None:
+            raise NotFound()
+        graph = cast(dict[str, Any], finding["graph"])
+        snapshot = graph["provenance"]["execution_snapshot"]
+        documents = [
+            self.get_document(workspace_id, item["document_id"])
+            for item in graph["provenance"]["sources"]
+        ]
+        sources: list[dict[str, Any]] = []
+        fragments: dict[str, Any] = {}
+        for ordinal, document in enumerate(documents, start=1):
+            source_id = "source-main" if ordinal == 1 else f"source-context-{ordinal - 1}"
+            parser = PdfDocumentParser() if document.media_type == "application/pdf" else TextDocumentParser()
+            parsed = parser.parse(document.content, source_id=source_id, document_id=document.id)
+            source_fragments: list[dict[str, Any]] = []
+            for fragment in parsed:
+                location = fragment["location"]
+                fragment_id = (
+                    f"{source_id}-page-{location['page']}"
+                    if "page" in location
+                    else f"{source_id}-lines-{location['line_start']}-{location['line_end']}"
+                )
+                source_fragments.append(
+                    {"id": fragment_id, "text": fragment["text"], "location": location}
+                )
+                fragments[fragment_id] = {
+                    "source_id": source_id,
+                    "document_id": document.id,
+                    "source_name": document.filename,
+                    "text": fragment["text"],
+                    "location": location,
+                }
+            sources.append(
+                {
+                    "id": source_id,
+                    "document_id": document.id,
+                    "name": document.filename,
+                    "fragments": source_fragments,
+                }
+            )
+        history = [
+            {
+                "turn_id": item["id"],
+                "ordinal": item["ordinal"],
+                "member_message": item["member_message"],
+                "assistant_message": item["assistant_response"],
+            }
+            for item in dialogue["turns"]
+            if item["id"] != turn_id and item["state"] == "completed"
+        ]
+        with self._connect() as connection:
+            profile = self._exact_profile(connection, snapshot["profile"])
+        return {
+            "dialogue": dialogue,
+            "turn": turn["value"],
+            "turn_ordinal": turn["ordinal"],
+            "attempt_id": turn["active_generation_attempt_id"],
+            "finding": finding["value"],
+            "sources": sources,
+            "fragments": fragments,
+            "history": history,
+            "profile": {
+                "id": profile.id,
+                "version": profile.version,
+                "name": profile.name,
+                "role": profile.role,
+                "goal": profile.goal,
+                "checks": list(profile.checks),
+            },
+            "snapshot": snapshot,
+        }
+
+    def publish_external_dialogue(
+        self, turn_id: str, attempt_id: str, owner_token: str, response: dict[str, Any]
+    ) -> None:
+        with self._connect() as connection:
+            turn = connection.execute(
+                """SELECT t.dialogue_id,t.value,a.state AS attempt_state,a.lease_token
+                   FROM dialogue_turns t JOIN generation_attempts a
+                     ON (a.organization_id,a.workspace_id,a.dialogue_turn_id,a.id)=
+                        (t.organization_id,t.workspace_id,t.id,t.active_generation_attempt_id)
+                   WHERE t.organization_id=%s AND t.workspace_id=%s AND t.id=%s AND a.id=%s
+                   FOR UPDATE OF t,a""",
+                (self.organization_id, self.workspace_id, turn_id, attempt_id),
+            ).fetchone()
+            if (
+                turn is None
+                or turn["attempt_state"] != "running"
+                or turn["lease_token"] != owner_token
+            ):
+                raise Conflict("execution_owner_conflict", "Dialogue execution owner is stale.")
+            finished = wire_time(utc_now())
+            turn_value = cast(dict[str, Any], turn["value"]) | {
+                "state": "completed",
+                "assistant_response": response,
+                "error": None,
+                "finished_at": finished,
+            }
+            connection.execute(
+                """UPDATE generation_attempts SET state='completed',checkpoint='published',
+                     revision=revision+1,value=value::jsonb || %s::jsonb
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                (Jsonb({"finished_at": finished}), self.organization_id, self.workspace_id, attempt_id),
+            )
+            connection.execute(
+                """UPDATE dialogue_turns SET state='completed',value=%s
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                (Jsonb(turn_value), self.organization_id, self.workspace_id, turn_id),
+            )
+            dialogue = connection.execute(
+                """SELECT revision,value FROM finding_dialogues
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s FOR UPDATE""",
+                (self.organization_id, self.workspace_id, turn["dialogue_id"]),
+            ).fetchone()
+            if dialogue is None:
+                raise RuntimeError("dialogue is missing")
+            value = cast(dict[str, Any], dialogue["value"])
+            value["turns"] = [turn_value if item["id"] == turn_id else item for item in value["turns"]]
+            if value["state"] != "closed":
+                value.update(state="open", can_send_message=True, blocked_reason=None)
+            value["revision"] = dialogue["revision"] + 1
+            connection.execute(
+                """UPDATE finding_dialogues SET revision=revision+1,value=%s
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                (Jsonb(value), self.organization_id, self.workspace_id, turn["dialogue_id"]),
+            )
+
+    def fail_external_dialogue(
+        self, turn_id: str, attempt_id: str, owner_token: str, failure: ExecutionFailure
+    ) -> None:
+        with self._connect() as connection:
+            turn = connection.execute(
+                """SELECT t.dialogue_id,t.value,a.state AS attempt_state,a.lease_token
+                   FROM dialogue_turns t JOIN generation_attempts a
+                     ON (a.organization_id,a.workspace_id,a.dialogue_turn_id,a.id)=
+                        (t.organization_id,t.workspace_id,t.id,t.active_generation_attempt_id)
+                   WHERE t.organization_id=%s AND t.workspace_id=%s AND t.id=%s AND a.id=%s
+                   FOR UPDATE OF t,a""",
+                (self.organization_id, self.workspace_id, turn_id, attempt_id),
+            ).fetchone()
+            if (
+                turn is None
+                or turn["attempt_state"] != "running"
+                or turn["lease_token"] != owner_token
+            ):
+                raise Conflict("execution_owner_conflict", "Dialogue execution owner is stale.")
+            finished = wire_time(utc_now())
+            public_error = {
+                "code": failure.code,
+                "message": failure.safe_message,
+                "retryable": failure.retryable,
+            }
+            turn_value = cast(dict[str, Any], turn["value"]) | {
+                "state": "failed",
+                "assistant_response": None,
+                "error": public_error,
+                "finished_at": finished,
+            }
+            connection.execute(
+                """UPDATE generation_attempts SET state='failed',checkpoint='failed',
+                     revision=revision+1,value=value::jsonb || %s::jsonb
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                (
+                    Jsonb({"finished_at": finished, "error": public_error}),
+                    self.organization_id,
+                    self.workspace_id,
+                    attempt_id,
+                ),
+            )
+            connection.execute(
+                """UPDATE dialogue_turns SET state='failed',value=%s
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                (Jsonb(turn_value), self.organization_id, self.workspace_id, turn_id),
+            )
+            dialogue = connection.execute(
+                """SELECT revision,value FROM finding_dialogues
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s FOR UPDATE""",
+                (self.organization_id, self.workspace_id, turn["dialogue_id"]),
+            ).fetchone()
+            if dialogue is None:
+                raise RuntimeError("dialogue is missing")
+            value = cast(dict[str, Any], dialogue["value"])
+            value["turns"] = [turn_value if item["id"] == turn_id else item for item in value["turns"]]
+            if value["state"] != "closed":
+                value.update(state="open", can_send_message=True, blocked_reason=None)
+            value["revision"] = dialogue["revision"] + 1
+            connection.execute(
+                """UPDATE finding_dialogues SET revision=revision+1,value=%s
+                   WHERE organization_id=%s AND workspace_id=%s AND id=%s""",
+                (Jsonb(value), self.organization_id, self.workspace_id, turn["dialogue_id"]),
+            )
 
     def create_dialogue_turn(
         self, workspace_id: str, run_id: str, finding_id: str, body: dict[str, Any], key: str

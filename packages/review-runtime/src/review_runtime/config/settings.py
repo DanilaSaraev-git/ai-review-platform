@@ -190,6 +190,13 @@ class OperatorSettings(BaseSettings):
     dialogue_policy_id: str
     skill_id: str
     skill_package_sha256: str
+    model_profile_path: Path | None = None
+    model_credential_path: Path | None = None
+    skill_package_path: Path | None = None
+    review_deadline_seconds: float = Field(default=300, gt=0)
+    dialogue_deadline_seconds: float = Field(default=60, gt=0)
+    finalization_timeout_seconds: float = Field(default=10, gt=0, le=30)
+    model_max_response_bytes: int = Field(default=1_048_576, gt=0)
     trusted_proxy_bind: str = "127.0.0.1"
 
     @model_validator(mode="after")

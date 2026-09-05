@@ -30,7 +30,15 @@ async def create_run(
         body = CreateReviewRunDTO.model_validate(await request.json()).model_dump(mode="json")
     except (ValidationError, ValueError) as error:
         raise InvalidRequest("invalid_review_run", "Review run body is invalid.") from error
-    value = request.app.state.platform.create_run(workspace_id, body, idempotency_key)
+    runtime = request.app.state.ml_runtime
+    if runtime is None:
+        import anyio
+
+        value = await anyio.to_thread.run_sync(
+            request.app.state.platform.create_run, workspace_id, body, idempotency_key
+        )
+    else:
+        value = await runtime.create_run(workspace_id, body, idempotency_key)
     response.headers["Location"] = f"/v1/workspaces/{workspace_id}/review-runs/{value['id']}"
     return value
 

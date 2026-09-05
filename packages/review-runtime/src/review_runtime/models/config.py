@@ -5,6 +5,7 @@ import os
 import socket
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
@@ -18,6 +19,25 @@ class EnvironmentSecretProvider:
         value = os.environ.get(reference)
         if value is None:
             raise ValueError("model credential reference is unavailable")
+        return value
+
+
+@dataclass(frozen=True, slots=True)
+class FileSecretProvider:
+    """Resolve one configured reference from a mounted, non-environment file."""
+
+    reference: str
+    path: Path
+
+    def resolve(self, reference: str) -> str:
+        if reference != self.reference:
+            raise ValueError("model credential reference is unavailable")
+        try:
+            value = self.path.read_text(encoding="utf-8").rstrip("\r\n")
+        except OSError as error:
+            raise ValueError("model credential file is unavailable") from error
+        if not value:
+            raise ValueError("model credential file is empty")
         return value
 
 
