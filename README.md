@@ -27,9 +27,16 @@
 - `main` — общий архитектурный и контрактный baseline;
 - `codex/003-backend-implementation` — backend MVP;
 - `codex/004-llm-review-integration` — инженерный слой LLM-интеграции; real endpoint и предметный harness подключаются отдельно;
-- `codex/005-web-review-ui` — web v1.
+- `codex/005-web-review-ui` — web v1;
+- `codex/mvp-launch-20260905` — упрощённый интерфейс и выпуск MVP.
 
 Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Реальная модель и endpoint не выбраны и не проверялись; chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
+
+## Подготовка MVP
+
+Текущий срез [006 MVP launch](specs/006-mvp-launch/spec.md) объединяет упрощение веб-интерфейса, диалоги по замечаниям и подготовку защищённого развёртывания для одной доверенной группы. Работа ведётся через [план](specs/006-mvp-launch/plan.md) и [задачи SpecKit](specs/006-mvp-launch/tasks.md), отдельными коммитами. Фактически пройденные проверки и ограничения собраны в [evidence](specs/006-mvp-launch/evidence.md). Подключение реального endpoint и предметная оценка модели выполняются отдельно.
+
+Сборка, установка, доступ, резервные копии, восстановление, откат и подключение модели описаны в [руководстве оператора](docs/operations/deployment.md).
 
 ## Лицензирование
 

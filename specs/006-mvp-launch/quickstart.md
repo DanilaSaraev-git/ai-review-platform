@@ -16,6 +16,14 @@ npm run build
 
 Проверить synthetic happy-path: загрузка и контекст → запуск → отчёт → выбранное замечание → диалог → human decision → reload. Проверить retry/conflict без потери текста и отсутствие изменения отчёта. Визуально проверить 1440, 1280, 390 пикселей, keyboard focus и длинный текст.
 
+Отдельный сценарий без MSW выполняется против изолированного durable runtime с синтетической моделью. `LIVE_WRITE=1` явно разрешает создавать тестовые документы, ревью, диалоги и решения в этой базе:
+
+```sh
+LIVE_WRITE=1 VITE_API_PROXY_TARGET=http://127.0.0.1:18081 npm run test:e2e:live
+```
+
+Не направлять этот тест на рабочую базу или платный endpoint.
+
 ## Backend
 
 Из корня:
@@ -32,7 +40,7 @@ make test-security
 
 ## Deployment
 
-Точные команды будут в docs/operations по завершении T013–T019. Проверки обязательны: воспроизводимая сборка, config validation, gateway negative/positive HTTP probes, доверенный TLS, private API/DB, health, unavailable model, backup manifest и изолированное восстановление. Перед обновлением сохранить DB+artifacts и прежнюю release directory. После установки проверить startup/restart и отсутствие lost records.
+Точные команды приведены в [руководстве оператора](../../docs/operations/deployment.md). Проверки обязательны: воспроизводимая сборка, config validation, gateway negative/positive HTTP probes, доверенный TLS, private API/DB, health, unavailable model, backup manifest и изолированное восстановление. Перед обновлением сохранить DB+artifacts и прежнюю release directory. После установки проверить startup/restart и отсутствие lost records.
 
 ## Evidence
 
