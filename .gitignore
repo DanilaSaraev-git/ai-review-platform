@@ -20,7 +20,6 @@ htmlcov/
 .uv-cache/
 .local/
 *.whl
-node_modules/
 
 # Scratch runs and visual QA
 .local-runs/
