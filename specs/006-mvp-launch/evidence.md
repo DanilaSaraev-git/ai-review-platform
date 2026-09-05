@@ -1,6 +1,9 @@
 # Evidence: 006 MVP launch
 
-Статус: работа выполняется. Дата: 2026-09-05/06. Baseline: `2a61354`.
+Статус: MVP реализован и развёрнут. Дата: 2026-09-05/06. Baseline: `2a61354`.
+Рабочий release: `9aad090e1d007c16e55d79dbfcd166ce4ca7a8c5`.
+Адрес: [https://135.106.195.62](https://135.106.195.62). Доступ защищён общим gateway;
+credentials переданы владельцу через приватный локальный файл вне репозитория.
 
 ## Выполненные подготовительные проверки
 
@@ -10,9 +13,19 @@
 - Server read-only audit: Ubuntu24.04, 2 GiB RAM + 2 GiB swap, 40 GiB disk; web/API/Postgres healthy на loopback, нет TLS/gateway/scheduled backups; найден uncommitted deployment overlay.
 - Backend diagnosis: default durable fixture выглядит доступной моделью; production должен перейти на explicit unconfigured runtime.
 
-## Оставшиеся проверки
+## Границы готовности
 
-Functional web, production gateway/certificate, backup restore, выпуск и внешний restart будут записаны после выполнения. Реальный endpoint и качество LLM не входят в этот gate.
+Web, runtime, protected gateway, restore, фактический rollback, restart и timers проверены.
+Реальная модель не подключена: осталось задать совместимый профиль поставщика и ключ,
+включить модель и пройти отдельный compatibility smoke по [руководству оператора](../../docs/operations/deployment.md).
+Предметное качество LLM и оценка дизайна пользователем не проверялись. MVP рассчитан на одну
+доверенную группу с общим workspace/actor. Постоянное автоматическое внешнее хранилище
+копий ещё не выбрано; проверенная копия с VPS сохранена у владельца. На текущем Mac выявлен
+внешний дефект VPN-маршрута; прямой маршрут работает, настройки сети пользователя не менялись.
+
+Ниже сохранены результаты этапов в хронологическом порядке. Промежуточные неуспешные
+проверки F1–F6 закрыты последующими исправлениями или подтверждённой диагностикой;
+окончательное состояние записано в конце документа.
 
 ## Slice 1 — visual baseline
 
@@ -101,3 +114,103 @@ Server agent проверил с локальной машины: HTTP→308, 8 
 Откат `501cf86`→legacy `2a61354` выполнен: current переключён, loopback healthy, публичные 80/443 закрыты, несовместимые timers остановлены. Данные сохранились: 3 document versions, 3 reports, 2 dialogue turns, 2 decisions, 6 artifact records; список документов содержит 3 записи. Данные из резервной копии не восстанавливались.
 
 При проверке обнаружен false-positive: старый `/v1/bootstrap` возвращает SPA HTML с HTTP 200. Коммит `ed3d4d6` — `fix(ops): validate legacy rollback API` — использует фактический `/api/v1/bootstrap` и проверяет JSON, exact organization/workspace/actor IDs и labels до переключения symlink. Реальный legacy JSON прошёл, HTML отклонён; независимый targeted review passed. Обратная установка финального release выполняется после этого уточнения gate.
+
+## Convergence finding F6 — external handshake sampling
+
+HIGH / missing / FR-009, FR-014, SC-005: независимая серия root во время финальных maintenance работ дала 7 успешных и 7 неуспешных запросов (5 curl exit 28 во время TLS handshake, 2 exit 35). Успешные HTTPS запросы имели ssl_verify_result=0: auth bootstrap 200 с ожидаемыми labels, no-auth API/schema/health 401, cross-origin mutation 403; plaintext redirect 308. Неуспешные запросы не доказывают ошибку приложения или сертификата. T031 повторяет минимальный probe после прекращения restart/backup и сопоставляет host/network/browser evidence; доступность пока не считается окончательно проверенной.
+
+## Финальный выпуск и эксплуатационная приёмка
+
+Рабочая версия — `9aad090e1d007c16e55d79dbfcd166ce4ca7a8c5`, установленная после успешного
+цикла `2a61354`→`501cf86`→`2a61354`→`9aad090`. T030 закрыта фактическим переключением
+версий и проверкой exact seed. Current symlink и версии контейнеров согласованы; все
+контейнеры перезапущены, полный deployment gate после restart прошёл. Сохранились
+3 версии документа, 3 отчёта, 2 хода диалога, 2 решения и 6 DB artifact records.
+Для отката не потребовалось восстанавливать данные из копии.
+
+T022 закрыта: HTTP redirect, gateway на всех API/docs/document aliases, cross-origin denial,
+authenticated UI/API и приватные DB/API проверены. Сертификат Let's Encrypt для IP
+`135.106.195.62` проходит системную проверку и действителен до 2026-09-12 12:52:08 UTC;
+staging renewal dry-run passed. Активны renewal (02:00/14:00 UTC, jitter ≤20 min), backup
+(00:30 UTC, jitter ≤30 min, retention 14) и minute model probe timers. Без enabled marker
+probe не вызывает сеть. Readiness возвращает `ready`, composition `unconfigured`; database,
+business_schema, exact_seed и artifact_store checks — true. Каталог содержит ровно один
+недоступный профиль `model-not-configured`. Реальных запросов модели не было.
+
+Финальная копия `20260905T224545Z` прошла isolated restore: логический fingerprint БД
+совпал, каждый из 6 DB artifacts проверен по пути/размеру/SHA-256; архив содержит 8 файлов.
+Набор скопирован с VPS в приватный локальный каталог владельца с mode 0700/0600, SHA-256
+проверены отдельно. Автоматическое offsite-хранилище остаётся эксплуатационным продолжением.
+
+На завершении VPS: load average 0.33/0.59/0.52, доступно 1.4 GiB RAM, занято 34 MiB swap,
+диск 29%; OOM и ошибки/drops интерфейсов не обнаружены. Это наблюдение во время приёмки,
+не нагрузочный тест или обещание SLA. Локальные QA containers/networks удалены без `-v`;
+данные в named volumes сохранены. Рабочий VPS оставлен запущенным.
+
+## T031 — подтверждённая причина TLS failures
+
+После завершения maintenance обычный маршрут Mac через `utun7` дал 4/6 успешных запросов
+и два handshake timeout. Минимальный differential — тот же HTTPS запрос с привязкой только
+его сокета к `en0` — дал 10/10 успешных 401 с `ssl_verify_result=0`, без retry, за 48–59 ms.
+Независимая серия server agent: `en0` 12/12, `utun7` 7/12. Полный authenticated внешний
+gate по `en0` также passed без повторов: bootstrap IDs/labels, документы, profiles, health,
+OpenAPI 3.1.0, docs и gateway aliases.
+
+Причина локализована в VPN-маршруте текущего Mac, а не в сертификате или готовности API.
+T031 закрыта подтверждённой диагностикой; внешний клиентский дефект не объявлен исправленным.
+Владельцу может потребоваться прямой маршрут/исключение IP из VPN. Системные настройки
+сети, SSH и проверка доверия TLS не ослаблялись.
+
+## Финальная визуальная проверка production
+
+Playwright с HTTP credentials и `ignoreHTTPSErrors:false` открыл deployed UI. Все запросы
+кроме GET/HEAD/OPTIONS блокировались: write attempts = 0. История содержит 3 записи,
+подготовка явно показывает неподключённую модель и отключённый запуск, synthetic report
+помечен «Тестовый результат», документ, dialogue и сохранённое confirmed decision доступны.
+Проверены desktop 1440 и mobile 390. Для стабильной проверки на Mac использован временный
+localhost CONNECT relay только к IP сервера, с outbound `en0` и end-to-end TLS; после QA
+relay и временный файл удалены, порт освобождён.
+
+Координатор просмотрел свежие production screenshots. Мобильный кадр первоначально был
+снят во время загрузки; повторный capture дождался текста и корректной подсветки фрагмента,
+без предупреждения о несопоставленном anchor. Кадры сохранены только локально в игнорируемом
+`.local-qa/006-mvp/production-*.png`. Клиентские материалы в репозиторий не добавлялись.
+
+## Финальный SpecKit analyze / converge
+
+Проверены spec, plan, tasks, research, data model, contracts и quickstart. Все 18 FR и 8 SC
+покрыты выполненными задачами и проверками; 4 истории реализованы в принятой области MVP.
+
+| Требования | Задачи | Подтверждение |
+| --- | --- | --- |
+| FR-001–004, FR-016–018; SC-001–002 | T007–T011 | Visual commits, web gates, desktop/mobile production QA |
+| FR-005–007, FR-014; SC-003–004 | T011–T014, T022 | Live HTTP flow, conflict/retry, immutable report, restart |
+| FR-008, FR-013; SC-008 | T012, T017, T026–T027 | Unconfigured production, fake-provider activation/probe/admission |
+| FR-009–010; SC-005 | T015–T018, T022, T028, T031 | TLS/auth/origin/private ports, trusted single workspace |
+| FR-011–012; SC-006 | T019–T022, T030 | Actual rollback/re-promotion, consistent backup and isolated restore |
+| FR-015; SC-007 | T001–T003, T023–T025, T029 | Stage commits, standard CI gate, operator handoff and explicit limits |
+
+31 tasks, checklist 16/16, 7 AGENTS principles: PASS. F1–F5 исправлены с regression/actual
+deployment evidence; F6 диагностирован с сохранением явной клиентской границы. Невыполненных
+задач реализации в согласованной области не осталось; новые convergence tasks не нужны.
+SpecKit prerequisites прошли с явным feature directory; локальные ссылки в 11 Markdown
+файлах, относительный `CLAUDE.md -> AGENTS.md` и `git diff --check` проверены без ошибок.
+Реальная модель, пользовательская эстетическая оценка, multi-company SaaS и постоянное
+автоматическое offsite-хранилище не объявляются выполненными.
+
+[Backend CI deployed SHA](https://github.com/DanilaSaraev-git/ai-review-platform/actions/runs/33996795001)
+passed. Web source после ранее успешного full web CI не менялся. Финальный документационный
+коммит не требует повторного развёртывания: код установленного release остаётся тем же.
+
+## Передача владельцу
+
+- Открыть [сервис](https://135.106.195.62); gateway credentials находятся в приватном
+  локальном файле владельца вне Git и будут указаны локальной ссылкой в итоговом ответе.
+- Подключить профиль/ключ модели и выполнить compatibility smoke по
+  [руководству оператора](../../docs/operations/deployment.md#подключить-модель).
+- Для отката использовать `rollback-release.sh` с полным SHA предыдущего release.
+  Проверенный legacy target `2a613542056dd7b132a077a7c5b0619ff2bb733a` возвращает loopback-only
+  сервис; для возврата публичного нового выпуска требуется promotion и установка timers.
+- Отдельные commits сохранены в `codex/mvp-launch-20260905`; merge в main не выполнялся.
+  Постоянное внешнее хранение копий и вход отдельного SSH-оператора по ключу остаются
+  явными эксплуатационными продолжениями. На текущем Mac нужен исправный маршрут к IP вне VPN.

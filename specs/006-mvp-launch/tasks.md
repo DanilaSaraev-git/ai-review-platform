@@ -41,13 +41,13 @@ Tests обязательны по FR-014. Координатор отмечае�
 - [X] T019 [P] [US4] Реализовать согласованные backup/retention/schedule, isolated restore и rollback в tools/ops/, deploy/ и docs/operations/.
 - [X] T020 [US4] Пройти изолированное восстановление и проверить сохранность синтетических документов/отчёта/диалога; результат в specs/006-mvp-launch/evidence.md.
 - [X] T021 [US4] Создать predeploy backup и установить проверенный release на существующий сервер с сохранением предыдущей версии; записать release hash в evidence.
-- [ ] T022 [US4] Проверить внешний доступ, health, model unavailable, persistence/restart и renewal/backup timers; записать результаты и инструкцию отката в docs/operations/.
+- [X] T022 [US4] Проверить внешний доступ, health, model unavailable, persistence/restart и renewal/backup timers; записать результаты и инструкцию отката в docs/operations/.
 
 ## Phase 7 — Final validation
 
-- [ ] T023 Проверить spec/plan/tasks consistency через SpecKit analyze и convergence, закрыть реальные gaps и обновить specs/006-mvp-launch/evidence.md.
-- [ ] T024 Проверить локальные ссылки и CLAUDE.md -> AGENTS.md; включить 006 и operator guide в README.md, зафиксировать финальный документационный коммит.
-- [ ] T025 Зафиксировать итог: URL и способ доступа, commits/rollback, подключение модели и явные блокеры в specs/006-mvp-launch/evidence.md и ответе пользователю.
+- [X] T023 Проверить spec/plan/tasks consistency через SpecKit analyze и convergence, закрыть реальные gaps и обновить specs/006-mvp-launch/evidence.md.
+- [X] T024 Проверить локальные ссылки и CLAUDE.md -> AGENTS.md; включить 006 и operator guide в README.md, зафиксировать финальный документационный коммит.
+- [X] T025 Зафиксировать итог: URL и способ доступа, commits/rollback, подключение модели и явные блокеры в specs/006-mvp-launch/evidence.md и ответе пользователю.
 
 ## Dependencies
 
@@ -75,4 +75,8 @@ SpecKit baseline → visual → backend semantics → functional web → deploym
 
 ## Phase 12: Convergence
 
-- [ ] T030 Исправить обнаруженный при фактическом promotion drift deployment labels в tools/ops/: capture полного legacy environment, согласование labels до seed новой/старой версии, восстановление прежнего состояния при failure; пройти existing→new→legacy→new без потери данных per FR-011, FR-012, FR-015 (contradicts, HIGH).
+- [X] T030 Исправить обнаруженный при фактическом promotion drift deployment labels в tools/ops/: capture полного legacy environment, согласование labels до seed новой/старой версии, восстановление прежнего состояния при failure; пройти existing→new→legacy→new без потери данных per FR-011, FR-012, FR-015 (contradicts, HIGH).
+
+## Phase 13: Convergence
+
+- [X] T031 Проверить внешнюю HTTPS доступность после завершения maintenance: воспроизвести handshake failures коротким repeatable probe, сопоставить с host/browser/network evidence, исправить подтверждённую причину или записать внешний блокер без заявления о непроверенной готовности per FR-009, FR-014, SC-005 (missing, HIGH).
