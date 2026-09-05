@@ -4,10 +4,10 @@ release:
   intended_repository: DanilaSaraev-git/ai-review-platform
   intended_license: none
   distribution_label: source-visible-all-rights-reserved
-  status: REVIEW
+  status: PACKAGE-READY
   source_issue: null
   release_owner: DanilaSaraev-git repository owner
-  reviewer: null
+  reviewer: Codex local release verification
   approved_by: null
   approved_at: null
   published_at: null
@@ -87,7 +87,7 @@ excluded:
 
 package:
   allowlist_file: docs/release/allowlist.txt
-  staged_tree: local filtered clone
+  staged_tree: local filtered clone and verified release bundle
   readme: present
   attribution: verified for baseline; implementation branches require branch-local notice checks
   license: intentionally absent for owner-authored files
@@ -103,6 +103,42 @@ verification:
   post_clone_secret_scan: NOT-RUN
   full_commit_map: docs/release/full-commit-map.tsv
   full_commit_map_sha256: 486b76ed381ae6c81f837ae5c124694b8c6023a148b8fc5244ebc5da508cb29c
+  pre_content_scrub_release_refs:
+    main: 2bbcabf45a0a90e8692aa193ba45781e1f2e1875
+    codex/003-backend-implementation: 6697af5f40fb48f9316f833f5b6732901c9ffc74
+    codex/004-llm-review-integration: 2726b7cbe0075c0aa96e2b31706671ea4d26930e
+    codex/005-web-review-ui: 949099fc32660faadd9ef93612132864f237b1a9
+  content_scrub_commit_map: docs/release/content-scrub-commit-map.tsv
+  content_scrub_commit_map_sha256: cb66f6415b3da180bd42e31aa14da588675ad20fb7448fab035ed387e70ae92d
+  content_scrub: PASS
+  final_branch_refs_before_manifest_commit:
+    main: 3b2b170147228bc4f4f49e8f47aad665701440c6
+    codex/003-backend-implementation: 830c49cf8771fd2f46ddedfdaaa575b75c8854fe
+    codex/004-llm-review-integration: 57aad189156e2747704342bd1a3f954fcf5ef521
+    codex/005-web-review-ui: 5c1636263544ffbe538cc05e7bd0046544a593fa
+  release_ref_history_scan: PASS
+  prohibited_path_scan: PASS
+  private_path_scan: PASS
+  large_blob_scan_over_5_mib: PASS
+  symlinks:
+    - CLAUDE.md -> AGENTS.md
+  manual_secret_pattern_scan: PASS_WITH_LOCAL_FIXTURE_ALLOWLIST
+  manual_secret_pattern_allowlist:
+    - loopback and Compose PostgreSQL fixture credentials
+  integration_smoke:
+    backend_contract_tests: 37 passed
+    backend_unit_tests: 56 passed
+    backend_security_tests: 5 passed
+    web_unit_tests: 94 passed
+    web_e2e_tests: 29 passed
+    web_typecheck_lint_build: PASS
+    compose_restart_smoke: PASS
+  target_repository_observation:
+    repository: private staging repository
+    visibility: private
+    empty: true
+    current_actor_can_push: true
+    current_actor_can_admin_or_maintain: false
   scanners:
     gitleaks: UNAVAILABLE
     trufflehog: UNAVAILABLE

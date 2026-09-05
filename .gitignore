@@ -20,11 +20,15 @@ htmlcov/
 .uv-cache/
 .local/
 *.whl
-node_modules/
 
-# Scratch runs and visual QA; curated client experiment results remain trackable
+# Scratch runs and visual QA
 .local-runs/
 .local-qa/
 .env
 .env.*
 !deploy/compose/env.example
+
+# Web dependencies and reproducible test/build output
+node_modules/
+test-results/
+playwright-report/
