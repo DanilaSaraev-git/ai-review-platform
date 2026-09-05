@@ -27,8 +27,12 @@ printf 'user = "%s:%s"\n' "$username" "$password" > "$curl_config"
 redirect_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "http://$public_ip/")"
 [[ "$redirect_status" == 308 ]] || die "plaintext endpoint did not redirect (status $redirect_status)"
 
-unauthorized_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://$public_ip/")"
-[[ "$unauthorized_status" == 401 ]] || die "gateway did not reject unauthenticated access (status $unauthorized_status)"
+for protected_path in / /api/v1/bootstrap /v1/bootstrap /docs /docs/ /openapi.json /api/openapi.json /health/ready; do
+  unauthorized_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    "https://$public_ip$protected_path")"
+  [[ "$unauthorized_status" == 401 ]] \
+    || die "gateway did not reject unauthenticated access to $protected_path (status $unauthorized_status)"
+done
 
 authorized_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --config "$curl_config" "https://$public_ip/")"
 [[ "$authorized_status" == 200 ]] || die "gateway did not accept operator credentials (status $authorized_status)"
@@ -39,8 +43,11 @@ cross_origin_status="$(curl --silent --output /dev/null --write-out '%{http_code
 
 bootstrap_file="$(mktemp)"
 profiles_file="$(mktemp)"
-trap 'rm -f -- "$curl_config" "$bootstrap_file" "$profiles_file"' EXIT INT TERM
-chmod 600 "$bootstrap_file" "$profiles_file"
+documents_file="$(mktemp)"
+openapi_file="$(mktemp)"
+docs_file="$(mktemp)"
+trap 'rm -f -- "$curl_config" "$bootstrap_file" "$profiles_file" "$documents_file" "$openapi_file" "$docs_file"' EXIT INT TERM
+chmod 600 "$bootstrap_file" "$profiles_file" "$documents_file" "$openapi_file" "$docs_file"
 curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/api/v1/bootstrap" > "$bootstrap_file"
 workspace_id="$(python3 - "$bootstrap_file" <<'PY'
 import json
@@ -52,13 +59,56 @@ print(value["workspace"]["id"])
 PY
 )"
 curl --silent --show-error --fail --config "$curl_config" \
+  "https://$public_ip/api/v1/workspaces/$workspace_id/documents?limit=1" > "$documents_file"
+document_id="$(python3 - "$documents_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+items = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("items", [])
+print(items[0]["id"] if items else "")
+PY
+)"
+if [[ -n "$document_id" ]]; then
+  document_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    "https://$public_ip/v1/workspaces/$workspace_id/documents/$document_id/content")"
+  [[ "$document_status" == 401 ]] \
+    || die "gateway exposed document content without credentials (status $document_status)"
+fi
+
+curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/openapi.json" > "$openapi_file"
+curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/docs/" > "$docs_file"
+python3 - "$openapi_file" "$docs_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+schema = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not str(schema.get("openapi", "")).startswith("3.") or "/v1/bootstrap" not in schema.get("paths", {}):
+    raise SystemExit("gateway OpenAPI document is not the canonical v1 schema")
+docs = Path(sys.argv[2]).read_text(encoding="utf-8")
+if "<!doctype html" not in docs.lower():
+    raise SystemExit("gateway docs route did not return the offline HTML application")
+PY
+
+curl --silent --show-error --fail --config "$curl_config" \
   "https://$public_ip/api/v1/workspaces/$workspace_id/model-profiles" > "$profiles_file"
-if [[ -f "$REVIEW_MODEL_ENABLED_MARKER" ]]; then
+model_mode="${REVIEW_VERIFY_MODEL_MODE:-}"
+if [[ -z "$model_mode" ]]; then
+  if [[ -f "$REVIEW_MODEL_ENABLED_MARKER" ]]; then
+    model_mode=enabled
+  else
+    model_mode=unconfigured
+  fi
+fi
+[[ "$model_mode" == enabled || "$model_mode" == unconfigured ]] \
+  || die "REVIEW_VERIFY_MODEL_MODE must be enabled or unconfigured"
+if [[ "$model_mode" == enabled ]]; then
   expected_model_id="$(env_value REVIEW_MODEL_PROFILE_ID "$REVIEW_MODEL_ENV_FILE")"
 else
   expected_model_id="$(env_value REVIEW_MODEL_PROFILE_ID)"
 fi
-python3 - "$profiles_file" "$expected_model_id" "$REVIEW_MODEL_ENABLED_MARKER" <<'PY'
+python3 - "$profiles_file" "$expected_model_id" "$model_mode" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -66,7 +116,7 @@ from pathlib import Path
 value = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 profiles = value.get("items", [])
 expected_id = sys.argv[2]
-model_enabled = Path(sys.argv[3]).is_file()
+model_enabled = sys.argv[3] == "enabled"
 selected = [profile for profile in profiles if profile.get("id") == expected_id]
 if len(selected) != 1:
     raise SystemExit(f"expected exactly one model profile {expected_id!r}")

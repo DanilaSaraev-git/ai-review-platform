@@ -8,6 +8,7 @@ REVIEW_PREVIOUS_LINK="${REVIEW_PREVIOUS_LINK:-/opt/ai-review-platform-previous}"
 REVIEW_RELEASES_DIR="${REVIEW_RELEASES_DIR:-/opt/ai-review-releases}"
 REVIEW_STATE_DIR="${REVIEW_STATE_DIR:-/opt/ai-review-state}"
 REVIEW_ENV_FILE="${REVIEW_ENV_FILE:-${REVIEW_STATE_DIR}/review.env}"
+REVIEW_LEGACY_ENV_FILE="${REVIEW_LEGACY_ENV_FILE:-${REVIEW_STATE_DIR}/legacy.env}"
 REVIEW_MODEL_ENV_FILE="${REVIEW_MODEL_ENV_FILE:-${REVIEW_STATE_DIR}/model.env}"
 REVIEW_MODEL_ENABLED_MARKER="${REVIEW_MODEL_ENABLED_MARKER:-${REVIEW_STATE_DIR}/model-enabled}"
 REVIEW_BACKUP_DIR="${REVIEW_BACKUP_DIR:-/opt/ai-review-backups}"
@@ -84,9 +85,11 @@ compose_base_args() {
 compose_legacy_args() {
   local release_dir="$1"
   require_safe_release_dir "$release_dir"
+  check_private_file "$REVIEW_LEGACY_ENV_FILE"
   COMPOSE_ARGS=(
     --project-name "$REVIEW_COMPOSE_PROJECT"
     --env-file "$REVIEW_ENV_FILE"
+    --env-file "$REVIEW_LEGACY_ENV_FILE"
     -f "$release_dir/deploy/compose/compose.yaml"
   )
 }

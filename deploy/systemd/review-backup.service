@@ -1,0 +1,11 @@
+[Unit]
+Description=Create a consistent AI Review backup set
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ai-review-platform-current/tools/ops/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

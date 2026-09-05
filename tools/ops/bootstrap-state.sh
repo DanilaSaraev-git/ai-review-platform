@@ -22,6 +22,44 @@ done
 
 template="$(realpath -e "$SCRIPT_DIR/../../deploy/compose/production.env.example")"
 install -d -m 700 "$REVIEW_STATE_DIR" "${REVIEW_STATE_DIR}/secrets"
+
+capture_legacy_environment() {
+  if [[ -e "$REVIEW_LEGACY_ENV_FILE" ]]; then
+    check_private_file "$REVIEW_LEGACY_ENV_FILE"
+    return 0
+  fi
+  local api_container
+  local -a api_containers
+  mapfile -t api_containers < <(docker ps \
+    --filter "label=com.docker.compose.project=$REVIEW_COMPOSE_PROJECT" \
+    --filter 'label=com.docker.compose.service=api' \
+    --format '{{.ID}}')
+  if ((${#api_containers[@]} > 1)); then
+    die "multiple running API containers match the deployment project"
+  fi
+  if ((${#api_containers[@]} == 0)); then
+    return 0
+  fi
+  api_container="${api_containers[0]}"
+  umask 077
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$api_container" \
+    | awk -F= '
+        $1 == "REVIEW_COMPOSITION" ||
+        $1 == "REVIEW_MODEL_PROFILE_ID" ||
+        $1 == "REVIEW_DIALOGUE_POLICY_ID" ||
+        $1 == "REVIEW_EXPECTED_OUTPUT_PATH" ||
+        $1 == "REVIEW_TRUSTED_DOCUMENT_PATH" {print}
+      ' > "$REVIEW_LEGACY_ENV_FILE"
+  chmod 600 "$REVIEW_LEGACY_ENV_FILE"
+  [[ -n "$(env_value REVIEW_COMPOSITION "$REVIEW_LEGACY_ENV_FILE")" ]] \
+    || die "legacy environment has no composition"
+  [[ -n "$(env_value REVIEW_MODEL_PROFILE_ID "$REVIEW_LEGACY_ENV_FILE")" ]] \
+    || die "legacy environment has no model profile ID"
+  [[ -n "$(env_value REVIEW_DIALOGUE_POLICY_ID "$REVIEW_LEGACY_ENV_FILE")" ]] \
+    || die "legacy environment has no dialogue policy ID"
+}
+
+capture_legacy_environment
 if [[ -e "$REVIEW_ENV_FILE" ]]; then
   check_private_file "$REVIEW_ENV_FILE"
   [[ "$(env_value REVIEW_PUBLIC_IP)" == "$public_ip" ]] \
@@ -59,3 +97,6 @@ chmod 600 "$REVIEW_ENV_FILE"
 [[ "$(env_value POSTGRES_PASSWORD)" != replace-with-a-long-random-value ]] \
   || die "failed to initialize database password"
 printf 'private deployment state initialized: %s\n' "$REVIEW_ENV_FILE"
+if [[ -f "$REVIEW_LEGACY_ENV_FILE" ]]; then
+  printf 'private legacy rollback environment captured: %s\n' "$REVIEW_LEGACY_ENV_FILE"
+fi

@@ -20,6 +20,8 @@ require_command install
 install -d -m 700 "$REVIEW_STATE_DIR"
 exec 9>"${REVIEW_STATE_DIR}/.release.lock"
 flock -n 9 || die "another release, backup, or model operation is already running"
+[[ ! -f "$REVIEW_MODEL_ENABLED_MARKER" ]] \
+  || die "disable the external model before replacing its profile or credential"
 check_private_file "$credential_source"
 [[ -s "$credential_source" ]] || die "credential file is empty"
 [[ "$(stat -c '%s' "$credential_source")" -le 16384 ]] || die "credential file is unexpectedly large"
