@@ -38,9 +38,9 @@ def model_smoke(
             err=True,
         )
         raise typer.Exit(2) from None
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError):
         typer.echo(json.dumps({"status": "failed", "code": "invalid_configuration"}), err=True)
-        raise typer.Exit(2) from error
+        raise typer.Exit(2) from None
     encoded = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)

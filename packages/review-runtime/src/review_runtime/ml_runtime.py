@@ -67,6 +67,14 @@ class ReviewOperation:
     created_at: datetime
 
 
+class _ModelOutputInvalid(ValueError):
+    pass
+
+
+class _SemanticValidationFailed(ValueError):
+    pass
+
+
 class _ReviewOperationStorage(
     ExecutionStorage[ReviewOperation, dict[str, Any], dict[str, Any]]
 ):
@@ -486,6 +494,7 @@ class LLMReviewRuntime:
             )
         finally:
             event.set()
+            self._dialogue_events.pop(attempt_id, None)
 
     async def _execute_dialogue(
         self,
@@ -590,15 +599,22 @@ class LLMReviewRuntime:
                     + self.platform.settings.dialogue_deadline_seconds,
                     clock=time.monotonic,
                 )
-                response = await self.dialogue_engine.execute(
-                    adapter=_SingleResultAdapter(result),
-                    request=replace(request, request_id=result.request_id),
-                    parse_and_validate=lambda text: self.skill_executor.validate_output(
-                        "finding_dialogue", json.loads(text)
-                    ),
-                    fragments=fragments,
-                    skill_snapshot=prepared["snapshot"]["skill"],
-                )
+                try:
+                    compact_dialogue = self.skill_executor.validate_output(
+                        "finding_dialogue", json.loads(result.text)
+                    )
+                except (ValueError, json.JSONDecodeError) as validation_error:
+                    raise _ModelOutputInvalid from validation_error
+                try:
+                    response = await self.dialogue_engine.execute(
+                        adapter=_SingleResultAdapter(result),
+                        request=replace(request, request_id=result.request_id),
+                        parse_and_validate=lambda _text: compact_dialogue,
+                        fragments=fragments,
+                        skill_snapshot=prepared["snapshot"]["skill"],
+                    )
+                except ValueError as validation_error:
+                    raise _SemanticValidationFailed from validation_error
                 await anyio.to_thread.run_sync(
                     self.platform.publish_external_dialogue,
                     turn_id,
@@ -638,7 +654,11 @@ class LLMReviewRuntime:
                 "The model request could not be completed.",
                 error.retryable,
             )
-        if isinstance(error, (ValueError, json.JSONDecodeError)):
+        if isinstance(error, _SemanticValidationFailed):
+            return ExecutionFailure(
+                "validation_failed", "The model response evidence failed validation.", False
+            )
+        if isinstance(error, (_ModelOutputInvalid, ValueError, json.JSONDecodeError)):
             return ExecutionFailure(
                 "model_output_invalid", "The model response failed validation.", False
             )
@@ -853,9 +873,12 @@ class LLMReviewRuntime:
         result: GenerationResult = generated["result"]
         prepared = generated["prepared"]
         operation: ReviewOperation = prepared["operation"]
-        compact = self.skill_executor.validate_output(
-            "review", self.review_output.parse_and_validate(result.text)
-        )
+        try:
+            compact = self.skill_executor.validate_output(
+                "review", self.review_output.parse_and_validate(result.text)
+            )
+        except ValueError as validation_error:
+            raise _ModelOutputInvalid from validation_error
         usage = result.usage
         sources = prepared["review_input"]["sources"]
         provenance = {
@@ -885,18 +908,21 @@ class LLMReviewRuntime:
                 )
             ],
         }
-        return self.review_engine.map_model_output(
-            compact,
-            context=MappingContext(
-                run_id=operation.storage_request.run_id,
-                report_id=str(uuid4()),
-                created_at=wire_time(utc_now()),
-                primary_source_id="source-main",
-                target_fragment_ids=prepared["target_fragment_ids"],
-                fragments=prepared["fragments"],
-                provenance=provenance,
-            ),
-        )
+        try:
+            return self.review_engine.map_model_output(
+                compact,
+                context=MappingContext(
+                    run_id=operation.storage_request.run_id,
+                    report_id=str(uuid4()),
+                    created_at=wire_time(utc_now()),
+                    primary_source_id="source-main",
+                    target_fragment_ids=prepared["target_fragment_ids"],
+                    fragments=prepared["fragments"],
+                    provenance=provenance,
+                ),
+            )
+        except ValueError as validation_error:
+            raise _SemanticValidationFailed from validation_error
 
     @staticmethod
     def _failure(error: BaseException) -> ExecutionFailure:
@@ -905,7 +931,11 @@ class LLMReviewRuntime:
         if isinstance(error, ModelAdapterError):
             code = public_model_error_code(error, purpose="review")
             return ExecutionFailure(code, "The model request could not be completed.", error.retryable)
-        if isinstance(error, ValueError):
+        if isinstance(error, _SemanticValidationFailed):
+            return ExecutionFailure(
+                "validation_failed", "The model response evidence failed validation.", False
+            )
+        if isinstance(error, (_ModelOutputInvalid, ValueError)):
             return ExecutionFailure(
                 "model_output_invalid", "The model response failed validation.", False
             )

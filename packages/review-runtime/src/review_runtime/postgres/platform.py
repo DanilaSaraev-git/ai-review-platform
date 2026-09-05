@@ -1218,6 +1218,16 @@ class PostgresReviewPlatform:
                         now,
                     ),
                 )
+                persisted_profile = connection.execute(
+                    """SELECT digest FROM model_profile_versions
+                       WHERE id=%s AND version=%s""",
+                    (config_id, config_version),
+                ).fetchone()
+                if (
+                    persisted_profile is None
+                    or persisted_profile["digest"] != digest_value(payload)
+                ):
+                    raise RuntimeError("configured model profile identity drifted")
             connection.execute(
                 """INSERT INTO model_profile_availability
                 (deployment_id,model_profile_id,model_profile_version,state,reason_code,checked_at,
