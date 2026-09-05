@@ -103,11 +103,19 @@ verification:
   post_clone_secret_scan: NOT-RUN
   full_commit_map: docs/release/full-commit-map.tsv
   full_commit_map_sha256: 486b76ed381ae6c81f837ae5c124694b8c6023a148b8fc5244ebc5da508cb29c
-  release_refs:
-    main_baseline_before_manifest_commit: e14bf9c30124f8bfcd401338b124511d89911e3d
+  pre_content_scrub_release_refs:
+    main: 2bbcabf45a0a90e8692aa193ba45781e1f2e1875
     codex/003-backend-implementation: 6697af5f40fb48f9316f833f5b6732901c9ffc74
     codex/004-llm-review-integration: 2726b7cbe0075c0aa96e2b31706671ea4d26930e
     codex/005-web-review-ui: 949099fc32660faadd9ef93612132864f237b1a9
+  content_scrub_commit_map: docs/release/content-scrub-commit-map.tsv
+  content_scrub_commit_map_sha256: cb66f6415b3da180bd42e31aa14da588675ad20fb7448fab035ed387e70ae92d
+  content_scrub: PASS
+  final_branch_refs_before_manifest_commit:
+    main: 3b2b170147228bc4f4f49e8f47aad665701440c6
+    codex/003-backend-implementation: 830c49cf8771fd2f46ddedfdaaa575b75c8854fe
+    codex/004-llm-review-integration: 57aad189156e2747704342bd1a3f954fcf5ef521
+    codex/005-web-review-ui: 5c1636263544ffbe538cc05e7bd0046544a593fa
   release_ref_history_scan: PASS
   prohibited_path_scan: PASS
   private_path_scan: PASS
