@@ -53,6 +53,8 @@ rollback_on_failure() {
       compose_active_args "$old_release"
       docker compose "${COMPOSE_ARGS[@]}" up --detach --no-build --remove-orphans postgres api proxy gateway >/dev/null 2>&1 || true
     else
+      REVIEW_COMPOSE_RELEASE_DIR="$release_dir" REVIEW_LABEL_ENV_FILE="$REVIEW_LEGACY_ENV_FILE" \
+        "$release_dir/tools/ops/update-deployment-labels.sh" >/dev/null 2>&1 || true
       compose_legacy_args "$old_release"
       docker compose "${COMPOSE_ARGS[@]}" up --detach --no-build --remove-orphans postgres api proxy >/dev/null 2>&1 || true
     fi
@@ -63,6 +65,7 @@ trap rollback_on_failure EXIT INT TERM
 
 docker compose "${COMPOSE_ARGS[@]}" stop --timeout 30 gateway proxy api >/dev/null 2>&1 || true
 docker compose "${COMPOSE_ARGS[@]}" run --rm migrate
+REVIEW_COMPOSE_RELEASE_DIR="$release_dir" "$release_dir/tools/ops/update-deployment-labels.sh" --allow-missing
 docker compose "${COMPOSE_ARGS[@]}" up --detach --no-build --wait postgres api
 REVIEW_COMPOSE_RELEASE_DIR="$release_dir" "$release_dir/tools/ops/update-deployment-labels.sh"
 docker compose "${COMPOSE_ARGS[@]}" up --detach --no-build --wait --remove-orphans postgres api proxy gateway

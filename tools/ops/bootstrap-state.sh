@@ -24,9 +24,30 @@ template="$(realpath -e "$SCRIPT_DIR/../../deploy/compose/production.env.example
 install -d -m 700 "$REVIEW_STATE_DIR" "${REVIEW_STATE_DIR}/secrets"
 
 capture_legacy_environment() {
+  local key
+  local -a required_keys=(
+    REVIEW_COMPOSITION
+    REVIEW_MODEL_PROFILE_ID
+    REVIEW_DIALOGUE_POLICY_ID
+    REVIEW_ORGANIZATION_ID
+    REVIEW_ORGANIZATION_NAME
+    REVIEW_WORKSPACE_ID
+    REVIEW_WORKSPACE_NAME
+    REVIEW_ACTOR_ID
+    REVIEW_ACTOR_DISPLAY_NAME
+  )
   if [[ -e "$REVIEW_LEGACY_ENV_FILE" ]]; then
     check_private_file "$REVIEW_LEGACY_ENV_FILE"
-    return 0
+    local legacy_complete=1
+    for key in "${required_keys[@]}"; do
+      if [[ -z "$(env_value "$key" "$REVIEW_LEGACY_ENV_FILE" 2>/dev/null || true)" ]]; then
+        legacy_complete=0
+        break
+      fi
+    done
+    if [[ "$legacy_complete" == 1 ]]; then
+      return 0
+    fi
   fi
   local api_container
   local -a api_containers
@@ -38,25 +59,27 @@ capture_legacy_environment() {
     die "multiple running API containers match the deployment project"
   fi
   if ((${#api_containers[@]} == 0)); then
+    [[ ! -e "$REVIEW_LEGACY_ENV_FILE" ]] \
+      || die "legacy environment is incomplete and no running API can refresh it"
     return 0
   fi
   api_container="${api_containers[0]}"
   umask 077
-  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$api_container" \
-    | awk -F= '
-        $1 == "REVIEW_COMPOSITION" ||
-        $1 == "REVIEW_MODEL_PROFILE_ID" ||
-        $1 == "REVIEW_DIALOGUE_POLICY_ID" ||
-        $1 == "REVIEW_EXPECTED_OUTPUT_PATH" ||
-        $1 == "REVIEW_TRUSTED_DOCUMENT_PATH" {print}
-      ' > "$REVIEW_LEGACY_ENV_FILE"
-  chmod 600 "$REVIEW_LEGACY_ENV_FILE"
-  [[ -n "$(env_value REVIEW_COMPOSITION "$REVIEW_LEGACY_ENV_FILE")" ]] \
-    || die "legacy environment has no composition"
-  [[ -n "$(env_value REVIEW_MODEL_PROFILE_ID "$REVIEW_LEGACY_ENV_FILE")" ]] \
-    || die "legacy environment has no model profile ID"
-  [[ -n "$(env_value REVIEW_DIALOGUE_POLICY_ID "$REVIEW_LEGACY_ENV_FILE")" ]] \
-    || die "legacy environment has no dialogue policy ID"
+  local legacy_tmp
+  legacy_tmp="$(mktemp "${REVIEW_STATE_DIR}/.legacy.env.XXXXXX")"
+  if ! docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$api_container" \
+    | awk -F= '$1 ~ /^REVIEW_[A-Z0-9_]+$/ {print}' > "$legacy_tmp"; then
+    rm -f -- "$legacy_tmp"
+    die "failed to inspect the running API environment"
+  fi
+  chmod 600 "$legacy_tmp"
+  for key in "${required_keys[@]}"; do
+    if [[ -z "$(env_value "$key" "$legacy_tmp" 2>/dev/null || true)" ]]; then
+      rm -f -- "$legacy_tmp"
+      die "running API environment has no required legacy setting: $key"
+    fi
+  done
+  mv -f -- "$legacy_tmp" "$REVIEW_LEGACY_ENV_FILE"
 }
 
 capture_legacy_environment

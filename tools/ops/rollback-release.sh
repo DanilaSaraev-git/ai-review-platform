@@ -33,6 +33,8 @@ REVIEW_RELEASE_LOCK_HELD=1 REVIEW_COMPOSE_RELEASE_DIR="$current" "$current/tools
 restore_current_on_failure() {
   local status=$?
   if ((status != 0)); then
+    REVIEW_COMPOSE_RELEASE_DIR="$current" REVIEW_LABEL_ENV_FILE="$REVIEW_ENV_FILE" \
+      "$current/tools/ops/update-deployment-labels.sh" >/dev/null 2>&1 || true
     compose_active_args "$current"
     docker compose "${COMPOSE_ARGS[@]}" up --detach --no-build --wait --remove-orphans \
       postgres api proxy gateway >/dev/null 2>&1 || true
@@ -47,6 +49,8 @@ if [[ -f "$target/deploy/compose/compose.production.yaml" ]]; then
   "$target/tools/ops/verify-deployment.sh"
 else
   require_command systemctl
+  REVIEW_COMPOSE_RELEASE_DIR="$current" REVIEW_LABEL_ENV_FILE="$REVIEW_LEGACY_ENV_FILE" \
+    "$current/tools/ops/update-deployment-labels.sh"
   compose_legacy_args "$target"
   docker compose "${COMPOSE_ARGS[@]}" config --quiet
   docker compose "${COMPOSE_ARGS[@]}" up --detach --no-build --wait --remove-orphans postgres api proxy

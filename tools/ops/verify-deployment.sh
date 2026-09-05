@@ -46,8 +46,9 @@ profiles_file="$(mktemp)"
 documents_file="$(mktemp)"
 openapi_file="$(mktemp)"
 docs_file="$(mktemp)"
-trap 'rm -f -- "$curl_config" "$bootstrap_file" "$profiles_file" "$documents_file" "$openapi_file" "$docs_file"' EXIT INT TERM
-chmod 600 "$bootstrap_file" "$profiles_file" "$documents_file" "$openapi_file" "$docs_file"
+docs_headers="$(mktemp)"
+trap 'rm -f -- "$curl_config" "$bootstrap_file" "$profiles_file" "$documents_file" "$openapi_file" "$docs_file" "$docs_headers"' EXIT INT TERM
+chmod 600 "$bootstrap_file" "$profiles_file" "$documents_file" "$openapi_file" "$docs_file" "$docs_headers"
 curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/api/v1/bootstrap" > "$bootstrap_file"
 workspace_id="$(python3 - "$bootstrap_file" <<'PY'
 import json
@@ -77,6 +78,12 @@ if [[ -n "$document_id" ]]; then
 fi
 
 curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/openapi.json" > "$openapi_file"
+docs_redirect_status="$(curl --silent --output /dev/null --dump-header "$docs_headers" --write-out '%{http_code}' \
+  --config "$curl_config" "https://$public_ip/docs")"
+[[ "$docs_redirect_status" == 307 ]] || die "canonical docs URL did not redirect to its directory"
+docs_location="$(awk 'BEGIN {IGNORECASE=1} /^location:/ {sub(/\r$/, ""); sub(/^[^:]*:[[:space:]]*/, ""); print; exit}' "$docs_headers")"
+[[ "$docs_location" == "https://$public_ip/docs/" ]] \
+  || die "canonical docs redirect exposed an internal or plaintext address"
 curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/docs/" > "$docs_file"
 python3 - "$openapi_file" "$docs_file" <<'PY'
 import json

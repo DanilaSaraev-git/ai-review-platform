@@ -53,8 +53,9 @@ Compose и не записывают в журналы.
 
 При переходе с существующей установки bootstrap сохраняет её текущий внутренний пароль
 PostgreSQL в новом private env; смена credentials не совмещается с выпуском приложения. Он
-также сохраняет `legacy.env` с прежними composition/model/dialogue IDs, чтобы старый runtime
-при откате не пытался прочитать новые immutable seed IDs. Оба файла имеют mode `0600`.
+также сохраняет `legacy.env` со всеми фактическими прежними `REVIEW_*` settings, включая
+display labels и composition/model/dialogue IDs. Поэтому старый runtime при откате получает
+ровно тот seed, с которым уже работал. Оба файла имеют mode `0600`.
 Promotion сам создаёт predeploy backup, собирает version-tagged images, применяет только
 forward migrations, меняет display labels без смены
 ID, поднимает сервисы и выполняет внешний probe. Ссылки current/previous меняются только
