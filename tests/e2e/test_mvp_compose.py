@@ -22,7 +22,7 @@ def test_running_compose_is_healthy_and_preserves_smoke_state() -> None:
             "docker",
             "compose",
             "--project-name",
-            "review-platform-mvp",
+            os.environ.get("MVP_PROJECT", "review-platform-mvp"),
             "-f",
             "deploy/compose/compose.yaml",
             "exec",
