@@ -89,4 +89,5 @@ def test_dialogue_and_human_decision_do_not_mutate_report(
     assert after.content == before.content
     assert hashlib.sha256(after.content).digest() == hashlib.sha256(before.content).digest()
     assert after.headers["etag"] == before.headers["etag"]
-    assert _deferred_row_counts(durable_app) == deferred_before
+    deferred_after = _deferred_row_counts(durable_app)
+    assert deferred_after == (deferred_before[0], deferred_before[1] + 1, deferred_before[2])

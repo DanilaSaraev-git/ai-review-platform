@@ -46,6 +46,7 @@ release-check: release-check-local
 	trap cleanup EXIT INT TERM; \
 	$(RELEASE_COMPOSE) up --detach --wait postgres; \
 	REVIEW_TEST_DATABASE_URL=$(RELEASE_DATABASE_URL) $(UV) pytest -q tests/migration; \
+	REVIEW_DATABASE_URL=$(RELEASE_DATABASE_URL) $(UV) alembic -c packages/review-runtime/alembic.ini upgrade head; \
 	REVIEW_TEST_DATABASE_URL=$(RELEASE_DATABASE_URL) $(UV) pytest -q tests/integration; \
 	REVIEW_TEST_DATABASE_URL=$(RELEASE_DATABASE_URL) $(UV) pytest -q tests/e2e
 
