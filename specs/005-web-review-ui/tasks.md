@@ -5,7 +5,7 @@ description: "Задачи реализации веб-интерфейса AI R
 
 # Tasks: Веб-интерфейс AI Review v1
 
-**Input**: Design documents from `specs/003-web-review-ui/`
+**Input**: Design documents from `specs/005-web-review-ui/`
 
 **Prerequisites**: [plan.md](plan.md), [spec.md](spec.md), [research.md](research.md), [data-model.md](data-model.md), [contracts/](contracts/), [quickstart.md](quickstart.md)
 

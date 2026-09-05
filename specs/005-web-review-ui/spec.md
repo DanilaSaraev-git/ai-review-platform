@@ -1,6 +1,6 @@
 # Feature Specification: Веб-интерфейс AI Review v1
 
-**Feature Branch**: `codex/web-review-v1`
+**Feature Branch**: `codex/005-web-review-ui`
 
 **Created**: 2026-09-04
 
@@ -259,7 +259,7 @@
 
 ## Dependencies
 
-- Зафиксированный baseline [контрактов Review Platform v1](../../contracts/review-platform/v1/README.md) и [граница доверенного развёртывания](../../contracts/review-platform/v1/deployment-boundary.md) — источник объёма, состояний и негативных случаев. Необходимое изменение контракта вносится отдельным PR по [порядку параллельной разработки](../../architecture/parallel-development.md), а не правкой на стороне интерфейса.
+- Зафиксированный baseline [контрактов Review Platform v1](../../contracts/review-platform/v1/README.md) и [граница доверенного развёртывания](../../contracts/review-platform/v1/deployment-boundary.md) — источник объёма, состояний и негативных случаев. Необходимое изменение контракта вносится отдельным PR по [порядку параллельной разработки](../../docs/architecture/parallel-development.md), а не правкой на стороне интерфейса.
 - Раздел [«Принципы реализации»](../../AGENTS.md) — нормативный источник для Constitution Check.
 - Работающая сторона проверки — обработка запусков, публикация отчётов и генерация ходов диалога — предоставляется вне этого интерфейса; интерфейс проверяется независимо от её готовности.
 

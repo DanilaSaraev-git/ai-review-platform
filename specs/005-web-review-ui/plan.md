@@ -1,8 +1,8 @@
 # Implementation Plan: Веб-интерфейс AI Review v1
 
-**Branch**: `codex/web-review-v1` | **Date**: 2026-09-04 | **Spec**: [spec.md](spec.md)
+**Branch**: `codex/005-web-review-ui` | **Date**: 2026-09-04 | **Spec**: [spec.md](spec.md)
 
-**Input**: Feature specification from `specs/003-web-review-ui/spec.md`
+**Input**: Feature specification from `specs/005-web-review-ui/spec.md`
 
 ## Summary
 
@@ -61,7 +61,7 @@ Redux не добавляется: серверное состояние пок�
 
 *GATE: пройден до Phase 0, перепроверен после Phase 1.*
 
-Источник: раздел [«Принципы реализации»](../../AGENTS.md) — нормативный для Constitution Check; основание принципов — [контракты v1](../../contracts/review-platform/v1/README.md) и [порядок параллельной разработки](../../architecture/parallel-development.md).
+Источник: раздел [«Принципы реализации»](../../AGENTS.md) — нормативный для Constitution Check; основание принципов — [контракты v1](../../contracts/review-platform/v1/README.md) и [порядок параллельной разработки](../../docs/architecture/parallel-development.md).
 
 | Принцип | Уровень | Как соблюдается в этом плане | До Phase 0 | После Phase 1 |
 | --- | --- | --- | --- | --- |
@@ -80,7 +80,7 @@ Redux не добавляется: серверное состояние пок�
 ### Documentation (this feature)
 
 ```text
-specs/003-web-review-ui/
+specs/005-web-review-ui/
 ├── plan.md              # Этот файл
 ├── spec.md              # Спецификация с разделом Clarifications
 ├── research.md          # Phase 0

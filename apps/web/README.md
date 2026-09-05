@@ -4,7 +4,7 @@
 фоновая проверка, разбор адресных замечаний, диалог по замечанию и решение
 человека.
 
-Спецификация, план и задачи: [`specs/003-web-review-ui/`](../../specs/003-web-review-ui/).
+Спецификация, план и задачи: [`specs/005-web-review-ui/`](../../specs/005-web-review-ui/).
 Контракт HTTP: [`contracts/review-platform/v1/`](../../contracts/review-platform/v1/).
 
 ## Требования
@@ -24,7 +24,7 @@ npm run api:generate
 `contracts/review-platform/v1/openapi.yaml`. Ручные копии DTO запрещены; если
 повторный запуск генерации даёт diff, значит сгенерированный файл правили
 руками либо он разошёлся с контрактом — исправление вносится в источник
-(принцип II, [contracts/orval.md](../../specs/003-web-review-ui/contracts/orval.md)).
+(принцип II, [contracts/orval.md](../../specs/005-web-review-ui/contracts/orval.md)).
 
 ## Запуск против моков
 
@@ -44,7 +44,7 @@ $env:VITE_MSW_SCENARIO='happy-path'; npm run dev
 ```
 
 Доступные сценарии перечислены в
-[contracts/msw-scenarios.md](../../specs/003-web-review-ui/contracts/msw-scenarios.md)
+[contracts/msw-scenarios.md](../../specs/005-web-review-ui/contracts/msw-scenarios.md)
 и собраны в `src/mocks/scenarios/`. Все данные синтетические: материалы кейса
 в интерфейс не переносятся (принцип VI).
 

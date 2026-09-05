@@ -11,7 +11,7 @@ test.describe('Диалог по замечанию', () => {
     await page.getByRole('textbox', { name: /Уточняющий вопрос/ }).fill(QUESTION);
     await page.getByRole('button', { name: 'Отправить вопрос' }).click();
 
-    await expect(page.getByText(QUESTION)).toBeVisible();
+    await expect(page.getByRole('paragraph').filter({ hasText: QUESTION })).toBeVisible();
     await expect(page.getByText('Предложена резолюция')).toBeVisible();
     await expect(page.getByText('Предложенная моделью формулировка')).toBeVisible();
   });
