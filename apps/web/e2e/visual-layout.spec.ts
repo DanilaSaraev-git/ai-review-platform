@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openFinding, openReport, uploadSyntheticDocument } from './helpers';
+import { openFinding, openReport, uploadSyntheticDocument, withScenario } from './helpers';
 
 async function expectNoPageOverflow(page: Page): Promise<void> {
   const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
@@ -34,12 +34,24 @@ test('отчёт держит документ и панель рядом на 1
   await page.screenshot({ path: testInfo.outputPath('report-1440.png'), fullPage: true });
 });
 
+test('длинная панель отчёта скроллится внутри workspace на 1280×720', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await withScenario(page, 'report-long');
+  await openReport(page);
+
+  const panel = page.getByRole('complementary', { name: 'Панель разбора' });
+  const scrollArea = panel.locator(':scope > div');
+  expect(await scrollArea.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await page.getByRole('heading', { name: 'Чем выполнена проверка' }).scrollIntoViewIfNeeded();
+  expect(await scrollArea.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+});
+
 test('разбор замечания сохраняет документ рядом с действиями', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openFinding(page);
+  await page.getByRole('tab', { name: /Диалог/ }).click();
 
   await expect(page.getByRole('heading', { name: 'Исходный документ' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Ваше решение' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Диалог по замечанию' })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('finding-dialogue-1440.png'), fullPage: true });
 });
@@ -51,4 +63,25 @@ test('mobile 390 px не создаёт горизонтальную прокр�
 
   await expectNoPageOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('new-review-mobile-390.png'), fullPage: true });
+});
+
+test('отчёт на mobile сохраняет чтение документа и закрытые details', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openReport(page);
+
+  await expectNoPageOverflow(page);
+  await expect(page.locator('details[open]')).toHaveCount(0);
+  await page.getByRole('heading', { name: 'Чем выполнена проверка' }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole('status').filter({ hasText: /Есть замечания/ })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('report-mobile-390.png'), fullPage: true });
+});
+
+test('диалог замечания на mobile остаётся привязан к документу', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openFinding(page);
+  await page.getByRole('tab', { name: /Диалог/ }).click();
+
+  await expectNoPageOverflow(page);
+  await expect(page.locator('details[open]')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('finding-dialogue-mobile-390.png'), fullPage: true });
 });

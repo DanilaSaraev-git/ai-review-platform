@@ -15,6 +15,7 @@ export interface BootstrapState {
   workspaceId: string;
   isLoading: boolean;
   error: unknown;
+  retry: () => Promise<void>;
 }
 
 export function useBootstrap(): BootstrapState {
@@ -35,5 +36,6 @@ export function useBootstrap(): BootstrapState {
     workspaceId: bootstrap?.workspace.id ?? '',
     isLoading: query.isPending,
     error: query.error,
+    retry: async () => void (await query.refetch()),
   };
 }

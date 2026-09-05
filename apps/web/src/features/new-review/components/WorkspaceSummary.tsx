@@ -29,17 +29,13 @@ export function WorkspaceSummary({
   }
 
   return (
-    <details className="rounded-[6px] border border-line bg-surface px-4 py-3">
-      <summary className="cursor-pointer">
-        <h2 id="workspace-summary-title" className="inline text-[13px] font-semibold text-ink">
-          Рабочее пространство · {workspace.name}
-        </h2>
+    <details className="relative mt-1 text-xs">
+      <summary className="cursor-pointer text-ink-muted hover:text-ink">
+        <span id="workspace-summary-title" className="font-medium">
+          {workspace.name}
+        </span>
       </summary>
-      <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <dt className="text-xs text-ink-muted">Пространство</dt>
-          <dd className="text-sm text-ink">{workspace.name}</dd>
-        </div>
+      <dl className="mt-2 grid gap-x-6 gap-y-3 rounded-[6px] border border-line bg-surface p-3 shadow-sm sm:grid-cols-3 lg:absolute lg:left-0 lg:top-full lg:z-20 lg:w-[36rem]">
         <div>
           <dt className="text-xs text-ink-muted">Организация</dt>
           <dd className="text-sm text-ink">{workspace.organization_name}</dd>

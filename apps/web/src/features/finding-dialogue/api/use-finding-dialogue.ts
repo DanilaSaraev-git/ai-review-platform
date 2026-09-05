@@ -17,6 +17,7 @@ export interface FindingDialogueState {
   isGenerating: boolean;
   isLoading: boolean;
   error: unknown;
+  retry: () => Promise<void>;
 }
 
 export function useFindingDialogue(workspaceId: string, runId: string, findingId: string): FindingDialogueState {
@@ -36,5 +37,6 @@ export function useFindingDialogue(workspaceId: string, runId: string, findingId
     isGenerating: isDialogueGenerating(dialogue),
     isLoading: query.isPending,
     error: query.error,
+    retry: async () => void (await query.refetch()),
   };
 }

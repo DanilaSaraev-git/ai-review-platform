@@ -3,6 +3,7 @@ import type { HumanDecision } from '@/api/generated/model';
 import { isProblem, isRevisionConflict } from '@/api/errors';
 import { Button, Callout, Field, RadioCards, TextArea } from '@/components/ui';
 import { DECISION_STATUS_TEXT } from '@/lib/error-messages';
+import { formatDateTime } from '@/lib/format';
 import { usePutDecision } from '../api/use-put-decision';
 import { decisionConflictState } from '../lib/conflict';
 import {
@@ -35,6 +36,7 @@ export function DecisionForm({
   prefilledResolution?: string | null;
 }) {
   const [values, setValues] = useState<DecisionFormValues>(() => toFormValues(decision));
+  const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const { save, isPending, error, reset } = usePutDecision(workspaceId, runId, findingId);
@@ -44,19 +46,29 @@ export function DecisionForm({
   // подставляется в поле, сохранение остаётся вторым шагом (FR-029).
   useEffect(() => {
     if (prefilledResolution) {
+      setHasLocalEdits(true);
+      setSavedAt(null);
       setValues((current) => ({ ...current, resolution: prefilledResolution }));
     }
   }, [prefilledResolution]);
 
-  async function submit(): Promise<void> {
-    const parsed = decisionSchema.safeParse(values);
+  // Состояние замечания часто приходит после отчёта. До первого ввода форма
+  // принимает серверное решение; после ввода обновления ревизии не стирают draft.
+  useEffect(() => {
+    if (!hasLocalEdits && decision) {
+      setValues(toFormValues(decision));
+    }
+  }, [decision, hasLocalEdits]);
+
+  async function submit(nextValues: DecisionFormValues = values): Promise<void> {
+    const parsed = decisionSchema.safeParse(nextValues);
     if (!parsed.success) {
       setValidationError(REASON_REQUIRED_MESSAGE);
       return;
     }
     setValidationError(null);
     reset();
-    const body = toPutFindingDecision(values, decision?.revision ?? 0);
+    const body = toPutFindingDecision(nextValues, decision?.revision ?? 0);
     try {
       const result = await save(body);
       setValues(toFormValues(result));
@@ -79,8 +91,13 @@ export function DecisionForm({
       <RadioCards
         legend="Статус замечания"
         name="decision-status"
+        compact
         value={values.status}
-        onValueChange={(next) => setValues((current) => ({ ...current, status: next as DecisionFormValues['status'] }))}
+        onValueChange={(next) => {
+          setHasLocalEdits(true);
+          setSavedAt(null);
+          setValues((current) => ({ ...current, status: next as DecisionFormValues['status'] }));
+        }}
         options={[
           { value: 'confirmed', label: DECISION_STATUS_TEXT.confirmed },
           { value: 'rejected', label: DECISION_STATUS_TEXT.rejected },
@@ -88,41 +105,42 @@ export function DecisionForm({
             value: 'needs_context',
             label: DECISION_STATUS_TEXT.needs_context,
           },
-          {
-            value: 'unreviewed',
-            label: DECISION_STATUS_TEXT.unreviewed,
-            description: 'Сбросить сохранённое решение.',
-          },
         ]}
       />
 
-      <Field
-        label="Обоснование"
-        hint={values.status === 'unreviewed' ? undefined : 'Обязательно для сохранения.'}
-        error={validationError}
-      >
-        {(id, describedBy) => (
-          <TextArea
-            id={id}
-            aria-describedby={describedBy}
-            value={values.reason}
-            disabled={values.status === 'unreviewed'}
-            onChange={(event) => setValues((current) => ({ ...current, reason: event.target.value }))}
-          />
-        )}
-      </Field>
+      {values.status !== 'unreviewed' || (values.resolution?.trim().length ?? 0) > 0 ? (
+        <>
+          <Field label="Обоснование" hint="Обязательно для сохранения." error={validationError}>
+            {(id, describedBy) => (
+              <TextArea
+                id={id}
+                aria-describedby={describedBy}
+                value={values.reason}
+                onChange={(event) => {
+                  setHasLocalEdits(true);
+                  setSavedAt(null);
+                  setValues((current) => ({ ...current, reason: event.target.value }));
+                }}
+              />
+            )}
+          </Field>
 
-      <Field label="Формулировка резолюции" hint="Необязательно.">
-        {(id, describedBy) => (
-          <TextArea
-            id={id}
-            aria-describedby={describedBy}
-            value={values.resolution}
-            disabled={values.status === 'unreviewed'}
-            onChange={(event) => setValues((current) => ({ ...current, resolution: event.target.value }))}
-          />
-        )}
-      </Field>
+          <Field label="Формулировка резолюции" hint="Необязательно.">
+            {(id, describedBy) => (
+              <TextArea
+                id={id}
+                aria-describedby={describedBy}
+                value={values.resolution}
+                onChange={(event) => {
+                  setHasLocalEdits(true);
+                  setSavedAt(null);
+                  setValues((current) => ({ ...current, resolution: event.target.value }));
+                }}
+              />
+            )}
+          </Field>
+        </>
+      ) : null}
 
       <RevisionConflictNotice
         conflict={conflict}
@@ -137,12 +155,32 @@ export function DecisionForm({
         </Callout>
       ) : null}
 
-      {savedAt && !conflict.isConflict ? <Callout tone="ok" title="Решение сохранено" /> : null}
+      {savedAt && !conflict.isConflict ? <p role="status" className="text-xs font-semibold text-ok">✓ Решение сохранено</p> : null}
 
-      <div>
-        <Button variant="primary" disabled={isPending} onClick={() => void submit()}>
-          {isPending ? 'Сохраняем…' : 'Сохранить решение'}
-        </Button>
+      <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-line bg-surface py-3">
+        {values.status !== 'unreviewed' ? (
+          <Button variant="primary" disabled={isPending} onClick={() => void submit()}>
+            {isPending ? 'Сохраняем…' : 'Сохранить решение'}
+          </Button>
+        ) : null}
+        {decision && decision.status !== 'unreviewed' ? (
+          <Button
+            variant="ghost"
+            disabled={isPending}
+            onClick={() => {
+              const cleared: DecisionFormValues = { status: 'unreviewed', reason: '', resolution: '' };
+              setHasLocalEdits(true);
+              setSavedAt(null);
+              setValues(cleared);
+              void submit(cleared);
+            }}
+          >
+            Сбросить решение
+          </Button>
+        ) : null}
+        {decision?.actor ? (
+          <span className="text-xs text-ink-subtle">{decision.actor.display_name} · {formatDateTime(decision.decided_at)}</span>
+        ) : null}
       </div>
     </section>
   );

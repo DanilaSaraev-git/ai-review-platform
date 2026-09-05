@@ -18,6 +18,7 @@ export interface ReviewReportState {
   isUnavailable: boolean;
   isNotFound: boolean;
   error: unknown;
+  retry: () => Promise<void>;
 }
 
 export function useReviewReport(workspaceId: string, runId: string): ReviewReportState {
@@ -34,5 +35,6 @@ export function useReviewReport(workspaceId: string, runId: string): ReviewRepor
     isUnavailable: isReportUnavailable(query.error),
     isNotFound: isNotFound(query.error),
     error: query.error,
+    retry: async () => void (await query.refetch()),
   };
 }

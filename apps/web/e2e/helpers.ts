@@ -56,3 +56,10 @@ export async function openFinding(page: Page): Promise<void> {
   await page.getByRole('link', { name: /Не задано расписание обновления/ }).click();
   await page.getByRole('heading', { name: 'Ваше решение' }).waitFor();
 }
+
+/** Открывает адресуемую вкладку диалога, сохраняя документ рядом. */
+export async function openDialogue(page: Page): Promise<void> {
+  await openFinding(page);
+  await page.getByRole('tab', { name: /Диалог/ }).click();
+  await page.getByRole('heading', { name: 'Диалог по замечанию' }).waitFor();
+}

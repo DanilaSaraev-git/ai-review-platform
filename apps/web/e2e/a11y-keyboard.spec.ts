@@ -61,7 +61,7 @@ test('основной сценарий проходится только с к�
   await reportLink.waitFor({ timeout: 20_000 });
   await reportLink.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Отчёт проверки' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Результат проверки' })).toBeVisible();
 
   // Переход к замечанию.
   const findingLink = page.getByRole('link', { name: /Не задано расписание обновления/ });

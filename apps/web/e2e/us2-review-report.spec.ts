@@ -9,7 +9,6 @@ test.describe('Разбор замечаний в неизменяемом от�
   test('показывает сводку, замечания, охват и источники', async ({ page }) => {
     await openReport(page);
 
-    await expect(page.getByRole('heading', { name: 'Отчёт проверки' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Результат проверки' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Охват проверки' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Источники проверки' })).toBeVisible();
@@ -67,5 +66,14 @@ test.describe('Разбор замечаний в неизменяемом от�
 
     await expect(page.getByText('Отчёта пока нет')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Замечания' })).toHaveCount(0);
+  });
+
+  test('ошибка загрузки отчёта не становится вечным ожиданием и допускает повтор', async ({ page }) => {
+    await withScenario(page, 'report-error-retry');
+    await openReport(page);
+
+    await expect(page.getByText('Не удалось загрузить отчёт')).toBeVisible();
+    await page.getByRole('button', { name: 'Повторить' }).click();
+    await expect(page.getByRole('heading', { name: 'Результат проверки' })).toBeVisible();
   });
 });

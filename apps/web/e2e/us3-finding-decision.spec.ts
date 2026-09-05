@@ -40,6 +40,8 @@ test.describe('Решение по замечанию', () => {
     // Введённый текст сохранён (SC-005).
     await expect(page.getByRole('textbox', { name: 'Обоснование' })).toHaveValue(REASON);
     await expect(page.getByRole('button', { name: 'Повторить с актуальной версией' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Повторить с актуальной версией' }).click();
+    await expect(page.getByText('Решение сохранено')).toBeVisible();
   });
 
   test('решение не изменяет отчёт', async ({ page }) => {
@@ -55,6 +57,6 @@ test.describe('Решение по замечанию', () => {
     // Содержание отчёта прежнее (FR-018, SC-006).
     await expect(page.getByText('Найдено одно уточнение по расписанию обновления.')).toBeVisible();
     await expect(page.getByRole('link', { name: /Не задано расписание обновления/ })).toBeVisible();
-    await expect(page.getByText(/разобрано 1 из 1/i)).toBeVisible();
+    await expect(page.getByText(/Разбор завершён · 1 из 1/i)).toBeVisible();
   });
 });

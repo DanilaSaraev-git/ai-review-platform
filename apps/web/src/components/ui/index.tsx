@@ -123,18 +123,20 @@ export function RadioCards({
   value,
   onValueChange,
   name,
+  compact = false,
 }: {
   legend: string;
   options: readonly RadioOption[];
   value: string | undefined;
   onValueChange: (value: string) => void;
   name: string;
+  compact?: boolean;
 }) {
   return (
     <fieldset className="border-0 p-0">
       <legend className="mb-2 text-[13px] font-semibold text-ink">{legend}</legend>
       <RadioGroup.Root
-        className="flex flex-col gap-1.5"
+        className={compact ? 'flex flex-wrap gap-1.5' : 'flex flex-col gap-1.5'}
         value={value ?? ''}
         onValueChange={onValueChange}
         name={name}
@@ -143,12 +145,12 @@ export function RadioCards({
         {options.map((option) => {
           const itemId = `${name}-${option.value}`;
           return (
-            <div key={option.value} className="group flex items-start gap-2.5 rounded-[5px] border border-line bg-surface px-3 py-2.5 transition-[border-color,background-color] duration-100 hover:border-line-strong hover:bg-surface-muted has-[[data-state=checked]]:border-accent has-[[data-state=checked]]:bg-accent-tint">
+            <div key={option.value} className={`group flex items-start gap-2.5 rounded-[5px] border border-line bg-surface transition-[border-color,background-color] duration-100 hover:border-line-strong hover:bg-surface-muted has-[[data-state=checked]]:border-accent has-[[data-state=checked]]:bg-accent-tint ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2.5'}`}>
               <RadioGroup.Item
                 id={itemId}
                 value={option.value}
                 disabled={option.disabled}
-                className="mt-0.5 size-4 shrink-0 cursor-pointer rounded-full border border-line-strong bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+                className={`${compact ? 'mt-px size-3.5' : 'mt-0.5 size-4'} shrink-0 cursor-pointer rounded-full border border-line-strong bg-surface disabled:cursor-not-allowed disabled:opacity-40`}
               >
                 <RadioGroup.Indicator className="block size-full rounded-full border-4 border-accent" />
               </RadioGroup.Item>

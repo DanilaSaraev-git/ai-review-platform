@@ -3,6 +3,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET;
+
 // Базовый URL API задаётся переменной окружения VITE_API_BASE_URL.
 // Сценарий моков — VITE_MSW_SCENARIO; при пустом значении моки выключены,
 // и приложение работает против реального backend без изменения кода (принцип III).
@@ -16,5 +18,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    proxy: apiProxyTarget
+      ? {
+          '/api': {
+            target: apiProxyTarget,
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/api/u, ''),
+          },
+        }
+      : undefined,
   },
 });

@@ -3,9 +3,13 @@
  * Показывает ход разбора, при этом текст отчёта остаётся неизменным.
  */
 export function DecisionProgress({ reviewed, total }: { reviewed: number; total: number }) {
+  const complete = total > 0 && reviewed === total;
   return (
-    <p className="text-xs text-ink-muted" role="status">
-      Разобрано {reviewed} из {total}; осталось {Math.max(0, total - reviewed)}.
-    </p>
+    <span role="status">
+      <StatusBadge tone={complete ? 'ok' : 'warn'}>
+        {complete ? `Разбор завершён · ${reviewed} из ${total}` : `Есть замечания · разобрано ${reviewed} из ${total}`}
+      </StatusBadge>
+    </span>
   );
 }
+import { StatusBadge } from '@/components/ui';

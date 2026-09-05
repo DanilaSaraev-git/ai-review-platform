@@ -11,7 +11,7 @@ import { Link, NavLink, Outlet } from 'react-router';
  */
 export function AppLayout() {
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
+    <div className="flex min-h-screen flex-col bg-canvas lg:h-screen lg:overflow-hidden">
       <header className="sticky top-0 z-30 flex h-13 shrink-0 items-center gap-3 border-b border-line bg-surface px-3 shadow-[0_1px_2px_rgba(23,32,51,0.03)] md:px-4">
         <span
           aria-hidden="true"

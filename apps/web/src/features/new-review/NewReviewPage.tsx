@@ -19,7 +19,7 @@ import { runReadiness } from './lib/run-readiness';
  */
 export function NewReviewPage() {
   const navigate = useNavigate();
-  const { workspaceId, limits, isLoading } = useBootstrap();
+  const { workspaceId, limits, isLoading, error: bootstrapError, retry: retryBootstrap } = useBootstrap();
   const [document, setDocument] = useState<Document | undefined>(undefined);
   const [contextDocuments, setContextDocuments] = useState<Document[]>([]);
   const [profile, setProfile] = useState<ReviewProfile | undefined>(undefined);
@@ -32,6 +32,9 @@ export function NewReviewPage() {
 
   const readiness = runReadiness(document);
   const canStart = readiness.canStart && Boolean(profile && modelProfile) && !isPending;
+  const modelProfiles = modelProfilesQuery.data?.items ?? [];
+  const hasNoAvailableModel = modelProfilesQuery.isSuccess && !modelProfiles.some((item) => item.availability === 'available');
+  const modelWasNotConfigured = modelProfiles.some((item) => /unconfigured|не подключ/iu.test(`${item.id} ${item.name}`));
 
   useEffect(() => {
     if (!profile && profilesQuery.data?.items[0]) {
@@ -64,6 +67,16 @@ export function NewReviewPage() {
     } catch {
       // Причина показывается сообщением из состояния мутации.
     }
+  }
+
+  if (bootstrapError && !limits) {
+    return (
+      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
+        <Callout tone="danger" title="Не удалось загрузить рабочее пространство">
+          <Button className="mt-2" onClick={() => void retryBootstrap()}>Повторить</Button>
+        </Callout>
+      </main>
+    );
   }
 
   if (isLoading || !limits) {
@@ -122,7 +135,7 @@ export function NewReviewPage() {
             onClick={() => setIsContextOpen(true)}
           >
             Контекст
-            <span className="text-ink-subtle">{contextDocuments.length}</span>
+            {contextDocuments.length > 0 ? <span className="text-ink-subtle">{contextDocuments.length}</span> : null}
           </button>
 
           <hr className="my-5 border-line" />
@@ -175,6 +188,17 @@ export function NewReviewPage() {
             <div className="mt-3">
               <Callout tone="danger" title="Не удалось создать проверку">
                 {isProblem(error) ? error.problem.title : 'Повторите попытку.'}
+              </Callout>
+            </div>
+          ) : null}
+
+          {hasNoAvailableModel ? (
+            <div className="mt-3">
+              <Callout
+                tone="warn"
+                title={modelWasNotConfigured ? 'Модель ещё не подключена' : 'Нет доступной модели'}
+              >
+                Подключите модель в конфигурации сервиса, чтобы запускать новые проверки.
               </Callout>
             </div>
           ) : null}
