@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew the short-lived AI Review IP certificate
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ai-review-platform-current/tools/ops/renew-certificate.sh

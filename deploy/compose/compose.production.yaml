@@ -1,0 +1,51 @@
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: ${REVIEW_LOG_MAX_SIZE:-10m}
+    max-file: ${REVIEW_LOG_MAX_FILES:-3}
+
+services:
+  postgres:
+    restart: unless-stopped
+    logging: *bounded-logging
+
+  api:
+    environment:
+      REVIEW_COMPOSITION: unconfigured
+      REVIEW_MODEL_PROFILE_ID: ${REVIEW_MODEL_PROFILE_ID:-model-not-configured}
+      REVIEW_DIALOGUE_POLICY_ID: ${REVIEW_DIALOGUE_POLICY_ID:-bounded-dialogue-v1}
+      REVIEW_EXPECTED_OUTPUT_PATH: !reset null
+      REVIEW_TRUSTED_DOCUMENT_PATH: !reset null
+    restart: unless-stopped
+    logging: *bounded-logging
+
+  proxy:
+    restart: unless-stopped
+    logging: *bounded-logging
+
+  gateway:
+    image: nginx:1.29.4-alpine
+    environment:
+      NGINX_ENVSUBST_FILTER: ^REVIEW_PUBLIC_IP$
+      REVIEW_PUBLIC_IP: ${REVIEW_PUBLIC_IP:?set REVIEW_PUBLIC_IP}
+    volumes:
+      - ./nginx.gateway.conf.template:/etc/nginx/templates/review.conf.template:ro
+      - ./gateway-copy-secrets.sh:/docker-entrypoint.d/20-review-copy-secrets.sh:ro
+      - ${REVIEW_TLS_DIR:?set REVIEW_TLS_DIR}:/etc/letsencrypt:ro
+      - ${REVIEW_ACME_WEBROOT:?set REVIEW_ACME_WEBROOT}:/var/www/certbot:ro
+      - ${REVIEW_GATEWAY_HTPASSWD_FILE:?set REVIEW_GATEWAY_HTPASSWD_FILE}:/run/review-secrets/gateway.htpasswd:ro
+    ports:
+      - "${REVIEW_PUBLIC_HTTP_BIND:-0.0.0.0}:80:80"
+      - "${REVIEW_PUBLIC_HTTPS_BIND:-0.0.0.0}:443:443"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://proxy:8080/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    networks:
+      - edge
+    restart: unless-stopped
+    logging: *bounded-logging

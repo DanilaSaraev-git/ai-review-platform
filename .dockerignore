@@ -2,6 +2,11 @@
 .github/
 .venv/
 node_modules/
+**/node_modules/
+**/dist/
+**/test-results/
+**/playwright-report/
+apps/web/src/api/generated/
 **/__pycache__/
 **/*.py[cod]
 *.log*
@@ -9,6 +14,7 @@ node_modules/
 coverage/
 htmlcov/
 .local/
+.local-qa/
+.local-runs/
 client-materials/
-apps/web/
 output/

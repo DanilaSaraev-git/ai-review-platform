@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh AI Review external model availability
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ai-review-platform-current/tools/ops/refresh-model-availability.sh

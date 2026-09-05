@@ -24,7 +24,7 @@ x-app-image: &app-image
   build:
     context: ../..
     dockerfile: deploy/compose/Dockerfile
-  image: review-platform-mvp:local
+  image: ${REVIEW_APP_IMAGE:-review-platform-mvp:local}
 
 services:
   postgres:
@@ -89,9 +89,10 @@ services:
       - internal
 
   proxy:
-    image: nginx:1.29.4-alpine
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    build:
+      context: ../..
+      dockerfile: deploy/compose/Dockerfile.web
+    image: ${REVIEW_WEB_IMAGE:-review-platform-web:local}
     ports:
       - "127.0.0.1:${REVIEW_PROXY_PORT:-8080}:8080"
     depends_on:
