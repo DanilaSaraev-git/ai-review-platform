@@ -34,13 +34,13 @@ Tests обязательны по FR-014. Координатор отмечае�
 - [X] T015 [P] [US3] Перенести web/API production build и Compose setup в deploy/ без неучтённого серверного overlay; unconfigured production default, persistent volumes и ограниченные logs.
 - [X] T016 [US3] Подготовить TLS/gateway для всех data routes, private API/DB, secret-file config и renewal в deploy/ и tools/ops/; публичный plaintext не принимает документы/пароли.
 - [X] T017 [US3] Подготовить operator model connection и unavailable preflight в tools/ops/ и docs/operations/; не вызывать реальную модель.
-- [ ] T018 [US3] Проверить build/config, отрицательный/положительный gateway доступ, сертификат и unavailable model; deployment commit и ops evidence.
+- [X] T018 [US3] Проверить build/config, отрицательный/положительный gateway доступ, сертификат и unavailable model; deployment commit и ops evidence.
 
 ## Phase 6 — US4 / Slice 3–4 / recovery and deployment
 
 - [X] T019 [P] [US4] Реализовать согласованные backup/retention/schedule, isolated restore и rollback в tools/ops/, deploy/ и docs/operations/.
 - [X] T020 [US4] Пройти изолированное восстановление и проверить сохранность синтетических документов/отчёта/диалога; результат в specs/006-mvp-launch/evidence.md.
-- [ ] T021 [US4] Создать predeploy backup и установить проверенный release на существующий сервер с сохранением предыдущей версии; записать release hash в evidence.
+- [X] T021 [US4] Создать predeploy backup и установить проверенный release на существующий сервер с сохранением предыдущей версии; записать release hash в evidence.
 - [ ] T022 [US4] Проверить внешний доступ, health, model unavailable, persistence/restart и renewal/backup timers; записать результаты и инструкцию отката в docs/operations/.
 
 ## Phase 7 — Final validation
@@ -67,7 +67,7 @@ SpecKit baseline → visual → backend semantics → functional web → deploym
 
 ## Phase 10: Convergence
 
-- [ ] T028 Восстановить публикацию канонической схемы по `/openapi.json` в apps/api/ для существующей API docs, проверить маршрут и закрытый gateway доступ per FR-009, FR-014 (missing, MEDIUM).
+- [X] T028 Восстановить публикацию канонической схемы по `/openapi.json` в apps/api/ для существующей API docs, проверить маршрут и закрытый gateway доступ per FR-009, FR-014 (missing, MEDIUM).
 
 ## Phase 11: Convergence
 

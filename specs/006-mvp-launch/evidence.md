@@ -89,3 +89,15 @@ HIGH / contradicts / FR-011, FR-012, FR-015: первая попытка promoti
 Коммит `dbb330a` — `fix(ops): preserve seed identity across releases`. Deployment labels согласуются до seed соответствующей версии, в том числе при failure rollback. Неполный legacy.env мигрирует атомарно из фактической конфигурации здорового старого API; полный файл проверяется по seed-critical keys. Также исправлены обработка вывода SQL-команды без SIGPIPE и redirect API docs на публичный HTTPS origin.
 
 На PostgreSQL18 пройдены реальные команды: existing neutral→legacy labels, empty→deferred (exit 0), partial→rollback без изменения имени (exit 1). Bootstrap: старый файл с 3 keys обновлён до 18 REVIEW_*; повторный запуск сохранил hash; без работающего API неполная конфигурация отклоняется. Nginx/Compose/bash/diff checks passed; независимый targeted review не нашёл оставшихся blockers. Current VPS после проверок остаётся healthy на legacy `2a61354`. Фактический цикл нового выпуска и отката проходит следующим шагом.
+
+## Первый успешный production promotion
+
+На VPS установлен `501cf8618526140412cb8458a70c6989f601c3d2` из чистого Git archive (SHA-256 `bc1cb0e4d127dbe84ae064d5c379a1a2acd0fe9e3e978b51da7352d09d4d56f2`). Prebackup, build, migration, labels, startup и verify прошли; current symlink указывает на этот release. [Backend CI для этого SHA](https://github.com/DanilaSaraev-git/ai-review-platform/actions/runs/33996207753) также passed.
+
+Server agent проверил с локальной машины: HTTP→308, 8 защищённых aliases без credentials→401, authenticated bootstrap с нейтральными labels, единственный unavailable `model-not-configured`, 3 прежних документа, OpenAPI/docs и точный redirect `/docs` на публичный HTTPS. Встречались единичные handshake timeouts; запросы повторялись, финальная стабильность проверяется после restart/rollback gate. Timers установлены, model probe без enabled marker завершился без сетевого вызова. Фактический rollback/re-promotion и финальная проверка ещё выполняются.
+
+## Реальный rollback gate
+
+Откат `501cf86`→legacy `2a61354` выполнен: current переключён, loopback healthy, публичные 80/443 закрыты, несовместимые timers остановлены. Данные сохранились: 3 document versions, 3 reports, 2 dialogue turns, 2 decisions, 6 artifact records; список документов содержит 3 записи. Данные из резервной копии не восстанавливались.
+
+При проверке обнаружен false-positive: старый `/v1/bootstrap` возвращает SPA HTML с HTTP 200. Коммит `ed3d4d6` — `fix(ops): validate legacy rollback API` — использует фактический `/api/v1/bootstrap` и проверяет JSON, exact organization/workspace/actor IDs и labels до переключения symlink. Реальный legacy JSON прошёл, HTML отклонён; независимый targeted review passed. Обратная установка финального release выполняется после этого уточнения gate.
