@@ -75,3 +75,17 @@ Web agent: typecheck/lint/build passed, 100 unit tests passed, 41 Playwright sce
 Финальная правка `52d3b3c` убрала повторные счётчики замечаний и имя документа; toolbar сохранил статус и имя. Typecheck/lint, 7 relevant unit и 2 targeted Playwright tests passed. В `7a96a89` approved web baseline закреплён на полном SHA этого коммита. Не-web protected paths не менялись от прежнего baseline; автоматических исключений нет.
 
 Стандартный `env -u PROTECTED_PATH_ARGS make release-check-local` passed: Ruff, mypy 104, contracts 81, unit 110, security 12, protected gate. Дополнительно в этом срезе ранее прошли integration 51 и migrations 8; web полный gate — 100 unit и 41 Playwright, реальный HTTP write/reload и backend restart проверены отдельно. Markdown links и относительный symlink CLAUDE.md проверены. Модель не подключалась; внешний production gate записывается после установки.
+
+## Convergence finding F5 — actual legacy transition
+
+HIGH / contradicts / FR-011, FR-012, FR-015: первая попытка promotion `f3c2dfb` обнаружила drift display labels в `_seed_exact`. Private legacy.env содержал прежние model/dialogue ID, но не все фактические REVIEW labels. Current symlink остался на `2a61354`; после восстановления точной legacy конфигурации loopback API снова healthy. Данные не удалялись и не заменялись backup. Добавлена T030 для двустороннего согласования labels до seed, failure recovery и реального цикла new→legacy→new. Предыдущий read-only review не выявил этот переход; успешный выпуск пока не заявляется.
+
+## GitHub CI
+
+На опубликованном `f3c2dfb` оба workflow завершились успешно: [backend release-check](https://github.com/DanilaSaraev-git/ai-review-platform/actions/runs/33994456776) и [web checks](https://github.com/DanilaSaraev-git/ai-review-platform/actions/runs/33994456773). Этот результат проверяет код и синтетические сценарии; фактическая совместимость состояния старого VPS проверяется отдельным T030.
+
+## Исправление перехода между выпусками
+
+Коммит `dbb330a` — `fix(ops): preserve seed identity across releases`. Deployment labels согласуются до seed соответствующей версии, в том числе при failure rollback. Неполный legacy.env мигрирует атомарно из фактической конфигурации здорового старого API; полный файл проверяется по seed-critical keys. Также исправлены обработка вывода SQL-команды без SIGPIPE и redirect API docs на публичный HTTPS origin.
+
+На PostgreSQL18 пройдены реальные команды: existing neutral→legacy labels, empty→deferred (exit 0), partial→rollback без изменения имени (exit 1). Bootstrap: старый файл с 3 keys обновлён до 18 REVIEW_*; повторный запуск сохранил hash; без работающего API неполная конфигурация отклоняется. Nginx/Compose/bash/diff checks passed; независимый targeted review не нашёл оставшихся blockers. Current VPS после проверок остаётся healthy на legacy `2a61354`. Фактический цикл нового выпуска и отката проходит следующим шагом.

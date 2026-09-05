@@ -1,5 +1,14 @@
 # Quickstart validation: 006
 
+## Продолжить работу через SpecKit
+
+В новом checkout явно выберите feature directory; локальная `.specify/feature.json` намеренно не коммитится:
+
+```sh
+SPECIFY_FEATURE_DIRECTORY=specs/006-mvp-launch \
+  .specify/scripts/bash/check-prerequisites.sh --json --require-spec --require-tasks --include-tasks
+```
+
 ## Web
 
 Из apps/web:

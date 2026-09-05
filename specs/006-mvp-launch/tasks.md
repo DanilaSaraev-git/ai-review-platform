@@ -72,3 +72,7 @@ SpecKit baseline → visual → backend semantics → functional web → deploym
 ## Phase 11: Convergence
 
 - [X] T029 Согласовать CI protected-path gate с принятым web stage в tools/contracts/check_protected_paths.py: проверить неизменность остальных защищённых каталогов, закрепить одобренный полный commit SHA интерфейса как baseline и выполнить стандартную проверку без временных allow-path per FR-014, FR-015 (missing, HIGH).
+
+## Phase 12: Convergence
+
+- [ ] T030 Исправить обнаруженный при фактическом promotion drift deployment labels в tools/ops/: capture полного legacy environment, согласование labels до seed новой/старой версии, восстановление прежнего состояния при failure; пройти existing→new→legacy→new без потери данных per FR-011, FR-012, FR-015 (contradicts, HIGH).
