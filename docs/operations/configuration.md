@@ -80,3 +80,18 @@ API. Обязательные тесты используют только fake 
 зафиксировать profile digest, model/version, skill digest, engine/backend commit, suite version,
 результат и время. Реальные credentials и клиентские документы в репозиторий не сохраняются.
 Текущий статус реального endpoint: **не выбран и не проверялся**.
+
+Явная команда после выбора endpoint (она выполняет по одному review и dialogue запросу):
+
+```sh
+uv run --frozen review-cli model-smoke \
+  --profile /absolute/path/to/model-profile.json \
+  --credential /absolute/path/to/model-api-key \
+  --fixture tests/fixtures/ml-integration/primary.md \
+  --skill skills/review-data-spec \
+  --output /absolute/path/to/compatibility-evidence.json
+```
+
+Команда не запускается ни readiness, ни обязательным release gate. Evidence содержит только
+идентичности, digests, безопасную фактическую provenance, usage/latency и статус; prompt,
+ответ модели и значение credential в него не входят.

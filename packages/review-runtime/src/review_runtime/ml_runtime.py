@@ -35,6 +35,7 @@ from review_core.ports.models import (
     ModelAdapter,
     ModelAdapterError,
     ModelCapabilities,
+    ModelErrorCode,
     ModelProfileSnapshot,
 )
 from review_core.review.engine import MappingContext, ReviewEngine, ReviewFragment
@@ -94,9 +95,17 @@ class _ReviewOperationStorage(
 
 
 class _RecordingAdapter:
-    def __init__(self, adapter: ModelAdapter, storage: PostgresReviewExecutionStorage) -> None:
+    def __init__(
+        self,
+        adapter: ModelAdapter,
+        storage: PostgresReviewExecutionStorage,
+        platform: PostgresReviewPlatform,
+        profile: ModelProfile,
+    ) -> None:
         self._adapter = adapter
         self._storage = storage
+        self._platform = platform
+        self._profile = profile
 
     async def capabilities(self) -> ModelCapabilities:
         return await self._adapter.capabilities()
@@ -111,6 +120,7 @@ class _RecordingAdapter:
             await anyio.to_thread.run_sync(
                 partial(self._storage.finish_model_attempt, attempt_id, error=error)
             )
+            await _record_availability(self._platform, self._profile, error)
             raise
         except BaseException:
             await anyio.to_thread.run_sync(
@@ -120,6 +130,7 @@ class _RecordingAdapter:
         await anyio.to_thread.run_sync(
             partial(self._storage.finish_model_attempt, attempt_id, result=result)
         )
+        await _record_availability(self._platform, self._profile, None)
         return result
 
 
@@ -129,10 +140,12 @@ class _DialogueRecordingAdapter:
         adapter: ModelAdapter,
         platform: PostgresReviewPlatform,
         generation_attempt_id: str,
+        profile: ModelProfile,
     ) -> None:
         self._adapter = adapter
         self._platform = platform
         self._generation_attempt_id = generation_attempt_id
+        self._profile = profile
 
     async def capabilities(self) -> ModelCapabilities:
         return await self._adapter.capabilities()
@@ -149,6 +162,7 @@ class _DialogueRecordingAdapter:
             await anyio.to_thread.run_sync(
                 partial(self._platform.finish_dialogue_model_attempt, attempt_id, error=error)
             )
+            await _record_availability(self._platform, self._profile, error)
             raise
         except BaseException:
             await anyio.to_thread.run_sync(
@@ -162,7 +176,36 @@ class _DialogueRecordingAdapter:
         await anyio.to_thread.run_sync(
             partial(self._platform.finish_dialogue_model_attempt, attempt_id, result=result)
         )
+        await _record_availability(self._platform, self._profile, None)
         return result
+
+
+async def _record_availability(
+    platform: PostgresReviewPlatform,
+    profile: ModelProfile,
+    error: ModelAdapterError | None,
+) -> None:
+    import anyio
+
+    state = "available"
+    reason_code = None
+    ttl = 300.0
+    if error is not None:
+        reason_code = error.code.value
+        if error.code is ModelErrorCode.RATE_LIMITED:
+            state = "degraded"
+            ttl = error.retry_after_seconds or 1.0
+        else:
+            state = "unavailable"
+    await anyio.to_thread.run_sync(
+        partial(
+            platform.observe_model_profile,
+            {"id": profile.id, "version": profile.version},
+            state=state,
+            reason_code=reason_code,
+            expires_at=datetime.now(UTC) + timedelta(seconds=max(ttl, 0.001)),
+        )
+    )
 
 
 class _SingleResultAdapter:
@@ -218,7 +261,10 @@ class LLMReviewRuntime:
         )
         self.dialogue_engine = DialogueEngine()
         self._recording_adapter = _RecordingAdapter(
-            self.model_runtime.adapter, self.platform.review_storage
+            self.model_runtime.adapter,
+            self.platform.review_storage,
+            self.platform,
+            self.model_profile,
         )
         self._coordinator = AsyncExecutionCoordinator[
             ReviewOperation, dict[str, Any], dict[str, Any], dict[str, Any]
@@ -534,7 +580,10 @@ class LLMReviewRuntime:
 
                 result = await generate_with_retry(
                     _DialogueRecordingAdapter(
-                        self.model_runtime.adapter, self.platform, attempt_id
+                        self.model_runtime.adapter,
+                        self.platform,
+                        attempt_id,
+                        self.model_profile,
                     ),
                     request_factory,
                     deadline=time.monotonic()

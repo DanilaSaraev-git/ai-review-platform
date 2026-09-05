@@ -12,6 +12,7 @@ COPY apps/worker ./apps/worker
 COPY apps/cli ./apps/cli
 COPY contracts ./contracts
 COPY specs/003-backend-implementation/contracts ./specs/003-backend-implementation/contracts
+COPY specs/004-llm-review-integration/contracts ./specs/004-llm-review-integration/contracts
 COPY tests/fixtures ./tests/fixtures
 COPY tools/mvp_smoke.py ./tools/mvp_smoke.py
 COPY skills ./skills

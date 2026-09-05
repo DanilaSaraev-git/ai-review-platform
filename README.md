@@ -29,7 +29,7 @@
 - `codex/004-llm-review-integration` — инженерный слой LLM-интеграции; real endpoint и предметный harness подключаются отдельно;
 - `codex/005-web-review-ui` — web v1.
 
-Feature-ветки не считаются интегрированными, пока не прошли собственный CI и общий smoke через публичный контракт.
+Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Реальная модель и endpoint не выбраны и не проверялись; chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
 
 ## Лицензирование
 

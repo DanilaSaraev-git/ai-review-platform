@@ -1,0 +1,15 @@
+services:
+  fake-model:
+    image: review-platform-mvp:local
+    command: ["python", "/app/tests/fixtures/ml-integration/fake_provider_server.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health', timeout=2).read()"]
+      interval: 1s
+      timeout: 2s
+      retries: 20
+    networks:
+      - model-egress
+  api:
+    depends_on:
+      fake-model:
+        condition: service_healthy
