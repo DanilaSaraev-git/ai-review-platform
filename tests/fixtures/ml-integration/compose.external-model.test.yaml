@@ -1,6 +1,6 @@
 services:
   fake-model:
-    image: review-platform-mvp:local
+    image: ${REVIEW_APP_IMAGE:-review-platform-mvp:local}
     command: ["python", "/app/tests/fixtures/ml-integration/fake_provider_server.py"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health', timeout=2).read()"]
@@ -10,6 +10,8 @@ services:
     networks:
       - model-egress
   api:
+    environment:
+      REVIEW_MODEL_PROFILE_ID: synthetic-compose-fake
     depends_on:
       fake-model:
         condition: service_healthy
