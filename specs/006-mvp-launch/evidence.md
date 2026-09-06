@@ -502,3 +502,43 @@ TypeScript и ESLint. Обновлённый gate вернул `status=ok` и п
 `tests/contract/test_protected_paths.py` прошёл без исключений. Эта запись
 подтверждает локальную интеграцию и проверки;
 результат обновления сервера фиксируется отдельно после развёртывания.
+
+## Язык ответов и переход на локальную проверку, 2026-09-06
+
+Пользователь сообщил об английском языке модели. В коде обнаружены две причины:
+`locale` review находилась только в untrusted input без доверенной инструкции о языке,
+а runtime диалога принудительно передавал `en-US`. Locale исходного review также не
+сохранялась. Тексты конкретных документов и ответов в репозиторий не переносились.
+
+Release `398c01983814811de9c4495399e07719e2ed9067` добавляет проверенную locale
+в доверенные инструкции обоих видов запроса и сохраняет её в приватном execution JSON.
+Для прежних запусков используется явно описанный fallback `ru-RU`. Исходные цитаты,
+JSON keys/enums, неизменность отчёта, skill package и публичные контракты сохранены.
+
+Детерминированный regression до исправления: 14 failed, 2 passed; после исправления
+core и prompt boundary: 102 passed. Adapter/config/security: 41 passed. На отдельной
+временной PostgreSQL review/dialogue integration: 16 passed, включая русский,
+английский, восстановление после restart, legacy fallback и неизменность report bytes/ETag.
+Проверены actual system messages в fake provider. Ruff, mypy (106 source files),
+diff check и protected-path gate прошли; gate разрешал только два ранее принятых
+изменения RunStatePanel. Независимый review не выявил блокирующих замечаний.
+
+Перед выпуском активных review/dialogue не было. Promotion завершился успешно:
+current — `398c01983814811de9c4495399e07719e2ed9067`, previous —
+`9a4d767a8dcd30469a942d1f39b7f0751d5421a3`; gateway/TLS/origin/private services/model mode
+passed, API/proxy/gateway/PostgreSQL healthy. Backup `20260906T125139Z` скопирован
+в приватный локальный каталог вне Git; SHA-256 и permissions 0700/0600 проверены.
+Новый restore drill не выполнялся. Генерации DeepSeek агентом не запускались;
+фактический язык нового ответа не подтверждался модельным прогоном.
+
+Пользователь затем переключил работу на локальное тестирование. На момент переключения
+удалённое обновление уже закончилось; дальнейшие изменения сервера не выполнялись.
+
+Для локальной работы поднят отдельный Compose project `review-platform-yandex-local`
+на `http://localhost:18101/new`: PostgreSQL/API/proxy healthy, GET health/bootstrap/new
+возвращают 200, профиль DeepSeek `available`. Проверка GET моделей повторяется раз
+в 60 секунд отдельным сервисом. База и artifacts постоянны и изолированы от сервера
+и существующего dev-стенда на 5173. После запуска `review_runs=0`, `model_attempts=0`.
+В браузере подтверждены принятый дизайн Numbat и выбранный DeepSeek. Реальные генерации
+не запускались. [Управление локальным стендом](../../docs/operations/local-development.md#отдельный-локальный-стенд-deepseek)
+находится в приватном каталоге машины, без секретов в Git.
