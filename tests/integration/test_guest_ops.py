@@ -116,3 +116,97 @@ def test_ops_preserve_state_and_close_gateway_on_failure(tmp_path: Path, scenari
                 assert events[-1] == "verify"
     finally:
         run("docker", "rm", "--force", name, check=False)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("scenario", ["migration_failed", "verify_failed", "compatible_old", "stale_current"])
+def test_promotion_never_restarts_incompatible_code_after_guest_migration(
+    tmp_path: Path, scenario: str
+) -> None:
+    if os.environ.get("REVIEW_GATEWAY_TEST") != "1":
+        pytest.skip("set REVIEW_GATEWAY_TEST=1 for the isolated shell/ops checks")
+    fixture = tmp_path / "fixture"
+    old = fixture / "releases" / "old"
+    new = fixture / "releases" / "new"
+    state = fixture / "state"
+    bin_dir = fixture / "bin"
+    for release, commit in [(old, "a" * 40), (new, "b" * 40)]:
+        compose = release / "deploy" / "compose"
+        compose.mkdir(parents=True)
+        (compose / "compose.yaml").write_text("services: {}\n")
+        (compose / "compose.production.yaml").write_text("services: {}\n")
+        (release / "RELEASE_COMMIT").write_text(commit + "\n")
+    fixture.joinpath("current").symlink_to("releases/old")
+    state.mkdir()
+    state.joinpath("review.env").write_text("REVIEW_GUEST_ACCESS=true\n")
+    state.joinpath("review.env").chmod(0o600)
+    bin_dir.mkdir()
+    curl_stub = bin_dir / "curl"
+    curl_stub.write_text("#!/bin/sh\nprintf 'unexpected network call\\n' >&2\nexit 77\n")
+    curl_stub.chmod(0o755)
+    migration = "packages/review-runtime/migrations/versions/20260906_0003_guest_sessions.py"
+    for release in [new, old] if scenario == "compatible_old" else [new]:
+        marker = release / migration
+        marker.parent.mkdir(parents=True)
+        marker.write_text("# Synthetic marker for schema support\n")
+    ops = new / "tools" / "ops"
+    ops.mkdir(parents=True)
+    for filename in ["common.sh", "promote-release.sh"]:
+        shutil.copy2(ROOT / "tools" / "ops" / filename, ops / filename)
+    for filename in ["backup.sh", "update-deployment-labels.sh", "verify-deployment.sh"]:
+        status = 1 if scenario == "verify_failed" and filename == "verify-deployment.sh" else 0
+        script = ops / filename
+        script.write_text(f"#!/bin/sh\nprintf '{filename}\\n' >> /fixture/events\nexit {status}\n")
+        script.chmod(0o755)
+    docker_stub = bin_dir / "docker"
+    migration_status = 1 if scenario in {"migration_failed", "compatible_old"} else 0
+    docker_stub.write_text(
+        "#!/bin/sh\n"
+        'printf \'%s\\n\' "$*" >> /fixture/events\n'
+        f'case "$*" in *" run --rm migrate"*) exit {migration_status} ;; esac\n'
+    )
+    docker_stub.chmod(0o755)
+    expected = "c" * 40 if scenario == "stale_current" else "a" * 40
+    name = f"review-guest-promote-test-{uuid4().hex[:12]}"
+
+    def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(args, check=check, capture_output=True, text=True, timeout=30)
+
+    try:
+        run(
+            "docker", "create", "--pull=never", "--name", name, "--user", "0", "--network", "none",
+            "--env", "PATH=/fixture/bin:/app/.venv/bin:/usr/local/bin:/usr/bin:/bin",
+            "--env", "REVIEW_RELEASES_DIR=/fixture/releases",
+            "--env", "REVIEW_CURRENT_LINK=/fixture/current",
+            "--env", "REVIEW_STATE_DIR=/fixture/state",
+            "--env", f"REVIEW_EXPECTED_CURRENT_COMMIT={expected}",
+            "--entrypoint", "/bin/bash",
+            os.environ.get("REVIEW_OPS_TEST_IMAGE", "review-platform-mvp:local"),
+            "/fixture/releases/new/tools/ops/promote-release.sh", "/fixture/releases/new",
+        )
+        run("docker", "cp", str(fixture), f"{name}:/fixture")
+        result = run("docker", "start", "--attach", name, check=False)
+        exit_code = run("docker", "inspect", "--format", "{{.State.ExitCode}}", name).stdout.strip()
+        observed = tmp_path / "observed"
+        run("docker", "cp", f"{name}:/fixture", str(observed))
+        assert exit_code == "1", result.stderr
+        assert observed.joinpath("current").readlink() == Path("releases/old")
+        if scenario == "stale_current":
+            assert "current release changed" in result.stderr
+            assert not observed.joinpath("events").exists()
+            assert not observed.joinpath("releases/new/release.env").exists()
+        else:
+            events = observed.joinpath("events").read_text().splitlines()
+            assert any(event.endswith(" run --rm migrate") for event in events)
+            old_start = [event for event in events if "/releases/old/" in event and " up " in event]
+            if scenario == "compatible_old":
+                assert len(old_start) == 1
+                assert "old code was not restarted" not in result.stderr
+            else:
+                assert not old_start
+                assert events[-1].endswith(" stop --timeout 30 gateway")
+                assert "/releases/new/" in events[-1]
+                assert "old code was not restarted" in result.stderr
+                assert "REVIEW_GUEST_ACCESS=false" in result.stderr
+    finally:
+        run("docker", "rm", "--force", name, check=False)
