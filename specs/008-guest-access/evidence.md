@@ -4,7 +4,7 @@
 
 ## Состояние
 
-Код и контракт guest-v1 подготовлены; общий локальный gate пройден. Проверены backend, guest integration, migration/contract, gateway, backup и web. Реальная выкладка гостевого режима и браузерный smoke на опубликованном сервисе **ещё не подтверждены**.
+Гостевой режим развёрнут: current `3a0ab32c90f6e2aaf5b69e99b1875105761a2b3e`, previous `398c01983814811de9c4495399e07719e2ed9067`, schema `20260906_0003`, `REVIEW_GUEST_ACCESS=true`. [Основной интерфейс](https://135.106.195.62/new) доступен без кода; подготовленный `/demo` сохраняет Basic-допуск. Локальный gate, production promotion, проверка изоляции/перезапуска и isolated restore пройдены. T014–T015 завершены.
 
 В срезе не меняется действующий поставщик модели. Тесты используют синтетические данные и fake adapter/provider; они не подтверждают качество реального ревью.
 
@@ -25,11 +25,12 @@
 | Миграция и guest contract | 13 passed на отдельной тестовой БД |
 | Gateway | 9 passed с настоящим nginx, включая приватность демо и согласованность гостевого режима |
 | Backup и переключение режима | 12 passed; включая 4 Linux shell integration с настоящими scripts и fake Docker |
+| Guest ops после merge `398c019` | 9 passed; 4 новых opt-in promotion tests пройдены отдельно |
 | Web | 104 tests в 23 files passed; API generation, typecheck, lint и build прошли |
 | Web после merge | Дополнительно 20 RunStatePanel tests passed; typecheck, lint и build прошли |
-| Общая типизация | Mypy: 109 source files без ошибок |
+| Общая типизация после merge `398c019` | Штатный `uv run mypy`: 110 source files без ошибок |
 | Canonical contract tooling | validate, generate и TypeScript-проверка прошли |
-| Итоговый backend gate | 378 passed, 7 skipped, 4 warnings; пропущенные opt-in Docker проверки отдельно пройдены |
+| Итоговый backend gate после merge `398c019` | 397 passed, 11 skipped, 4 warnings; opt-in Docker проверки пройдены отдельно, включая 4 новых promotion tests |
 
 В первом интеграционном прогоне обнаружено: foreign run ID внутри собственного workspace возвращал `409 report_unavailable`. В `PostgresReviewPlatform.report()` добавлен `get_run()` перед чтением отчёта; повторный guest integration gate прошёл.
 
@@ -74,11 +75,29 @@
 возвращает результат после сохранения; выбор нескольких файлов в одном поле и ранний
 допуск до передачи HTTP body в эту правку не входят. Правила квот и HTTP DTO сохранены.
 
-## Ещё не подтверждено
 
-| Gate | Статус |
+## CI после публикации PR #5
+
+Backend `release-check` прошёл. Первый web E2E gate: 44 passed, 2 skipped, 1 failed. Единственный отказ — прежний locator `Отчёт не опубликован.` после принятого изменения диагностики совпал с двумя текстами. В test-only commit `3be6f8c8f1befd2b2f6a5617d4397621a728b62a` поиск уточнён `exact: true`; UI и production code не менялись. Focused E2E прошёл: 1 passed на `localhost:18207` за 3,9 секунды. После исправления отправлен повторный полный CI; актуальный статус доступен в [PR #5](https://github.com/DanilaSaraev-git/ai-review-platform/pull/5). Production выпуск T014–T015 подтверждён отдельными проверками ниже.
+
+## Фактический production выпуск, 2026-09-06
+
+| Проверка | Наблюдаемый результат |
 | --- | --- |
-| Production migration, release и HTTPS smoke | Не выполнено в рамках этой записи |
+| Promotion и смена режима | Release `3a0ab32c90f6e2aaf5b69e99b1875105761a2b3e` сначала установлен с guest=false; проверка прошла. Затем переключение guest=true и повторная проверка прошли |
+| Два независимых HTTPS посетителя | Два curl cookie jars получили разные workspace/actor; действующая cookie возвращает прежнюю identity |
+| Upload и download | Загрузка синтетического файла вернула 201; собственный файл — 200, SHA-256 содержимого совпал |
+| Граница доступа | Через `/api/v1` и `/v1`: собственные данные 200, чужие 404, отсутствие cookie 401, cross-origin запрос 403; `/demo` без Basic — 401 |
+| Согласованный backup и restart | Backup остановил и снова запустил API, proxy и gateway; после restart проверены та же guest identity и SHA-256 загруженного файла |
+| Isolated restore | Backup `20260906T134547Z`: 20 документов, 5 отчётов, 4 хода диалогов, 2 решения, 27 файлов артефактов. Количества и хеши совпали |
+| Копия вне VPS | Набор сохранён в приватном каталоге владельца; SHA-256 и permissions 0700/0600 прошли проверку |
+| UI production release | CUA через SSH-туннель `localhost:18106`: sidebar 202 px, `rgb(143, 24, 40)`, Onest, logo loaded; форма с профилем и моделью отображается |
+| Внешний HTTPS | `curl --interface en0` прошёл с проверкой сертификата; основной `/new` доступен без кода |
+| Состояние эксплуатации | Свободно около 16 GB; backup, certificate renewal и model probe timers активны |
+
+Прямой переход IAB к публичному HTTPS сорвался на локальном соединении. Поэтому браузерный осмотр выполнен через приватный SSH-туннель к реальному release, а внешняя HTTPS-доступность подтверждена независимо curl. Прямой browser HTTPS PASS не заявляется.
+
+В ходе production выпуска и приёмки агент не выполнял вызовов модели. Существующие отчёты/диалоги в восстановленной копии не являются новыми генерациями этой проверки. Порядок эксплуатации и ограничения отката после schema `0003`: [deployment.md](../../docs/operations/deployment.md).
 
 ## Границы результата
 
