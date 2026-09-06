@@ -59,7 +59,7 @@ test.describe('Запуск проверки загруженного ТЗ', () 
     await startRun(page);
 
     await expect(page.getByText('Не удалось')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Отчёт не опубликован.')).toBeVisible();
+    await expect(page.getByText('Отчёт не опубликован.', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Открыть отчёт' })).toHaveCount(0);
   });
 
