@@ -429,7 +429,7 @@ def test_unconfigured_deployment_can_select_probe_and_run_one_external_model(
         if skill_package == "skills/review-data-spec":
             skill_snapshot = run.json()["execution_snapshot"]["skill"]
             assert skill_snapshot["id"] == operator_settings.skill_id
-            assert skill_snapshot["version"] == "1.0.1"
+            assert skill_snapshot["version"] == "1.0.2"
             assert skill_snapshot["package_sha256"] != operator_settings.skill_package_sha256
 
         failed = anyio.run(

@@ -165,6 +165,23 @@ async def test_native_schema_and_nullable_parameters_are_profile_gated() -> None
     assert all(value is not None for value in payload.values())
 
 
+async def test_native_json_object_keeps_schema_in_instructions_and_gates_json_syntax() -> None:
+    provider = FakeModelProvider([ScriptedReply(chat_completion("{}"))])
+    model_profile = profile(structured_output="native_json_object")
+    async with httpx.AsyncClient(transport=provider.transport) as client:
+        adapter = OpenAICompatibleModelAdapter(
+            profile=model_profile,
+            client=client,
+            secrets=StaticSecrets(),
+            max_response_bytes=4096,
+        )
+        await adapter.generate(request(model_profile))
+
+    payload = json.loads(provider.requests[0].content)
+    assert payload["response_format"] == {"type": "json_object"}
+    assert "Response JSON Schema:" in payload["messages"][0]["content"]
+
+
 async def test_yandex_uses_mounted_api_key_and_folder_from_model_uri(tmp_path: Path) -> None:
     provider = FakeModelProvider([ScriptedReply(chat_completion("{}"))])
     model_profile = profile(provider="yandex", model="gpt://synthetic-folder/deepseek-v4-flash/latest")

@@ -11,7 +11,7 @@ from review_core.canonical import digest_value
 from review_runtime.models.config import EndpointPolicy
 
 ModelCapability = Literal["text_generation", "vision", "native_structured_output"]
-StructuredOutputMode = Literal["plain_json", "native_json_schema"]
+StructuredOutputMode = Literal["plain_json", "native_json_object", "native_json_schema"]
 ProbeMode = Literal["models", "health"]
 
 _SAFE_PARAMETERS = frozenset(

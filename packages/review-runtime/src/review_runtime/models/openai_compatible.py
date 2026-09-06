@@ -154,7 +154,7 @@ class OpenAICompatibleModelAdapter:
             else "max_tokens"
         )
         trusted_instructions = request.trusted_instructions
-        if self.profile.structured_output == "plain_json":
+        if self.profile.structured_output in {"plain_json", "native_json_object"}:
             schema = json.dumps(
                 request.response_schema, ensure_ascii=False, separators=(",", ":"), sort_keys=True
             )
@@ -182,7 +182,9 @@ class OpenAICompatibleModelAdapter:
         if request.temperature is not None:
             payload["temperature"] = request.temperature
             safe["temperature"] = request.temperature
-        if self.profile.structured_output == "native_json_schema":
+        if self.profile.structured_output == "native_json_object":
+            payload["response_format"] = {"type": "json_object"}
+        elif self.profile.structured_output == "native_json_schema":
             payload["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {

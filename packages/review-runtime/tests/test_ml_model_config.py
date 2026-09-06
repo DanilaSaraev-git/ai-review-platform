@@ -139,6 +139,24 @@ def test_yandex_model_templates_follow_the_existing_profile_contract(name: str) 
     assert profile.max_output_tokens == 16384
 
 
+def test_gpt_oss_uses_provider_json_mode() -> None:
+    value = json.loads(
+        (ROOT / "deploy/compose/config/model-profile.yandex-gpt-oss20b.json").read_text()
+    )
+
+    assert value["structured_output"] == "native_json_object"
+    assert value["version"] == "1.0.1"
+
+
+def test_review_skill_requests_the_runtime_supplied_compact_schema() -> None:
+    instructions = (ROOT / "skills/review-data-spec/SKILL.md").read_text()
+    manifest = json.loads((ROOT / "skills/review-data-spec/manifest.json").read_text())
+
+    assert "response schema supplied by the engine" in instructions
+    assert "return only `review-output.v1`" not in instructions.lower()
+    assert manifest["version"] == "1.0.2"
+
+
 def test_profile_validation_performs_no_dns_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     def unexpected_dns(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("configuration validation must not resolve DNS")

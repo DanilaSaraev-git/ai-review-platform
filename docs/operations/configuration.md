@@ -111,12 +111,13 @@ python3 tools/ops/render-yandex-profile.py \
 архитектуре и доступности через тот же API. Пакетный режим содержит другие модели,
 но имеет минимальный запуск 200 000 токенов и не подходит текущему синхронному UI.
 
-Используется существующий `plain_json`: схема включается в доверенные инструкции, а результат
-проверяется каноническим валидатором до публикации. Поддержка строгой схемы конкретной моделью
-не заявляется. Параметр `max_completion_tokens=16384` ограничивает ответ вместе с reasoning;
+GPT-OSS 20B использует нативный `response_format={"type":"json_object"}`: Yandex гарантирует
+корректный JSON, а соответствие компактной схеме и каноническому контракту проверяет runtime
+до публикации. Схема остаётся в доверенных инструкциях. Qwen и DeepSeek пока используют
+`plain_json`. Параметр `max_completion_tokens=16384` ограничивает ответ вместе с reasoning;
 `reasoning_effort` и temperature не переопределяются. Это выбранный лимит запуска, а не
-заявленный максимальный размер ответа модели. Контекст модели — 1048576 токенов, существующий
-лимит всего сериализованного запроса 32768 UTF-8 байт сохраняется.
+заявленный максимальный размер ответа модели. Лимит всего сериализованного запроса 32768 UTF-8
+байт сохраняется для каждого профиля.
 
 Активация идёт через штатные `model-disable.sh`, `model-configure.sh`, `model-enable.sh`.
 `model-enable.sh` делает только GET списка моделей и инфраструктурные проверки. Генерации,
@@ -126,6 +127,7 @@ python3 tools/ops/render-yandex-profile.py \
 
 Официальные источники: [модели](https://aistudio.yandex.ru/ru/docs/ai-studio/concepts/generation/models),
 [Chat Completions](https://aistudio.yandex.ru/ru/docs/ai-studio/api/Chat-Completions/createChatCompletion),
+[структурированный вывод](https://aistudio.yandex.ru/ru/docs/ai-studio/concepts/generation/structured-output),
 [авторизация](https://aistudio.yandex.ru/ru/docs/ai-studio/api-ref/authentication),
 [GET models](https://aistudio.yandex.ru/en/docs/ai-studio/api/Models/listModels).
 

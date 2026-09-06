@@ -43,7 +43,7 @@
     "context_window_tokens": {"type": "integer", "minimum": 1},
     "max_input_utf8_bytes": {"type": "integer", "minimum": 1},
     "max_output_tokens": {"type": "integer", "minimum": 1},
-    "structured_output": {"enum": ["plain_json", "native_json_schema"]},
+    "structured_output": {"enum": ["plain_json", "native_json_object", "native_json_schema"]},
     "supported_parameters": {
       "type": "array",
       "uniqueItems": true,
