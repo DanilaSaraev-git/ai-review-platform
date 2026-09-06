@@ -16,7 +16,7 @@ Compose 2.40.3. В нём 2 GiB RAM, 2 GiB swap и 40 GiB диска. Текущ
 без потери данных. SSH password нельзя отключать, пока отдельный вход
 непривилегированного оператора по ключу не проверен в новой сессии.
 
-Включена Kimi K2 через Hugging Face Router/Novita: профиль `kimi-k2-hf-novita` 1.0.0,
+Включена Kimi K2 через Hugging Face Router/Novita: профиль `kimi-k2-hf-novita` 1.0.1,
 модель `moonshotai/Kimi-K2-Instruct:novita`, навык `review-data-spec` 1.0.1. Реальный
 синтетический HTTP smoke прошёл review и dialogue; результаты предметной оценки качества
 из этого не следуют. Предыдущий production release — `c61434de2ecba31e4bcd6d24aa045cd624bc64bd`;

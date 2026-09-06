@@ -92,3 +92,9 @@ SpecKit baseline → visual → backend semantics → functional web → deploym
 - [X] T035 Проверить реальный синтетический review→dialogue через сервер, неизменность report и доступность отката; записать фактический release и результаты в evidence и operator guide.
 - [X] T036 Устранить обнаруженный полным gate старый drift bootstrap/runtime dialogue budget без перезаписи immutable versions, проверить bootstrap→runtime на нестандартном лимите; актуализировать exact model ID и image в synthetic Compose fixture. Предшествует завершению T033.
 - [X] T037 Устранить обнаруженный серверным preflight конфликт legacy/canonical digest у review-data-spec 1.0.0: выпустить пакет 1.0.1, проверить переход unconfigured→ML→unconfigured с сохранением прежней записи; повторить promotion до T034–T035.
+
+## Phase 15: Усечение ответа Kimi — инцидент 2026-09-06
+
+- [X] T038 Подтвердить причину model_output_invalid по безопасным метаданным провайдера; повысить output budget новой версией профиля до 8192, применить через operator workflow и проверить исходный сценарий без изменения старой ошибки. Обрезка устранена; повтор выявил независимый validation_failed, затем HF HTTP 402.
+- [X] T039 Проверять finish reason до разбора ответа в review/dialogue/CLI: не публиковать даже валидный JSON с length, сохранить public error enum и запрет auto retry; пройти regressions и зафиксировать эксплуатационные границы. Код проверен локально и включается в следующий application release.
+- [ ] T040 После восстановления API-кредитов продолжить безопасную диагностику validation_failed и пройти успешный исходный review; выпустить completion guard на сервер вместе с готовым этапом. Сейчас генерация блокируется Hugging Face HTTP 402; покупки не выполнялись.
