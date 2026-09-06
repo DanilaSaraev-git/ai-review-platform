@@ -65,7 +65,7 @@ PostgreSQL использует Compose project `review-platform-dev` и volume 
 
 Feature 009 проверяется в отдельном checkout и Compose project `review-cycle-local`. Локальный адрес — [http://localhost:18109/documents](http://localhost:18109/documents); публикация порта ограничена loopback. База и исходники используют отдельные volumes. Существующие локальные и удалённые экземпляры не изменяются.
 
-Приватный wrapper `~/.local/state/ai-review-platform/document-cycle-local/manage.sh` принимает команды Compose: `ps`, `stop`, `up --detach --build --wait`. Профиль модели и путь к credential берутся из существующей локальной конфигурации Яндекса без копирования секрета в репозиторий. GET-probe проверяет доступность; генерация происходит только при действии пользователя. Для HTTP на loopback используется trusted режим; гостевая изоляция проверяется отдельно интеграционными тестами.
+Приватный wrapper `~/.local/state/ai-review-platform/document-cycle-local/manage.sh` принимает команды Compose: `ps`, `stop`, `up --detach --build --wait`. Выбранный профиль DeepSeek хранится отдельным локальным JSON, а путь к credential берётся из существующей конфигурации Яндекса без копирования секрета в репозиторий. GET-probe проверяет доступность; генерация происходит только при действии пользователя. Для HTTP на loopback используется trusted режим; гостевая изоляция проверяется отдельно интеграционными тестами.
 
 После обновления кода стенд необходимо пересобрать. Остановка сохраняет данные. Результаты приёмки описаны в [SpecKit 009](../../specs/009-document-review-cycle/quickstart.md); production deployment допускается только после отдельной команды пользователя.
 

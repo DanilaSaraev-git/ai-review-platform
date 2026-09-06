@@ -11,45 +11,45 @@
 ## Phase 2: Foundational contracts
 
 - [x] T003 Add compatible cycle/family/PDF resources, examples and changelog in `contracts/review-platform/v1/`; regenerate guest/static variants through `tools/contracts/` and validate compatibility.
-- [ ] T004 Add storage migration and metadata for families, version membership and cycle snapshots in `packages/review-runtime/migrations/versions/` and `packages/review-runtime/src/review_runtime/postgres/models/__init__.py`.
+- [x] T004 Add storage migration and metadata for families, version membership and cycle snapshots in `packages/review-runtime/migrations/versions/` and `packages/review-runtime/src/review_runtime/postgres/models/__init__.py`.
 
 ## Phase 3: US1 — Повторить проверку
 
 **Independent test**: Repeat completed/failed run with saved document and editable parameters; previous result unchanged.
 
-- [ ] T005 [P] [US1] Add repeat entry/prepopulation with a fresh run request in `apps/web/src/features/new-review/` and entry actions in `apps/web/src/features/review-run/`.
-- [ ] T006 [P] [US1] Verify repeat/idempotency and frozen comparison baseline through `tests/integration/test_document_cycle.py` and both platform adapters.
+- [x] T005 [P] [US1] Add repeat entry/prepopulation with a fresh run request in `apps/web/src/features/new-review/` and entry actions in `apps/web/src/features/review-run/`.
+- [x] T006 [P] [US1] Verify repeat/idempotency and frozen comparison baseline through `tests/integration/test_document_cycle.py` and both platform adapters.
 
 ## Phase 4: US2 — Версии
 
 **Independent test**: One family, two versions, three runs; old links and quotas remain valid.
 
-- [ ] T007 [US2] Implement family/version storage, legacy backfill and HTTP actions in `packages/review-runtime/src/review_runtime/postgres/`, `packages/review-core/src/review_core/application/platform.py` and `apps/api/src/review_api/routes/`.
-- [ ] T008 [P] [US2] Implement document list/history/version upload using generated client in `apps/web/src/features/document-cycle/` and connect existing routes.
-- [ ] T009 [US2] Test upload concurrency, quotas, guest isolation and historical data preservation in `tests/integration/test_document_cycle.py` and `tests/migration/`.
+- [x] T007 [US2] Implement family/version storage, legacy backfill and HTTP actions in `packages/review-runtime/src/review_runtime/postgres/`, `packages/review-core/src/review_core/application/platform.py` and `apps/api/src/review_api/routes/`.
+- [x] T008 [P] [US2] Implement document list/history/version upload using generated client in `apps/web/src/features/document-cycle/` and connect existing routes.
+- [x] T009 [US2] Test upload concurrency, quotas, guest isolation and historical data preservation in `tests/integration/test_document_cycle.py` and `tests/migration/`.
 
 ## Phase 5: US3 — Замечания между проверками
 
 **Independent test**: unchanged/changed/new/absent/ambiguous and v1→v2 resolved absent→v3 reappeared; manual corrections and retry preserve history.
 
 - [x] T010 [P] [US3] Test and implement pure conservative matching in `packages/review-core/src/review_core/application/review_cycle.py` and `packages/review-core/tests/test_review_cycle.py`.
-- [ ] T011 [US3] Persist lineage, previous decision snapshots, manual links and resolution history in `packages/review-runtime/src/review_runtime/postgres/`; expose revision-checked routes in `apps/api/src/review_api/routes/`.
-- [ ] T012 [P] [US3] Implement comparison, former decisions, manual linking and fix confirmation UI in `apps/web/src/features/document-cycle/` with MSW scenarios.
-- [ ] T013 [US3] Cover partial/changed context, non-destructive retry and concurrent revision conflicts in `tests/integration/test_document_cycle.py`.
+- [x] T011 [US3] Persist lineage, previous decision snapshots, manual links and resolution history in `packages/review-runtime/src/review_runtime/postgres/`; expose revision-checked routes in `apps/api/src/review_api/routes/`.
+- [x] T012 [P] [US3] Implement comparison, former decisions, manual linking and fix confirmation UI in `apps/web/src/features/document-cycle/` with MSW scenarios.
+- [x] T013 [US3] Cover partial/changed context, non-destructive retry and concurrent revision conflicts in `tests/integration/test_document_cycle.py`.
 
 ## Phase 6: US4 — PDF
 
 **Independent test**: Download a coherent, complete and readable PDF of selected run with current decisions.
 
 - [x] T014 [P] [US4] Test and implement PDF renderer and bundled licensed Cyrillic font in `packages/review-runtime/src/review_runtime/report_export.py`; lock dependency in `packages/review-runtime/pyproject.toml` and `uv.lock`.
-- [ ] T015 [US4] Build coherent export snapshot and protected attachment endpoint in `packages/review-runtime/src/review_runtime/postgres/` and `apps/api/src/review_api/routes/`.
-- [ ] T016 [P] [US4] Add PDF download UI to `apps/web/src/features/review-report/`; verify network/export errors and selected-run semantics.
-- [ ] T017 [US4] Extract and visually render synthetic multi-page Cyrillic PDF; test snapshot consistency and immutable ETag in `packages/review-runtime/tests/` and `tests/integration/test_document_cycle.py`.
+- [x] T015 [US4] Build coherent export snapshot and protected attachment endpoint in `packages/review-runtime/src/review_runtime/postgres/` and `apps/api/src/review_api/routes/`.
+- [x] T016 [P] [US4] Add PDF download UI to `apps/web/src/features/review-report/`; verify network/export errors and selected-run semantics.
+- [x] T017 [US4] Extract and visually render synthetic multi-page Cyrillic PDF; test snapshot consistency and immutable ETag in `packages/review-runtime/tests/` and `tests/integration/test_document_cycle.py`.
 
 ## Phase 7: Verification
 
-- [ ] T018 Run relevant backend/contract/migration and web gates, plus combined synthetic smoke in `apps/web/e2e/` and `tests/e2e/`; record actual evidence in `specs/009-document-review-cycle/evidence.md`.
-- [ ] T019 Independently review implementation against spec, resolve findings, update `README.md`, domain/operations docs and product decision references; verify Markdown links and symlink.
+- [x] T018 Run relevant backend/contract/migration and web gates, plus combined synthetic smoke in `apps/web/e2e/` and `tests/e2e/`; record actual evidence in `specs/009-document-review-cycle/evidence.md`.
+- [x] T019 Independently review implementation against spec, resolve findings, update `README.md`, domain/operations docs and product decision references; verify Markdown links and symlink.
 
 ## Dependencies & Execution Order
 
