@@ -1,7 +1,7 @@
 {
   "manifest_version": "review-skill.v1",
   "id": "review-data-spec",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "display_name": "Data specification review",
   "description": "Reviews data-flow and data-mart requirements with explicit evidence and coverage.",
   "operations": {

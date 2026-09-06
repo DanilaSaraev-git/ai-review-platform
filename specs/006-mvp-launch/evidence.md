@@ -246,3 +246,18 @@ Optional skip относится к отсутствующему local-model end
 на сервере. Synthetic external-model Compose прошёл на настоящей сети Docker с fake provider.
 Image web/API собран; synthetic report сохранил SHA-256 и ETag после restart.
 Перед packaging проверены отсутствие credential и локальных путей, ссылки и symlink инструкций.
+
+Серверный release `c61434de2ecba31e4bcd6d24aa045cd624bc64bd` успешно установлен после
+predeploy backup `20260906T074046Z`; gateway/TLS/origin/private services passed.
+Отдельный model preflight до включения обнаружил несовместимость старой записи навыка:
+`review-data-spec` 1.0.0 хранит legacy digest (только файлы), а ML registry проверяет canonical
+digest (manifest и файлы). CLI вернул `invalid_configuration`; рабочий сервис остался в
+unconfigured режиме. Историческая запись не менялась. Исправление и повторная установка
+отслеживаются в T037; это отдельный обнаруженный стык, не ошибка токена или Kimi.
+
+Навык выпущен как 1.0.1 без изменения текста инструкций и legacy digest. Regression
+реального пакета прошёл red→green и проверил unconfigured→ML→probe→review→unconfigured,
+новую версию в execution snapshot и полную неизменность прежней SQL-записи 1.0.0.
+Повторные проверки: 53 integration на чистой PostgreSQL, 52 registry/CLI/ML contract passed;
+Ruff, diff check и стандартный protected-path gate без исключений passed. Ранее пройденные
+web, migration и E2E gates не повторялись: UI, schema и runtime code этим исправлением не менялись.

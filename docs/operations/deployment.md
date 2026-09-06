@@ -145,9 +145,18 @@ backup set нужно скопировать с VPS в приватный кат
 понижает schema и не восстанавливает данные; восстановление данных — отдельное осознанное
 действие после разбора причины.
 
+Для отката Kimi-выпуска на `c61434de2ecba31e4bcd6d24aa045cd624bc64bd` сначала успешно
+выполните `model-disable.sh`, затем `rollback-release.sh` с этим полным SHA. Эта предыдущая
+версия работает в unconfigured режиме, но ещё содержит конфликт legacy/canonical identity
+навыка 1.0.0. Перед повторным включением Kimi верните исправленный release с навыком 1.0.1.
+Исторические версии навыка и результаты проверок при таком откате сохраняются.
+
 ## Подключить модель
 
-Создайте профиль из `deploy/compose/config/model-profile.external.example.json`, заменив
+Для выбранной Kimi K2 используется готовый
+[`model-profile.huggingface-kimi-k2.json`](../../deploy/compose/config/model-profile.huggingface-kimi-k2.json)
+с Hugging Face Router и Novita. Для другого endpoint создайте профиль из
+`deploy/compose/config/model-profile.external.example.json`, заменив
 synthetic ID/provider/model, оба точных HTTPS URL, limits и capabilities. Профиль проходит
 canonical `ModelProfile` validation внутри version-tagged app image. Скрипт не вызывает
 поставщика и проверяет, что непривилегированный runtime читает root-owned файлы:
