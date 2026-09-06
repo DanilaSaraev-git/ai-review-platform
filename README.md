@@ -30,7 +30,7 @@
 - `codex/005-web-review-ui` — web v1;
 - `codex/mvp-launch-20260905` — упрощённый интерфейс и выпуск MVP.
 
-Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Реальная модель и endpoint не выбраны и не проверялись; chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
+Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Для реального подключения выбран Kimi K2 через Hugging Face/Novita; [конфигурация](docs/operations/configuration.md#профиль-kimi-k2) и [серверные результаты](specs/006-mvp-launch/evidence.md) отделены от предметной оценки. Chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
 
 ## Подготовка MVP
 

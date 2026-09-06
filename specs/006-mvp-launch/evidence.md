@@ -214,3 +214,35 @@ passed. Web source после ранее успешного full web CI не м�
 - Отдельные commits сохранены в `codex/mvp-launch-20260905`; merge в main не выполнялся.
   Постоянное внешнее хранение копий и вход отдельного SSH-оператора по ключу остаются
   явными эксплуатационными продолжениями. На текущем Mac нужен исправный маршрут к IP вне VPN.
+
+## Kimi K2 — подготовка серверного выпуска 2026-09-06
+
+Пользователь поручил подключить выбранную Kimi K2 и выпустить обновление на существующий
+сервер. Код переносится поверх 2fb8785; текущий server release перед обновлением — 9aad090.
+Перенесены только plain JSON schema transport, семантическая проверка CLI smoke и профиль
+`kimi-k2-hf-novita` 1.0.0. Production model-probe/timer, limits, gateway и UI сохранены.
+Токен передаётся отдельным private file; в release archive секрета нет.
+
+Targeted adapter/CLI gate: 34 passed. `release-check-local`: 81 contract, 125 unit/CLI,
+12 security passed; Ruff и mypy (104 файла) passed; canonical schemas/client/protected paths passed.
+Compose web/API build, synthetic smoke и restart на отдельном loopback стенде прошли.
+
+Полный PostgreSQL gate выявил существовавший до Kimi рассинхрон: bootstrap сохранял
+`max_member_turns=null`, основной runtime после `4531968` ожидал runtime budget. Исправлен
+bootstrap с использованием того же validated config; regression с лимитом 7 прошёл red→green.
+Guard неизменяемых версий не ослаблен, существующие записи не перезаписываются. На заново
+созданной одноразовой test schema migration 8 + integration 52 passed.
+Synthetic Compose fixture также актуализирован: явно задан внешний model profile ID и
+используется выбранный app image. Это изменения тестовой конфигурации, не production defaults.
+
+Ранее зелёный CI выполнял `release-check-local` без PostgreSQL suites; историческое полное
+свидетельство 004 относится к более раннему baseline. Неуспешный новый прогон не скрывается
+этими прежними результатами. Статус серверной установки фиксируется отдельно ниже после
+promotion, enable и реального smoke.
+
+После исправлений полный последовательный backend gate: 81 contract + 125 unit/CLI +
+12 security + 8 migration + 52 integration + 9 E2E = **287 passed, 1 optional skip**.
+Optional skip относится к отсутствующему local-model endpoint; HF будет проверяться отдельно
+на сервере. Synthetic external-model Compose прошёл на настоящей сети Docker с fake provider.
+Image web/API собран; synthetic report сохранил SHA-256 и ETag после restart.
+Перед packaging проверены отсутствие credential и локальных путей, ссылки и symlink инструкций.

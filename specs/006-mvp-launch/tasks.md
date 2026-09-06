@@ -80,3 +80,14 @@ SpecKit baseline → visual → backend semantics → functional web → deploym
 ## Phase 13: Convergence
 
 - [X] T031 Проверить внешнюю HTTPS доступность после завершения maintenance: воспроизвести handshake failures коротким repeatable probe, сопоставить с host/browser/network evidence, исправить подтверждённую причину или записать внешний блокер без заявления о непроверенной готовности per FR-009, FR-014, SC-005 (missing, HIGH).
+
+## Phase 14: Kimi K2 — поручение на подключение и выпуск 2026-09-06
+
+Пользователь поручил выпустить версию с выбранной моделью на существующий сервер MVP.
+Этот этап снимает прежнее ограничение T017 на реальный provider call для явного compatibility smoke.
+
+- [X] T032 Перенести проверенный plain JSON schema transport и semantic CLI smoke, добавить профиль Kimi K2 через Hugging Face/Novita; сохранить production limits, model-probe timer и operator workflow. Targeted tests 34 passed.
+- [X] T033 Выполнить backend release gate и Compose build на отдельном локальном стенде, проверить отсутствие секретов и подготовить неизменяемый commit/archive.
+- [ ] T034 Создать predeploy backup штатным promotion, установить новый release, настроить private model files и включить Kimi через model-configure/model-enable; проверить gateway/TLS/model availability.
+- [ ] T035 Проверить реальный синтетический review→dialogue через сервер, неизменность report и доступность отката; записать фактический release и результаты в evidence и operator guide.
+- [X] T036 Устранить обнаруженный полным gate старый drift bootstrap/runtime dialogue budget без перезаписи immutable versions, проверить bootstrap→runtime на нестандартном лимите; актуализировать exact model ID и image в synthetic Compose fixture. Предшествует завершению T033.
