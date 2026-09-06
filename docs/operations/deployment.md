@@ -28,7 +28,8 @@ dialogue и `model-smoke` при подключении не выполняли�
 и порядок отката модели ниже описывают текущий контур.
 
 Исторически, до Яндекса, работала Kimi K2 через Hugging Face Router/Novita: профиль
-`kimi-k2-hf-novita` 1.0.0, модель `moonshotai/Kimi-K2-Instruct:novita`. Для неё реальный
+`kimi-k2-hf-novita` 1.0.0, позднее 1.0.1 с output budget 8192, модель
+`moonshotai/Kimi-K2-Instruct:novita`. Для версии 1.0.0 реальный
 синтетический HTTP smoke прошёл review и dialogue; результаты предметной оценки качества
 из этого не следуют и на DeepSeek не переносятся. До отдельного деморежима рабочим release
 был `5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`.

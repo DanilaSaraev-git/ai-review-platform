@@ -1,110 +1,45 @@
-import { Link, NavLink, Outlet } from 'react-router';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { Icon } from '@/components/ui/Icon';
 import { appBaseUrl, DEMO_NOTICE, isDemoMode } from '@/app/demo-mode';
 
-/**
- * Каркас страницы: шапка, левая панель разделов и область маршрута.
- * Раскладка веб-интерфейса v1.
- *
- * В шапке нет элементов аккаунта, выхода, ролей и участников: контур v1 не
- * содержит авторизации и обслуживает одно настроенное рабочее пространство
- * (FR-002, принцип IV). Имя действующего лица показывается только там, где оно
- * означает атрибуцию созданного, — на карточках запусков и решений.
- */
+/** Общая оболочка Numbat в настроенном рабочем пространстве. */
 export function AppLayout() {
+  const { pathname } = useLocation();
+  const isNew = pathname === '/new';
+  const currentPage = isNew ? 'Новая проверка' : pathname === '/' ? 'История' : 'Разбор ТЗ';
   return (
-    <div className="flex min-h-screen flex-col bg-canvas lg:h-screen lg:overflow-hidden">
-      <header className="sticky top-0 z-30 flex h-13 shrink-0 items-center gap-3 border-b border-line bg-surface px-3 shadow-[0_1px_2px_rgba(23,32,51,0.03)] md:px-4">
-        <img src={`${appBaseUrl}numbat-icon.png`} alt="" className="size-7 rounded-[5px]" />
-        <Link to="/" className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
-          Numbat
+    <div className="numbat-app">
+      <aside className="numbat-sidebar">
+        <Link to="/" className="numbat-brand" aria-label="Numbat — история проверок">
+          <span className="numbat-brand-mark"><img src={`${appBaseUrl}numbat-icon.png`} alt="" width="35" height="35" /></span>
+          <span>Numbat</span>
         </Link>
-        <span aria-hidden="true" className="mx-1 h-6 w-px bg-line" />
-        <nav aria-label="Разделы" className="flex h-full items-stretch">
-          <NavLink
-            to="/"
-            className={({ isActive }) =>
-              `relative flex items-center px-2 text-[13px] font-semibold ${
-                isActive ? 'text-ink after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-accent' : 'text-ink-muted hover:text-ink'
-              }`
-            }
-          >
-            Проверки
-          </NavLink>
+        <nav className="numbat-navigation" aria-label="Основные разделы">
+          <NavLink to="/new" aria-label="Создать проверку" className="numbat-nav-link"><Icon name="plus" />Новая проверка</NavLink>
+          <Link to="/" className={`numbat-nav-link${!isNew ? ' active' : ''}`} aria-current={!isNew ? 'page' : undefined}>
+            <Icon name="history" />История проверок
+          </Link>
         </nav>
-        <a href={isDemoMode ? '/' : '/demo/new'} className="ml-auto text-xs font-semibold text-accent hover:underline">
-          {isDemoMode ? 'К рабочему сервису' : 'Деморежим'}
-        </a>
-      </header>
-
-      {isDemoMode ? (
-        <aside aria-label="Демонстрационный режим" className="shrink-0 border-b border-accent/25 bg-accent/5 px-4 py-2 text-xs leading-relaxed text-ink">
-          <strong className="mr-2 text-accent">Деморежим · без модели</strong>
-          {DEMO_NOTICE} Диалог содержит готовые ответы. Решения сохраняются только в этой вкладке.
-        </aside>
-      ) : null}
-
-      <div className="flex min-h-0 flex-1 pb-14 md:pb-0">
-        <SectionRail />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Outlet />
-        </div>
+        <div className="numbat-workspace-label"><Icon name="layers" />Рабочее пространство</div>
+      </aside>
+      <div className="numbat-main">
+        <header className="numbat-topbar">
+          <nav aria-label="Разделы" className="numbat-breadcrumbs">
+            <Link to="/">Проверки</Link><Icon name="chevron-right" size={12} /><span aria-current="page">{currentPage}</span>
+          </nav>
+          <a href={isDemoMode ? '/' : '/demo/new'} className="ml-auto pl-3 text-xs font-medium text-accent hover:underline">
+            {isDemoMode ? 'К рабочему сервису' : 'Деморежим'}
+          </a>
+        </header>
+        {isDemoMode ? (
+          <aside aria-label="Демонстрационный режим" className="shrink-0 border-b border-line bg-accent-tint px-5 py-2 text-xs leading-relaxed text-ink">
+            <strong className="mr-2 font-medium text-accent">Деморежим · без модели</strong>
+            {DEMO_NOTICE} Диалог содержит готовые ответы. Решения сохраняются только в этой вкладке.
+          </aside>
+        ) : null}
+        <div className="numbat-route"><Outlet /></div>
       </div>
     </div>
   );
 }
-
-/** Левая панель разделов шириной 56px из макета. */
-function SectionRail() {
-  return (
-    <nav
-      aria-label="Основные разделы"
-      className="fixed inset-x-0 bottom-0 z-40 flex h-14 shrink-0 items-center justify-center gap-3 border-t border-rail-active bg-rail px-3 md:static md:h-auto md:w-12 md:flex-col md:justify-start md:border-t-0 md:px-0 md:py-3"
-    >
-      <Link
-        to="/new"
-        aria-label="Создать проверку"
-        className="flex size-9 items-center justify-center rounded-[5px] bg-white text-accent shadow-sm transition-[background-color,transform] duration-100 active:scale-[0.96]"
-      >
-        <PlusIcon />
-      </Link>
-      <Link
-        to="/"
-        aria-label="Проверки"
-        className="flex size-9 items-center justify-center rounded-[5px] text-white/90 transition-[background-color,transform] duration-100 hover:bg-rail-active active:scale-[0.96]"
-      >
-        <ClockIcon />
-      </Link>
-    </nav>
-  );
-}
-
-const ICON_PROPS = {
-  width: 20,
-  height: 20,
-  viewBox: '0 0 20 20',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.7,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-  'aria-hidden': true,
-} as const;
-
-function PlusIcon() {
-  return (
-    <svg {...ICON_PROPS} strokeWidth={2}>
-      <path d="M10 4v12M4 10h12" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg {...ICON_PROPS}>
-      <circle cx="10" cy="10" r="7" />
-      <path d="M10 6v4l2.5 2" />
-    </svg>
-  );
-}
-
 export default AppLayout;

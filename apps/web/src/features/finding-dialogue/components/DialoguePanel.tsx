@@ -29,7 +29,7 @@ export function DialoguePanel({
 
   if (!dialogue) {
     return (
-      <div className="p-4">
+      <div className="p-5">
         <Callout tone="danger" title="Не удалось загрузить диалог">
           <Button className="mt-2" onClick={() => void retryDialogue()}>Повторить</Button>
         </Callout>
@@ -38,8 +38,8 @@ export function DialoguePanel({
   }
 
   return (
-    <section aria-labelledby="dialogue-title" className="flex min-h-full flex-col gap-4 bg-surface p-4">
-      <h2 id="dialogue-title" className="text-[15px] font-semibold text-ink">
+    <section aria-labelledby="dialogue-title" className="flex min-h-full min-w-0 flex-col gap-5 bg-surface p-5">
+      <h2 id="dialogue-title" className="text-sm font-medium text-ink">
         Диалог по замечанию
       </h2>
 
@@ -50,7 +50,7 @@ export function DialoguePanel({
         </Callout>
       ) : null}
 
-      <div className="min-h-0 lg:flex-1 lg:overflow-y-auto">
+      <div className="min-h-0 min-w-0 lg:flex-1 lg:overflow-y-auto">
         <TurnList
           turns={dialogue.turns}
           onRetry={(turnId) => {
@@ -63,7 +63,7 @@ export function DialoguePanel({
         />
       </div>
 
-      <div className="mt-auto shrink-0 border-t border-line bg-surface pt-3">
+      <div className="mt-auto shrink-0 border-t border-line bg-surface pt-4">
         <TurnComposer workspaceId={workspaceId} runId={runId} findingId={findingId} dialogue={dialogue} />
       </div>
     </section>

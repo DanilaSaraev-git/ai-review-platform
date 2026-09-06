@@ -22,6 +22,12 @@
 
 Доменная терминология: [docs/domain-glossary.md](docs/domain-glossary.md). Архитектурный baseline: [docs/architecture/target-product.md](docs/architecture/target-product.md). Публичный контракт: [contracts/review-platform/v1/README.md](contracts/review-platform/v1/README.md). Настройка model runtime: [docs/operations/configuration.md](docs/operations/configuration.md).
 
+## Локальная разработка
+
+Из корня технического checkout выполните `./dev start`, затем откройте [http://localhost:5173](http://localhost:5173). Web работает с Vite HMR, API — с `uvicorn --reload`, PostgreSQL хранит данные в отдельном локальном volume. `./dev stop` останавливает этот стенд и сохраняет документы и отчёты; `./dev status` и `./dev logs` показывают состояние и журналы.
+
+Зависимости, credential Kimi K2, хранение данных и особенности reload: [руководство локальной разработки](docs/operations/local-development.md). Объём работ: [SpecKit 007](specs/007-local-dev-loop/spec.md), [план](specs/007-local-dev-loop/plan.md) и [задачи](specs/007-local-dev-loop/tasks.md) и [результаты проверок](specs/007-local-dev-loop/evidence.md).
+
 ## Ветки реализации
 
 - `main` — общий архитектурный и контрактный baseline;

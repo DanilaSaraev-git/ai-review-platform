@@ -15,20 +15,21 @@ export function TurnList({
   onUseResolution?: (text: string) => void;
 }) {
   if (turns.length === 0) {
-    return <p className="text-sm text-ink-muted">Диалога по этому замечанию ещё не было.</p>;
+    return <p className="py-2 text-sm leading-6 text-ink-muted">Диалога по этому замечанию ещё не было.</p>;
   }
 
   const ordered = [...turns].sort((left, right) => left.ordinal - right.ordinal);
 
   return (
-    <ol className="flex flex-col gap-4">
+    <ol className="flex min-w-0 flex-col gap-7">
       {ordered.map((turn) => (
-        <li key={turn.id} className="flex flex-col gap-2">
-          <div className="ml-8 rounded-[6px] border border-accent/15 bg-accent-tint p-3">
-            <p className="text-xs font-medium text-ink">
-              {turn.actor.display_name} · {formatDateTime(turn.created_at)}
+        <li key={turn.id} className="flex min-w-0 flex-col gap-4">
+          <div className="ml-5 rounded-lg bg-surface-muted px-4 py-3">
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
+              <span className="font-medium text-ink">{turn.actor.display_name}</span>
+              <span className="text-ink-subtle">{formatDateTime(turn.created_at)}</span>
             </p>
-            <p className="mt-1 text-sm text-ink">{turn.member_message}</p>
+            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-ink">{turn.member_message}</p>
           </div>
           <AssistantResponseCard
             turn={turn}

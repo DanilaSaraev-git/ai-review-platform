@@ -34,10 +34,11 @@ from review_runtime.skills.registry import SkillRegistry
 class SmokeFailure(Exception):
     """A safe failure classification, without provider text or local configuration."""
 
-    def __init__(self, code: str, phase: str) -> None:
+    def __init__(self, code: str, phase: str, *, message: str | None = None) -> None:
         super().__init__(code)
         self.code = code
         self.phase = phase
+        self.message = message
 
 
 @contextmanager
@@ -59,8 +60,11 @@ def model_smoke(
     try:
         evidence = anyio.run(_run_smoke, profile, fixture, skill, credential)
     except SmokeFailure as error:
+        failure = {"status": "failed", "code": error.code, "phase": error.phase}
+        if error.message is not None:
+            failure["message"] = error.message
         typer.echo(
-            json.dumps({"status": "failed", "code": error.code, "phase": error.phase}),
+            json.dumps(failure),
             err=True,
         )
         raise typer.Exit(2) from None
@@ -218,8 +222,8 @@ async def _run_smoke(
         review_result = await generate_with_retry(
             runtime.adapter, review_request, deadline=time.monotonic() + 300, clock=time.monotonic
         )
+        _require_complete(review_result, "review")
         with _validate_model_output("review_schema"):
-            _require_complete(review_result)
             compact = executor.validate_output("review", review_output.parse_and_validate(review_result.text))
         with _validate_model_output("review_semantics"):
             report = review_engine.map_model_output(
@@ -290,8 +294,8 @@ async def _run_smoke(
             deadline=time.monotonic() + 60,
             clock=time.monotonic,
         )
+        _require_complete(dialogue_result, "dialogue")
         with _validate_model_output("dialogue_schema"):
-            _require_complete(dialogue_result)
             compact_dialogue = executor.validate_output(
                 "finding_dialogue", loads_no_duplicates(dialogue_result.text)
             )
@@ -347,9 +351,14 @@ def _result_evidence(result: GenerationResult) -> dict[str, object]:
     }
 
 
-def _require_complete(result: GenerationResult) -> None:
+def _require_complete(result: GenerationResult, purpose: str) -> None:
     if result.finish_reason is not FinishReason.STOP:
-        raise ValueError("model result did not finish completely")
+        message = (
+            "The model response reached the output token limit before completion."
+            if result.finish_reason is FinishReason.LENGTH
+            else "The model response did not finish with a complete result."
+        )
+        raise SmokeFailure("model_output_invalid", f"{purpose}_completion", message=message)
 
 
 def _model_provenance(result: GenerationResult) -> dict[str, Any]:

@@ -25,7 +25,7 @@ test.describe('Разбор замечаний в неизменяемом от�
 
     // Фрагмент исходного документа виден рядом (FR-021, SC-003).
     await expect(page.getByRole('heading', { name: 'Исходный документ' })).toBeVisible();
-    await expect(page.getByText('Обновление витрины выполняется регулярно.')).toBeVisible();
+    await expect(page.getByTestId('document-scroll').getByText('Обновление витрины выполняется регулярно.')).toBeVisible();
   });
 
   test('частичный охват показывает пропуски и статусы всех источников', async ({ page }) => {

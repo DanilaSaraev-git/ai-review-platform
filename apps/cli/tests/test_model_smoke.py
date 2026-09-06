@@ -50,7 +50,7 @@ def invoke_smoke(
     monkeypatch: pytest.MonkeyPatch,
     responses: list[str],
     *,
-    finish_reason: str = "stop",
+    finish_reason: str | list[str] = "stop",
 ) -> tuple[Any, list[dict[str, Any]], Path]:
     profile = json.loads((ROOT / "tests/fixtures/ml-integration/model-profile.compose.json").read_text())
     profile["secret_ref"] = None
@@ -66,7 +66,11 @@ def invoke_smoke(
             "model": "synthetic-model",
             "choices": [{
                 "message": {"content": responses[len(requests) - 1]},
-                "finish_reason": finish_reason,
+                "finish_reason": (
+                    finish_reason[len(requests) - 1]
+                    if isinstance(finish_reason, list)
+                    else finish_reason
+                ),
             }],
             "usage": {"prompt_tokens": 100, "completion_tokens": 50},
         })
@@ -156,6 +160,36 @@ def test_smoke_does_not_verify_a_truncated_but_schema_valid_result(
     assert result.exit_code == 2
     assert json.loads(result.output)["code"] == "model_output_invalid"
     assert len(requests) == 1
+    assert not evidence.exists()
+
+
+@pytest.mark.parametrize("purpose", ["review", "dialogue"])
+@pytest.mark.parametrize("response_shape", ["valid_json", "truncated_json"])
+def test_smoke_identifies_output_limit_before_schema_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    purpose: str,
+    response_shape: str,
+) -> None:
+    responses = [json.dumps(review_output())]
+    reasons = ["length"]
+    if purpose == "dialogue":
+        responses.append(json.dumps(dialogue_output()))
+        reasons = ["stop", "length"]
+    if response_shape == "truncated_json":
+        responses[-1] = '{"summary":"' + RAW_SENTINEL
+    result, requests, evidence = invoke_smoke(
+        tmp_path, monkeypatch, responses, finish_reason=reasons
+    )
+    assert result.exit_code == 2
+    assert json.loads(result.output) == {
+        "status": "failed",
+        "code": "model_output_invalid",
+        "phase": f"{purpose}_completion",
+        "message": "The model response reached the output token limit before completion.",
+    }
+    assert len(requests) == len(responses)
+    assert RAW_SENTINEL not in result.output
     assert not evidence.exists()
 
 

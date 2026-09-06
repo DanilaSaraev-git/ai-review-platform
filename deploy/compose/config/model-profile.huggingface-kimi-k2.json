@@ -1,7 +1,7 @@
 {
   "schema_version": "model-profile.v1",
   "id": "kimi-k2-hf-novita",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "adapter_kind": "openai_compatible",
   "provider": "huggingface-novita",
   "model": "moonshotai/Kimi-K2-Instruct:novita",
@@ -11,7 +11,7 @@
   "capabilities": ["text_generation"],
   "context_window_tokens": 131072,
   "max_input_utf8_bytes": 32768,
-  "max_output_tokens": 4096,
+  "max_output_tokens": 8192,
   "structured_output": "plain_json",
   "supported_parameters": ["max_tokens", "temperature"],
   "request_options": {"temperature": 0.6},

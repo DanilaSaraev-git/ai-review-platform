@@ -1,24 +1,28 @@
 @import 'tailwindcss';
+@import './onest.css';
+@import './numbat-shell.css';
 
 /* Палитра веб-интерфейса v1. */
 @theme {
-  --color-canvas: #f4f5f7;
+  --color-canvas: #fcfcfc;
   --color-surface: #ffffff;
-  --color-surface-muted: #f8f9fb;
-  --color-ink: #172033;
-  --color-ink-muted: #4b5870;
-  --color-ink-subtle: #718096;
-  --color-line: #dfe3e9;
-  --color-line-strong: #c7ced8;
-  --color-accent: #d71920;
-  --color-accent-strong: #b10f17;
-  --color-accent-tint: #fff3f3;
-  --color-rail: #760d16;
-  --color-rail-active: #570810;
-  --color-warn: #9a4c08;
-  --color-warn-tint: #fff8e7;
-  --color-ok: #1e704e;
-  --color-ok-tint: #edf9f3;
+  --color-surface-muted: #f7f7f9;
+  --color-ink: #28292c;
+  --color-ink-muted: #65676f;
+  --color-ink-subtle: #777980;
+  --color-line: #e7e7eb;
+  --color-line-strong: #d4d4db;
+  --color-accent: #ac2434;
+  --color-accent-strong: #8f1828;
+  --color-accent-tint: #faf0f1;
+  --color-rail: #8f1828;
+  --color-rail-active: #7e1725;
+  --color-warn: #89652d;
+  --color-warn-tint: #faf5eb;
+  --color-ok: #48705b;
+  --color-ok-tint: #f0f6f2;
+  --font-sans: Onest, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  --font-weight-semibold: 500;
 }
 
 :root {
@@ -29,20 +33,16 @@ body {
   margin: 0;
   background: var(--color-canvas);
   color: var(--color-ink);
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-variant-numeric: tabular-nums;
+  font-optical-sizing: auto;
   line-height: 1.5;
 }
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }

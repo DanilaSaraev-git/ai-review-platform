@@ -1,177 +1,83 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
-import { useGetDocument } from '@/api/generated/endpoints';
 import { Button, Callout, Spinner } from '@/components/ui';
-import { DocumentViewer } from '@/components/document-viewer';
 import { NotFoundPage } from '@/app/NotFoundPage';
-import { useBootstrap } from '@/features/new-review/api/use-bootstrap';
 import { DecisionForm } from '@/features/finding-decision/components/DecisionForm';
-import { DecisionProgress } from '@/features/finding-decision/components/DecisionProgress';
 import { DialoguePanel } from '@/features/finding-dialogue/components/DialoguePanel';
 import { useFindingStates } from './api/use-finding-states';
 import { useReviewReport } from './api/use-review-report';
 import { FindingCard } from './components/FindingCard';
-import { ReviewWorkspace } from './components/ReviewWorkspace';
+import { useWorkspaceRun } from './components/ReviewWorkspaceLayout';
 
-/**
- * Разбор одного замечания: фрагмент документа, решение человека и диалог
- * (US2, US3, US4).
- *
- * Замечание — часть URL, поэтому разбор восстанавливается по прямой ссылке и
- * после обновления страницы.
- */
+/** Finding, dialogue and human decision share the persistent primary document. */
 export function FindingPage() {
   const { runId = '', findingId = '' } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { workspaceId, error: bootstrapError, retry: retryBootstrap } = useBootstrap();
+  const { workspaceId } = useWorkspaceRun();
   const { report, isLoading, isUnavailable, isNotFound, error, retry } = useReviewReport(workspaceId, runId);
-  const { byFindingId, reviewedCount, error: statesError, retry: retryStates } = useFindingStates(workspaceId, runId);
-
-  // Перенос предложенной резолюции — отдельное действие: текст только
-  // подставляется в форму, сохранение остаётся за аналитиком (FR-029).
-  const locationResolution = (location.state as { proposedResolution?: string } | null)?.proposedResolution ?? null;
-  const [prefilledResolution, setPrefilledResolution] = useState<string | null>(locationResolution);
+  const { byFindingId, error: statesError, retry: retryStates } = useFindingStates(workspaceId, runId);
+  const [prefilledResolution, setPrefilledResolution] = useState<string | null>(null);
   const isDialogue = location.pathname.endsWith('/dialogue');
 
-  useEffect(() => {
-    setPrefilledResolution(locationResolution);
-  }, [findingId, locationResolution]);
+  useEffect(() => { setPrefilledResolution(null); }, [findingId]);
 
-  const finding = report?.findings.find((item) => item.id === findingId);
-  const anchorDocumentId = finding?.anchors[0]?.document_id ?? report?.provenance.sources[0]?.document_id ?? '';
-  const documentQuery = useGetDocument(workspaceId, anchorDocumentId, {
-    query: { enabled: Boolean(workspaceId && anchorDocumentId) },
-  });
-
-  if (bootstrapError && !workspaceId) {
-    return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
-        <Callout tone="danger" title="Не удалось загрузить рабочее пространство">
-          <Button className="mt-2" onClick={() => void retryBootstrap()}>Повторить</Button>
-        </Callout>
-      </main>
-    );
-  }
-
-  if (isNotFound) {
-    return <NotFoundPage detail="Такой проверки нет. Возможно, ссылка устарела или идентификатор указан неверно." />;
-  }
-
-  if (isUnavailable) {
-    return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
-        <Callout tone="warn" title="Отчёта пока нет">
-          Проверка не завершилась успешно, поэтому замечаний нет.
-        </Callout>
-      </main>
-    );
-  }
-
-  if (error && !report) {
-    return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
-        <Callout tone="danger" title="Не удалось загрузить отчёт">
-          <Button className="mt-2" onClick={() => void retry()}>Повторить</Button>
-        </Callout>
-      </main>
-    );
-  }
-
-  if (isLoading || !report) {
-    return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
-        <Spinner label="Загружаем отчёт…" />
-      </main>
-    );
-  }
-
-  if (!finding) {
-    return <NotFoundPage detail="Такого замечания нет в этом отчёте." />;
-  }
-
+  if (isNotFound) return <NotFoundPage detail="Такой проверки нет. Возможно, ссылка устарела или идентификатор указан неверно." />;
+  if (isUnavailable) return <div className="p-5"><Callout tone="warn" title="Отчёта пока нет">Проверка не завершилась успешно, поэтому замечаний нет.</Callout></div>;
+  if (error && !report) return <div className="p-5"><Callout tone="danger" title="Не удалось загрузить отчёт">
+    <Button className="mt-2" onClick={() => void retry()}>Повторить</Button>
+  </Callout></div>;
+  if (isLoading || !report) return <div className="p-5"><Spinner label="Загружаем отчёт…" /></div>;
+  const finding = report.findings.find((item) => item.id === findingId);
+  if (!finding) return <NotFoundPage detail="Такого замечания нет в этом отчёте." />;
   const state = byFindingId.get(finding.id);
+  const ordered = [...report.findings].sort((left, right) => left.ordinal - right.ordinal);
+  const index = ordered.findIndex((item) => item.id === findingId);
+  const next = ordered[index + 1];
 
   return (
-    <ReviewWorkspace
-      toolbar={
-        <>
-          <nav aria-label="Навигация">
-            <Link aria-label="К списку замечаний" className="text-xs font-medium text-ink-muted hover:text-accent" to={`/runs/${runId}/report`}>
-              ← Все замечания
-            </Link>
-          </nav>
-          <div className="min-w-0">
-            <h1 className="truncate text-[15px] font-semibold text-ink">{documentQuery.data?.filename ?? 'Исходный документ'}</h1>
-            <p className="text-xs text-ink-subtle">Отчёт проверки</p>
-          </div>
-          <div className="ml-auto">
-            <DecisionProgress reviewed={reviewedCount} total={report.findings.length} />
-          </div>
-        </>
-      }
-      document={documentQuery.isError ? (
-        <Callout tone="danger" title="Не удалось загрузить сведения о документе">
-          <Button className="mt-2" onClick={() => void documentQuery.refetch()}>Повторить</Button>
-        </Callout>
-      ) : <DocumentViewer workspaceId={workspaceId} document={documentQuery.data} finding={finding} />}
-      panel={
-        <div className="flex h-full min-h-0 flex-col">
-          {statesError ? (
-            <div className="border-b border-line p-4">
-              <Callout tone="warn" title="Состояние замечания не обновилось">
-                <Button className="mt-2" onClick={() => void retryStates()}>Повторить</Button>
-              </Callout>
-            </div>
-          ) : null}
-          <div className="border-b border-line p-4">
-            <FindingCard finding={finding} state={state} runId={runId} isSelected />
-          </div>
-          <div className="flex border-b border-line px-4" role="tablist" aria-label="Работа с замечанием">
-            <Link
-              role="tab"
-              aria-selected={!isDialogue}
-              className={`relative px-3 py-3 text-[13px] font-semibold ${!isDialogue ? 'text-ink after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-accent' : 'text-ink-muted hover:text-ink'}`}
-              to={`/runs/${runId}/report/findings/${finding.id}`}
-            >
-              Решение
-            </Link>
-            <Link
-              role="tab"
-              aria-selected={isDialogue}
-              className={`relative px-3 py-3 text-[13px] font-semibold ${isDialogue ? 'text-ink after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-accent' : 'text-ink-muted hover:text-ink'}`}
-              to={`/runs/${runId}/report/findings/${finding.id}/dialogue`}
-            >
-              Диалог{state?.dialogue.turn_count ? ` · ${state.dialogue.turn_count}` : ''}
-            </Link>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto lg:overflow-hidden" hidden={!isDialogue}>
-            <DialoguePanel
-              key={`dialogue-${finding.id}`}
-              workspaceId={workspaceId}
-              runId={runId}
-              findingId={finding.id}
-              onUseResolution={(text) => {
-                setPrefilledResolution(text);
-                void navigate(`/runs/${runId}/report/findings/${finding.id}`, {
-                  state: { proposedResolution: text },
-                });
-              }}
-            />
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto" hidden={isDialogue}>
-            <DecisionForm
-              key={`decision-${finding.id}`}
-              workspaceId={workspaceId}
-              runId={runId}
-              findingId={finding.id}
-              decision={state?.decision}
-              prefilledResolution={prefilledResolution}
-            />
-          </div>
+    <div className="numbat-panel-scroll">
+      <nav className="numbat-finding-navigation" aria-label="Замечания">
+        <Link aria-label="К списку замечаний" to={`/runs/${runId}/report`}>← Все замечания</Link>
+        <div className="flex items-center gap-4">
+          <span>{index + 1} из {ordered.length}</span>
+          {next ? <Link to={`/runs/${runId}/report/findings/${next.id}`}>Следующее →</Link> : null}
         </div>
-      }
-    />
+      </nav>
+      {statesError ? <div className="p-4"><Callout tone="warn" title="Состояние замечания не обновилось">
+        <Button className="mt-2" onClick={() => void retryStates()}>Повторить</Button>
+      </Callout></div> : null}
+      <FindingCard finding={finding} state={state} runId={runId} isSelected />
+      <div className="numbat-finding-tabs" role="tablist" aria-label="Работа с замечанием" aria-orientation="horizontal"
+        onKeyDown={(event) => {
+          const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+          if (!keys.includes(event.key)) return;
+          event.preventDefault();
+          const tabs = event.currentTarget.querySelectorAll<HTMLAnchorElement>('[role="tab"]');
+          const focusedDialogue = event.target === tabs[1];
+          const nextDialogue = event.key === 'Home' ? false : event.key === 'End' ? true : !focusedDialogue;
+          tabs[nextDialogue ? 1 : 0]?.focus();
+          void navigate(`/runs/${runId}/report/findings/${finding.id}${nextDialogue ? '/dialogue' : ''}`);
+        }}>
+        <Link id={`decision-tab-${finding.id}`} role="tab" aria-selected={!isDialogue} aria-controls={`decision-panel-${finding.id}`} tabIndex={isDialogue ? -1 : 0} to={`/runs/${runId}/report/findings/${finding.id}`}>Решение</Link>
+        <Link id={`dialogue-tab-${finding.id}`} role="tab" aria-selected={isDialogue} aria-controls={`dialogue-panel-${finding.id}`} tabIndex={isDialogue ? 0 : -1} to={`/runs/${runId}/report/findings/${finding.id}/dialogue`}>
+          Диалог{state?.dialogue.turn_count ? ` · ${state.dialogue.turn_count}` : ''}
+        </Link>
+      </div>
+      <div id={`dialogue-panel-${finding.id}`} role="tabpanel" aria-labelledby={`dialogue-tab-${finding.id}`} tabIndex={0} hidden={!isDialogue}>
+        <DialoguePanel key={`dialogue-${finding.id}`} workspaceId={workspaceId} runId={runId} findingId={finding.id}
+          onUseResolution={(text) => {
+            // Both tabs stay mounted. Keep the transfer local so a reload cannot
+            // replay it from browser history over the saved human decision.
+            setPrefilledResolution(text);
+            void navigate(`/runs/${runId}/report/findings/${finding.id}`);
+          }} />
+      </div>
+      <div id={`decision-panel-${finding.id}`} role="tabpanel" aria-labelledby={`decision-tab-${finding.id}`} tabIndex={0} hidden={isDialogue}>
+        <DecisionForm key={`decision-${finding.id}`} workspaceId={workspaceId} runId={runId} findingId={finding.id}
+          decision={state?.decision} prefilledResolution={prefilledResolution} />
+      </div>
+    </div>
   );
 }
 

@@ -12,33 +12,40 @@ import type { AnchorMatch } from './use-anchor-highlight';
  */
 export function TextViewer({ content, match }: { content: string; match: AnchorMatch | null }) {
   const lines = toDocumentLines(content);
-  const highlightRef = useRef<HTMLElement>(null);
+  const highlightRef = useRef<HTMLSpanElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const highlighted = match?.kind === 'text' ? { start: match.lineStart, end: match.lineEnd } : null;
+  const start = highlighted?.start;
+  const end = highlighted?.end;
 
   useEffect(() => {
-    highlightRef.current?.scrollIntoView({ block: 'center' });
-  }, [match]);
-
-  const highlighted =
-    match && match.kind === 'text' ? { start: match.lineStart, end: match.lineEnd } : null;
+    const container = scrollRef.current;
+    const highlight = highlightRef.current;
+    if (!container || !highlight || start === undefined) return;
+    // scrollIntoView would also scroll the page and move the neighbouring panel.
+    const target = highlight.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    container.scrollTop += target - container.clientHeight / 3;
+  }, [start, end]);
 
   return (
-    <div className="min-h-[28rem] flex-1 overflow-auto rounded-[6px] border border-line bg-surface shadow-[0_1px_2px_rgba(23,32,51,0.05),0_12px_32px_rgba(23,32,51,0.06)] lg:min-h-full">
-      <pre className="m-0 whitespace-pre-wrap p-5 font-mono text-[13px] leading-6 text-ink sm:p-7">
+    <div ref={scrollRef} className="numbat-document-scroll" data-testid="document-scroll" tabIndex={0} aria-label="Текст исходного документа">
+      <pre className="numbat-document-text">
         {lines.map((line) => {
           const isHighlighted =
             highlighted !== null && line.number >= highlighted.start && line.number <= highlighted.end;
           return (
-            <code
+            <span
               key={line.number}
               ref={isHighlighted && line.number === highlighted?.start ? highlightRef : undefined}
-              className={`block border-l-2 px-2 ${isHighlighted ? 'border-accent bg-accent-tint font-semibold' : 'border-transparent'}`}
+              className={`numbat-document-line ${/^#{1,3}\s/u.test(line.text) ? 'numbat-document-line-heading' : ''}`}
               data-line={line.number}
+              data-highlighted={isHighlighted ? 'true' : undefined}
             >
-              <span aria-hidden="true" className="mr-3 inline-block w-8 select-none text-right text-ink-muted">
+              <span aria-hidden="true" className="numbat-document-line-number">
                 {line.number}
               </span>
-              {line.text || ' '}
-            </code>
+              <span>{line.text || ' '}</span>
+            </span>
           );
         })}
       </pre>

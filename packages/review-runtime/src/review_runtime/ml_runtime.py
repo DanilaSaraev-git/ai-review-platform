@@ -30,6 +30,7 @@ from review_core.application.profiles import ProfileVersion
 from review_core.canonical import digest_value
 from review_core.dialogue.engine import DialogueEngine
 from review_core.ports.models import (
+    FinishReason,
     GenerationRequest,
     GenerationResult,
     ModelAdapter,
@@ -70,6 +71,22 @@ class ReviewOperation:
 
 class _ModelOutputInvalid(ValueError):
     pass
+
+
+class _IncompleteModelOutput(ValueError):
+    def __init__(self, finish_reason: FinishReason) -> None:
+        self.finish_reason = finish_reason
+        message = (
+            "The model response reached the output token limit before completion."
+            if finish_reason is FinishReason.LENGTH
+            else "The model response did not finish with a complete result."
+        )
+        super().__init__(message)
+
+
+def _require_complete_model_output(result: GenerationResult) -> None:
+    if result.finish_reason is not FinishReason.STOP:
+        raise _IncompleteModelOutput(result.finish_reason)
 
 
 class _SemanticValidationFailed(ValueError):
@@ -623,6 +640,7 @@ class LLMReviewRuntime:
                     + self.platform.settings.dialogue_deadline_seconds,
                     clock=time.monotonic,
                 )
+                _require_complete_model_output(result)
                 try:
                     compact_dialogue = self.skill_executor.validate_output(
                         "finding_dialogue", json.loads(result.text)
@@ -672,6 +690,13 @@ class LLMReviewRuntime:
     def _dialogue_failure(error: BaseException) -> ExecutionFailure:
         if isinstance(error, PromptBudgetExceeded):
             return ExecutionFailure("context_limit", "The complete input exceeds the model budget.", False)
+        if isinstance(error, _IncompleteModelOutput):
+            code = (
+                "content_blocked"
+                if error.finish_reason is FinishReason.CONTENT_FILTER
+                else "model_output_invalid"
+            )
+            return ExecutionFailure(code, str(error), False)
         if isinstance(error, ModelAdapterError):
             return ExecutionFailure(
                 public_model_error_code(error, purpose="dialogue"),
@@ -896,6 +921,7 @@ class LLMReviewRuntime:
 
     def _validate(self, generated: dict[str, Any], _deadline: ExecutionDeadline) -> dict[str, Any]:
         result: GenerationResult = generated["result"]
+        _require_complete_model_output(result)
         prepared = generated["prepared"]
         operation: ReviewOperation = prepared["operation"]
         try:
@@ -953,6 +979,8 @@ class LLMReviewRuntime:
     def _failure(error: BaseException) -> ExecutionFailure:
         if isinstance(error, PromptBudgetExceeded):
             return ExecutionFailure("context_limit", "The complete input exceeds the model budget.", False)
+        if isinstance(error, _IncompleteModelOutput):
+            return ExecutionFailure("model_output_invalid", str(error), False)
         if isinstance(error, ModelAdapterError):
             code = public_model_error_code(error, purpose="review")
             return ExecutionFailure(code, "The model request could not be completed.", error.retryable)

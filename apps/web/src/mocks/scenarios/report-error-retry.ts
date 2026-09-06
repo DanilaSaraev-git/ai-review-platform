@@ -9,8 +9,9 @@ export function reportErrorRetry(): RequestHandler[] {
   return [
     http.get(`${API}/workspaces/:workspaceId/review-runs/:runId/report`, () => {
       attempts += 1;
-      // StrictMode может прервать первый запрос при проверочном remount.
-      return attempts <= 2
+      // Общий layout держит один запрос отчёта: первый ответ — ошибка,
+      // явный повтор пользователя — успешный ответ.
+      return attempts === 1
         ? problem(500, 'internal_error', 'Отчёт временно недоступен')
         : HttpResponse.json(fixtures.report, { headers: { ETag: '"synthetic-report-v1"' } });
     }),
