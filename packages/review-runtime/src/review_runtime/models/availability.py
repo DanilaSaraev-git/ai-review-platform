@@ -9,6 +9,7 @@ import httpx
 
 from review_runtime.config.model_profiles import ModelProfile
 from review_runtime.models.config import SecretProvider
+from review_runtime.models.headers import provider_headers
 
 AvailabilityState = Literal["available", "unavailable", "degraded", "unknown"]
 ObservationSource = Literal["probe", "manual", "generation"]
@@ -53,6 +54,7 @@ class ProbeRequest:
     model: str
     secret_ref: str | None
     timeout_seconds: int
+    provider: str = "openai"
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,10 +91,15 @@ class HTTPProbeTransport:
 
     async def observe(self, request: ProbeRequest) -> ProbeResponse:
         headers = {"Accept": "application/json"}
+        secret = None
         if request.secret_ref is not None:
             if self._secrets is None:
                 raise ValueError("model probe credential is unavailable")
-            headers["Authorization"] = f"Bearer {self._secrets.resolve(request.secret_ref)}"
+            try:
+                secret = self._secrets.resolve(request.secret_ref)
+            except (KeyError, ValueError):
+                raise ValueError("model probe credential is unavailable") from None
+        headers.update(provider_headers(provider=request.provider, model=request.model, secret=secret))
         try:
             async with httpx.AsyncClient(
                 transport=self._transport,
@@ -138,6 +145,7 @@ class AvailabilityService:
             model=profile.model,
             secret_ref=profile.secret_ref,
             timeout_seconds=probe.timeout_seconds,
+            provider=profile.provider,
         )
         response = await transport.observe(request)
         outcome = self._evaluate(request, response)

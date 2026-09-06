@@ -21,6 +21,7 @@ from review_core.ports.models import (
 
 from review_runtime.config.model_profiles import ModelProfile, profile_config_digest
 from review_runtime.models.config import SecretProvider
+from review_runtime.models.headers import provider_headers
 
 
 class OpenAICompatibleModelAdapter:
@@ -194,21 +195,29 @@ class OpenAICompatibleModelAdapter:
 
     def _headers(self) -> dict[str, str]:
         headers = {"content-type": "application/json"}
-        if self.profile.secret_ref is None:
-            return headers
-        if self.secrets is None:
-            raise self._safe_error(
-                ModelErrorCode.AUTHENTICATION_FAILED,
-                "configured model credential reference is unavailable",
-            )
+        secret = None
+        if self.profile.secret_ref is not None:
+            if self.secrets is None:
+                raise self._safe_error(
+                    ModelErrorCode.AUTHENTICATION_FAILED,
+                    "configured model credential reference is unavailable",
+                )
+            try:
+                secret = self.secrets.resolve(self.profile.secret_ref)
+            except (KeyError, ValueError):
+                raise self._safe_error(
+                    ModelErrorCode.AUTHENTICATION_FAILED,
+                    "configured model credential reference is unavailable",
+                ) from None
         try:
-            secret = self.secrets.resolve(self.profile.secret_ref)
-        except (KeyError, ValueError) as error:
+            headers.update(
+                provider_headers(provider=self.profile.provider, model=self.profile.model, secret=secret)
+            )
+        except ValueError:
             raise self._safe_error(
-                ModelErrorCode.AUTHENTICATION_FAILED,
-                "configured model credential reference is unavailable",
-            ) from error
-        headers["authorization"] = f"Bearer {secret}"
+                ModelErrorCode.MODEL_NOT_FOUND,
+                "configured model URI is invalid for the provider",
+            ) from None
         return headers
 
     async def _bounded_body(self, response: httpx.Response) -> bytes:
@@ -287,9 +296,7 @@ class OpenAICompatibleModelAdapter:
             return FinishReason.CONTENT_FILTER
         return FinishReason.OTHER
 
-    def _http_error(
-        self, response: httpx.Response, provider_request_id: str | None
-    ) -> ModelAdapterError:
+    def _http_error(self, response: httpx.Response, provider_request_id: str | None) -> ModelAdapterError:
         status = response.status_code
         if status in {401, 403}:
             code, message, retryable, automatic = (

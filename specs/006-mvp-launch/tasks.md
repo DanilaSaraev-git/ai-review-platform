@@ -98,3 +98,9 @@ SpecKit baseline → visual → backend semantics → functional web → deploym
 - [X] T038 Подтвердить причину model_output_invalid по безопасным метаданным провайдера; повысить output budget новой версией профиля до 8192, применить через operator workflow и проверить исходный сценарий без изменения старой ошибки. Обрезка устранена; повтор выявил независимый validation_failed, затем HF HTTP 402.
 - [X] T039 Проверять finish reason до разбора ответа в review/dialogue/CLI: не публиковать даже валидный JSON с length, сохранить public error enum и запрет auto retry; пройти regressions и зафиксировать эксплуатационные границы. Код проверен локально и включается в следующий application release.
 - [ ] T040 После восстановления API-кредитов продолжить безопасную диагностику validation_failed и пройти успешный исходный review; выпустить completion guard на сервер вместе с готовым этапом. Сейчас генерация блокируется Hugging Face HTTP 402; покупки не выполнялись.
+## Phase 16: DeepSeek через Yandex AI Studio — 2026-09-06
+
+Пользователь выбрал DeepSeek, запретил пробные генерации и поручил сразу запустить сервер.
+
+- [X] T041 Добавить профиль DeepSeek V4 Flash, общий Yandex auth для generation/probe и сохранение ключа вне Git; проверить конфигурацию и offline transport без внешних генераций.
+- [ ] T042 Выпустить обновление на базе текущего production release, сохранить предыдущие model files, включить профиль Яндекса и проверить только GET каталога и инфраструктурную readiness.
