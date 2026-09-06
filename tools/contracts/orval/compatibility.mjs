@@ -61,7 +61,7 @@ export function assertCompatible(baseline, candidate) {
     for (const [name, original] of Object.entries(baseline.components?.[section] ?? {})) {
       const current = structuredClone(candidate.components?.[section]?.[name]);
       if (!current) throw new Error(`components.${section}.${name} removed`);
-      // The only extension to an existing DTO is an optional original locale.
+      // Explicitly allow only the approved optional DTO additions.
       // In particular, document IDs, report bytes, required fields and existing
       // status enums must keep their original meaning and shape.
       if (section === "schemas" && name === "ReviewRun" && current.properties?.locale) {
@@ -70,6 +70,15 @@ export function assertCompatible(baseline, candidate) {
           throw new Error("ReviewRun.locale has an unexpected shape");
         }
         delete current.properties.locale;
+      }
+      if (section === "schemas" && ["DialogueTurn", "CreateDialogueTurn"].includes(name) && current.properties?.attachment_document_ids) {
+        if (current.required?.includes("attachment_document_ids")) throw new Error("Attachments must remain optional");
+        const shape = structuredClone(current.properties.attachment_document_ids);
+        delete shape.description;
+        if (!equal(shape, { type: "array", maxItems: 10, uniqueItems: true, items: { type: "string", format: "uuid" } })) {
+          throw new Error("Attachment IDs have an unexpected shape");
+        }
+        delete current.properties.attachment_document_ids;
       }
       if (!equal(original, current)) {
         throw new Error(`components.${section}.${name} has a breaking shape change`);

@@ -74,6 +74,8 @@ const httpExamples = {
   "dialogue.generating.json": "FindingDialogue",
   "dialogue.failed.json": "FindingDialogue",
   "create-dialogue-turn.json": "CreateDialogueTurn",
+  "create-dialogue-turn.attachments.json": "CreateDialogueTurn",
+  "review-completion.json": "ReviewCompletion",
   "retry-dialogue-turn.json": "RetryDialogueTurn",
   "decision.json": "HumanDecision",
   "put-decision.json": "PutFindingDecision",

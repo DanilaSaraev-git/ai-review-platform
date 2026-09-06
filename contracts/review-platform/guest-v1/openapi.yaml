@@ -2922,8 +2922,8 @@ components:
           - unavailable
         revision: *id004
         completion:
-          nullable: true
-          allOf:
+          oneOf:
+          - type: 'null'
           - $ref: '#/components/schemas/ReviewCompletion'
         compared_at: *id005
         entries:
