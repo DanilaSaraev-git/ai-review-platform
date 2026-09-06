@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { downloadReviewPdf } from '@/api/generated/endpoints';
 import { Button } from '@/components/ui';
+import { isDemoMode } from '@/app/demo-mode';
 
 /** Export always uses the selected run and the server's coherent, unfiltered snapshot. */
 export function DownloadPdfButton({ workspaceId, runId }: { workspaceId: string; runId: string }) {
@@ -10,6 +11,7 @@ export function DownloadPdfButton({ workspaceId, runId }: { workspaceId: string;
     setPending(true);
     setError(false);
     try {
+      if (isDemoMode) { const { printDemoReport } = await import('./print-demo-report'); await printDemoReport(workspaceId, runId); return; }
       const bytes = await downloadReviewPdf(workspaceId, runId);
       if (!(bytes instanceof Blob) || !bytes.type.includes('application/pdf')) throw new Error('Invalid PDF response');
       const url = URL.createObjectURL(bytes);

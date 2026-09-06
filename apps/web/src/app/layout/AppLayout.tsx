@@ -28,7 +28,7 @@ export function AppLayout() {
           <nav aria-label="Разделы" className="numbat-breadcrumbs">
             <Link to="/">Проверки</Link><Icon name="chevron-right" size={12} /><span aria-current="page">{currentPage}</span>
           </nav>
-          <a href={isDemoMode ? '/' : '/demo/new'} className="ml-auto pl-3 text-xs font-medium text-accent hover:underline">
+          <a href={isDemoMode ? '/' : '/demo/'} className="ml-auto pl-3 text-xs font-medium text-accent hover:underline">
             {isDemoMode ? 'К рабочему сервису' : 'Деморежим'}
           </a>
         </header>

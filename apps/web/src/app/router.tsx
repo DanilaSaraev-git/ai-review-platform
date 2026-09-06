@@ -3,8 +3,6 @@ import { AppLayout } from './layout/AppLayout';
 import { NotFoundPage } from './NotFoundPage';
 import { DocumentsPage } from '@/features/document-cycle/DocumentsPage';
 import { DocumentFamilyPage } from '@/features/document-cycle/DocumentFamilyPage';
-import { HomePage } from '@/features/review-run/HomePage';
-import { isDemoMode } from './demo-mode';
 import { RunPage } from '@/features/review-run/RunPage';
 import { NewReviewPage } from '@/features/new-review/NewReviewPage';
 import { ReportPage } from '@/features/review-report/ReportPage';
@@ -25,7 +23,7 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     errorElement: <NotFoundPage />,
     children: [
-      { index: true, element: isDemoMode ? <HomePage /> : <DocumentsPage /> },
+      { index: true, element: <DocumentsPage /> },
       { path: 'new', element: <NewReviewPage /> },
       { path: 'documents', element: <DocumentsPage /> },
       { path: 'documents/:familyId', element: <DocumentFamilyPage /> },

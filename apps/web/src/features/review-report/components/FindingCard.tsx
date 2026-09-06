@@ -2,7 +2,6 @@ import { Link } from 'react-router';
 import type { Finding, FindingState } from '@/api/generated/model';
 import { useGetReviewCycle } from '@/api/generated/endpoints';
 import { useBootstrap } from '@/features/new-review/api/use-bootstrap';
-import { isDemoMode } from '@/app/demo-mode';
 import { StatusBadge } from '@/components/ui';
 import { DECISION_STATUS_TEXT, FINDING_KIND_TEXT, PRIORITY_TEXT } from '@/lib/error-messages';
 
@@ -26,7 +25,7 @@ export function FindingCard({
 }) {
   const decision = state?.decision;
   const { workspaceId } = useBootstrap();
-  const cycle = useGetReviewCycle(workspaceId, runId, { query: { enabled: Boolean(workspaceId && !isDemoMode) } });
+  const cycle = useGetReviewCycle(workspaceId, runId, { query: { enabled: Boolean(workspaceId) } });
   const entry = cycle.data?.entries.find(e => e.current_finding_id === finding.id);
   const changes = { new: 'Новое', persisting: 'Повторилось', reappeared: 'Обнаружено снова', uncertain: 'Связь требует проверки', not_checked: 'Не проверено', not_detected: 'Не обнаружено' };
 

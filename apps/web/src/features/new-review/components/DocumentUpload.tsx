@@ -5,6 +5,7 @@ import { isPayloadTooLarge, isProblem } from '@/api/errors';
 import { Button, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
 import { isDemoMode } from '@/app/demo-mode';
+import { demoFile } from '@/app/demo-files';
 import { EXTRACTION_STATE_TEXT } from '@/lib/error-messages';
 import { formatBytes, formatMediaType } from '@/lib/format';
 import { SUPPORTED_EXTENSIONS, SUPPORTED_FORMATS_TEXT, validateUpload } from '../lib/validate-upload';
@@ -114,6 +115,7 @@ export function DocumentUpload({
           {document ? 'Заменить документ' : 'Выбрать документ'}
         </Button>
       </div>
+      {isDemoMode ? <Button className="mt-2" disabled={upload.isPending} onClick={() => void handleFile(demoFile())}>Взять демофайл</Button> : null}
       {hint !== 'PDF, Markdown или TXT.' ? (
         <p className="mt-2 text-xs text-ink-muted">Поддерживаются {SUPPORTED_FORMATS_TEXT}.</p>
       ) : null}
