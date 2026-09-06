@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -30,7 +31,7 @@ from review_core.ports.models import GenerationRequest, GenerationResult, ModelA
 
 from review_runtime.artifacts.posix import PosixArtifactStore
 from review_runtime.config.model_profiles import ModelProfile, profile_config_digest
-from review_runtime.config.settings import OperatorSettings
+from review_runtime.config.settings import OperatorSettings, RuntimePolicy
 from review_runtime.documents.pdf import PdfDocumentParser
 from review_runtime.documents.text import TextDocumentParser
 from review_runtime.postgres.artifact_fence import advisory_fence_key
@@ -924,11 +925,14 @@ class PostgresReviewPlatform:
 
     def __init__(
         self,
-        executor: ReviewExecutor,
+        executor: ReviewExecutor | None,
         settings: OperatorSettings,
         *,
         model_profiles: tuple[ModelProfile, ...] = (),
         resolved_skill: ResolvedSkill | None = None,
+        runtime_policy: RuntimePolicy | None = None,
+        semantic_execution_available: bool = True,
+        composition: str = "durable",
     ) -> None:
         self.executor = executor
         self.settings = settings
@@ -941,22 +945,56 @@ class PostgresReviewPlatform:
         self.configured_model_profiles = {
             (profile.id, profile.version): profile for profile in model_profiles
         }
+        selected_external_profiles = [
+            profile for profile in model_profiles if profile.id == settings.model_profile_id
+        ]
+        if composition == "ml" and len(selected_external_profiles) != 1:
+            raise ValueError("ML composition requires one selected external model profile")
+        self.selected_external_model_profile = (
+            selected_external_profiles[0] if composition == "ml" else None
+        )
         self.resolved_skill = resolved_skill
+        self.runtime_policy = runtime_policy or RuntimePolicy()
+        self.semantic_execution_available = semantic_execution_available
+        self.composition = composition
         self._ownership_connection: psycopg.Connection[dict[str, Any]] | None = None
-        self.max_upload_bytes = 52_428_800
-        self.model_profile = {
-            "id": settings.model_profile_id,
-            "version": "1.0.0",
-            "name": "Deterministic offline",
-            "description": "Offline technical conformance profile without semantic model claims.",
-            "capabilities": ["text_generation", "native_structured_output"],
-            "availability": "available",
-        }
+        self.max_upload_bytes = self.runtime_policy.budgets.max_upload_bytes
+        self.max_context_documents = self.runtime_policy.budgets.max_context_documents
+        self.max_dialogue_message_codepoints = (
+            self.runtime_policy.budgets.max_dialogue_message_codepoints
+        )
+        self.max_dialogue_turns = self.runtime_policy.budgets.max_dialogue_turns
+        if self.selected_external_model_profile is None:
+            self.model_profile = {
+                "id": settings.model_profile_id,
+                "version": "1.0.0",
+                "name": (
+                    "Deterministic offline" if semantic_execution_available else "Модель не подключена"
+                ),
+                "description": (
+                    "Offline technical conformance profile without semantic model claims."
+                    if semantic_execution_available
+                    else "Подключите модель, чтобы запускать проверку документов."
+                ),
+                "capabilities": ["text_generation", "native_structured_output"],
+                "availability": "available" if semantic_execution_available else "unavailable",
+            }
+        else:
+            selected_profile = self.selected_external_model_profile
+            self.model_profile = {
+                "id": selected_profile.id,
+                "version": selected_profile.version,
+                "name": selected_profile.model,
+                "description": f"Подключенная модель {selected_profile.provider}.",
+                "capabilities": list(selected_profile.capabilities),
+                "availability": "unavailable",
+            }
+        dialogue_policy_payload = {"max_member_turns": self.max_dialogue_turns}
         self.dialogue_policy = {
             "id": settings.dialogue_policy_id,
             "version": "1.0.0",
-            "digest": digest_value({"max_member_turns": None}),
-            "max_member_turns": None,
+            "digest": digest_value(dialogue_policy_payload),
+            **dialogue_policy_payload,
         }
         self._seed_exact()
         self.review_storage = PostgresReviewExecutionStorage(
@@ -1119,11 +1157,21 @@ class PostgresReviewPlatform:
     def _seed_exact(self) -> None:
         now = utc_now()
         semantic = RELEASE_PROFILE_SEMANTIC
-        model_payload = {"adapter_kind": "deterministic", "capabilities": ["text_generation"]}
+        model_payload = (
+            self.selected_external_model_profile.model_dump(mode="json")
+            if self.selected_external_model_profile is not None
+            else {
+                "adapter_kind": (
+                    "deterministic" if self.semantic_execution_available else "unconfigured"
+                ),
+                "capabilities": ["text_generation"],
+            }
+        )
+        model_version = self.model_profile["version"]
         skill_payload: dict[str, Any] = {
             "package_sha256": self.settings.skill_package_sha256
         }
-        policy_payload = {"max_member_turns": None}
+        policy_payload = {"max_member_turns": self.max_dialogue_turns}
         external_model_payloads = {
             identity: profile.model_dump(mode="json")
             for identity, profile in self.configured_model_profiles.items()
@@ -1190,7 +1238,7 @@ class PostgresReviewPlatform:
                 (family_row,),
             )
             for table, config_id, config_version, payload in (
-                ("model_profile_versions", self.settings.model_profile_id, "1.0.0", model_payload),
+                ("model_profile_versions", self.settings.model_profile_id, model_version, model_payload),
                 ("skill_versions", skill_id, skill_version, skill_payload),
                 ("dialogue_policy_versions", self.settings.dialogue_policy_id, "1.0.0", policy_payload),
             ):
@@ -1231,13 +1279,28 @@ class PostgresReviewPlatform:
             connection.execute(
                 """INSERT INTO model_profile_availability
                 (deployment_id,model_profile_id,model_profile_version,state,reason_code,checked_at,
-                 expires_at,revision) VALUES(%s,%s,'1.0.0','available',NULL,%s,%s,0)
+                expires_at,revision) VALUES(%s,%s,%s,%s,%s,%s,%s,0)
                 ON CONFLICT DO NOTHING""",
                 (
                     str(self.settings.deployment_id),
                     self.settings.model_profile_id,
+                    model_version,
+                    (
+                        "unavailable"
+                        if self.selected_external_model_profile is not None
+                        else "available" if self.semantic_execution_available else "unavailable"
+                    ),
+                    (
+                        "not_observed"
+                        if self.selected_external_model_profile is not None
+                        else None if self.semantic_execution_available else "not_configured"
+                    ),
                     now,
-                    now + timedelta(days=3650),
+                    (
+                        now
+                        if self.selected_external_model_profile is not None
+                        else now + timedelta(days=3650) if self.semantic_execution_available else now
+                    ),
                 ),
             )
             checks = connection.execute(
@@ -1248,7 +1311,7 @@ class PostgresReviewPlatform:
                 JOIN review_profile_families f ON f.deployment_id=d.id
                 JOIN review_profile_heads h ON h.family_row_id=f.row_id
                 JOIN review_profile_versions pv ON pv.family_row_id=h.family_row_id AND pv.version=h.head_version
-                JOIN model_profile_versions m ON m.id=%s AND m.version='1.0.0'
+                JOIN model_profile_versions m ON m.id=%s AND m.version=%s
                 JOIN skill_versions s ON s.id=%s AND s.version=%s
                 JOIN dialogue_policy_versions p ON p.id=%s AND p.version='1.0.0'
                 JOIN model_profile_availability av ON av.deployment_id=d.id
@@ -1259,6 +1322,7 @@ class PostgresReviewPlatform:
                 WHERE d.id=%s AND o.id=%s AND w.id=%s AND a.id=%s AND f.public_id=%s""",
                 (
                     self.settings.model_profile_id,
+                    model_version,
                     skill_id,
                     skill_version,
                     self.settings.dialogue_policy_id,
@@ -1279,8 +1343,19 @@ class PostgresReviewPlatform:
                 and checks["model_digest"] == digest_value(model_payload)
                 and checks["skill_digest"] == skill_digest
                 and checks["policy_digest"] == digest_value(policy_payload)
-                and checks["state"] == "available"
-                and checks["expires_at"] > now
+                and (
+                    checks["state"] in {"available", "unavailable", "degraded", "unknown"}
+                    if self.selected_external_model_profile is not None
+                    else checks["state"]
+                    == ("available" if self.semantic_execution_available else "unavailable")
+                )
+                and (
+                    True
+                    if self.selected_external_model_profile is not None
+                    else checks["expires_at"] > now
+                    if self.semantic_execution_available
+                    else checks["expires_at"] <= now
+                )
             )
             if not expected:
                 raise RuntimeError("configured runtime seed is missing or drifted")
@@ -1294,12 +1369,15 @@ class PostgresReviewPlatform:
                 "organization_name": self.settings.organization_name,
                 "name": self.settings.workspace_name,
             },
-            "limits": {"document_upload_max_bytes": self.max_upload_bytes, "max_context_documents": 50},
+            "limits": {
+                "document_upload_max_bytes": self.max_upload_bytes,
+                "max_context_documents": self.max_context_documents,
+            },
         }
 
     def check_seed(self) -> bool:
         self._seed_exact()
-        if self.resolved_skill is not None:
+        if not self.semantic_execution_available or self.resolved_skill is not None:
             return True
         check_configuration = getattr(self.executor, "check_release_configuration", None)
         if callable(check_configuration):
@@ -1664,17 +1742,20 @@ class PostgresReviewPlatform:
         return self._snapshot(profile)
 
     def exact_model_profile(self, reference: dict[str, str]) -> ModelProfile | None:
-        if reference == {"id": self.settings.model_profile_id, "version": "1.0.0"}:
-            return None
         profile = self.configured_model_profiles.get((reference["id"], reference["version"]))
-        if profile is None:
-            raise NotFound()
-        return profile
+        if profile is not None:
+            return profile
+        if self.selected_external_model_profile is None and reference == {
+            "id": self.settings.model_profile_id,
+            "version": "1.0.0",
+        }:
+            return None
+        raise NotFound()
 
     def list_model_profiles(self, workspace_id: str) -> dict[str, Any]:
         self._workspace(workspace_id)
         now = utc_now()
-        values = [self.model_profile]
+        values = [] if self.selected_external_model_profile is not None else [self.model_profile]
         with self._connect() as connection:
             for profile in self.configured_model_profiles.values():
                 observation = connection.execute(
@@ -1710,7 +1791,7 @@ class PostgresReviewPlatform:
         self.exact_model_profile(reference)
         now = utc_now()
         with self._connect() as connection:
-            connection.execute(
+            result = connection.execute(
                 """UPDATE model_profile_availability
                    SET state=%s,reason_code=%s,checked_at=%s,expires_at=%s,revision=revision+1
                    WHERE deployment_id=%s AND model_profile_id=%s AND model_profile_version=%s""",
@@ -1724,6 +1805,8 @@ class PostgresReviewPlatform:
                     reference["version"],
                 ),
             )
+            if result.rowcount != 1:
+                raise RuntimeError("configured model availability row is missing")
 
     def _exact_profile(
         self, connection: psycopg.Connection[dict[str, Any]], reference: dict[str, str]
@@ -1743,10 +1826,13 @@ class PostgresReviewPlatform:
         self._workspace(workspace_id)
         require_idempotency_key(key)
         context_ids = body.get("context_document_ids", [])
-        if len(context_ids) > 50:
-            raise InvalidRequest("context_limit", "At most 50 context documents are accepted.")
+        if len(context_ids) > self.max_context_documents:
+            raise InvalidRequest("context_limit", "Too many context documents.")
         if len(context_ids) != len(set(context_ids)):
             raise InvalidRequest("duplicate_context", "Context document IDs must be unique.")
+        if not self.semantic_execution_available:
+            self.exact_model_profile(body["model_profile"])
+            raise Conflict("model_unavailable", "The selected model profile is unavailable.")
         primary = self.get_document(workspace_id, body["document_id"])
         contexts = [self.get_document(workspace_id, item) for item in context_ids]
         with self._connect() as connection:
@@ -1828,6 +1914,8 @@ class PostgresReviewPlatform:
         }
         try:
             self.review_storage.save_prepared(claim, prepared)
+            if self.executor is None:
+                raise RuntimeError("semantic executor is unavailable")
             report = self.executor.execute(
                 run_id=admission.resource_id,
                 report_id=str(uuid4()),
@@ -1866,10 +1954,13 @@ class PostgresReviewPlatform:
         self._workspace(workspace_id)
         require_idempotency_key(key)
         context_ids = body.get("context_document_ids", [])
-        if len(context_ids) > 50:
-            raise InvalidRequest("context_limit", "At most 50 context documents are accepted.")
+        if len(context_ids) > self.max_context_documents:
+            raise InvalidRequest("context_limit", "Too many context documents.")
         if len(context_ids) != len(set(context_ids)):
             raise InvalidRequest("duplicate_context", "Context document IDs must be unique.")
+        if not self.semantic_execution_available:
+            self.exact_model_profile(body["model_profile"])
+            raise Conflict("model_unavailable", "The selected model profile is unavailable.")
         request_digest = digest_value(body)
         run_id, snapshot_id = (str(uuid4()) for _ in range(2))
         with self._connect() as connection:
@@ -1975,6 +2066,8 @@ class PostgresReviewPlatform:
         report_id = str(uuid4())
         created = utc_now()
         try:
+            if self.executor is None:
+                raise RuntimeError("semantic executor is unavailable")
             report = self.executor.execute(
                 run_id=run_id,
                 report_id=report_id,
@@ -2147,14 +2240,25 @@ class PostgresReviewPlatform:
 
     def list_runs(self, workspace_id: str, cursor: str | None, limit: int) -> dict[str, Any]:
         self._workspace(workspace_id)
-        if cursor is not None:
-            raise InvalidRequest("invalid_cursor", "Cursor is malformed or unknown.")
+        try:
+            offset = 0 if cursor is None else int(base64.urlsafe_b64decode(cursor + "===").decode())
+            if offset < 0:
+                raise ValueError
+        except (ValueError, UnicodeDecodeError) as error:
+            raise InvalidRequest("invalid_cursor", "Cursor is malformed or unknown.") from error
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT value FROM review_runs WHERE organization_id=%s AND workspace_id=%s ORDER BY id DESC LIMIT %s",
-                (self.organization_id, workspace_id, limit),
+                """SELECT value FROM review_runs
+                   WHERE organization_id=%s AND workspace_id=%s
+                   ORDER BY (value->>'created_at')::timestamptz DESC,id DESC
+                   OFFSET %s LIMIT %s""",
+                (self.organization_id, workspace_id, offset, limit + 1),
             ).fetchall()
-        return {"items": [row["value"] for row in rows], "next_cursor": None}
+        page = rows[:limit]
+        next_cursor = None
+        if len(rows) > limit:
+            next_cursor = base64.urlsafe_b64encode(str(offset + limit).encode()).decode().rstrip("=")
+        return {"items": [row["value"] for row in page], "next_cursor": next_cursor}
 
     def cancel_run(self, workspace_id: str, run_id: str) -> dict[str, Any]:
         self._workspace(workspace_id)
@@ -2244,7 +2348,9 @@ class PostgresReviewPlatform:
                 {
                     "finding_id": row["finding_id"],
                     "decision": row["decision"],
-                    "dialogue": self._dialogue_summary(row["dialogue"]),
+                    "dialogue": self._dialogue_summary(
+                        self._project_dialogue_availability(row["dialogue"])
+                    ),
                 }
                 for row in rows
             ]
@@ -2263,7 +2369,16 @@ class PostgresReviewPlatform:
         }
 
     def get_dialogue(self, workspace_id: str, run_id: str, finding_id: str) -> dict[str, Any]:
-        return self._dialogue(workspace_id, run_id, finding_id)
+        return self._project_dialogue_availability(
+            self._dialogue(workspace_id, run_id, finding_id)
+        )
+
+    def _project_dialogue_availability(self, dialogue: dict[str, Any]) -> dict[str, Any]:
+        if self.semantic_execution_available or dialogue["state"] == "closed":
+            return dialogue
+        projected = deepcopy(dialogue)
+        projected.update(can_send_message=False, blocked_reason="model_unavailable")
+        return projected
 
     def dialogue_model_reference(
         self, workspace_id: str, run_id: str, finding_id: str
@@ -2348,11 +2463,17 @@ class PostgresReviewPlatform:
             if retry_turn_id is None:
                 if not current_value["can_send_message"]:
                     raise Conflict("dialogue_blocked", "Dialogue cannot accept a new turn.")
+                if current_value["turn_count"] >= self.max_dialogue_turns:
+                    raise Conflict("dialogue_blocked", "Dialogue turn limit reached.")
                 message = body.get("message")
-                if not isinstance(message, str) or not message.strip() or len(message) > 8000:
+                if (
+                    not isinstance(message, str)
+                    or not message.strip()
+                    or len(message) > self.max_dialogue_message_codepoints
+                ):
                     raise InvalidRequest(
                         "invalid_message",
-                        "Dialogue message must be non-empty and at most 8000 characters.",
+                        "Dialogue message exceeds the configured limit.",
                     )
                 turn_id = str(uuid4())
                 turn = {
@@ -2818,6 +2939,8 @@ class PostgresReviewPlatform:
         self, workspace_id: str, run_id: str, finding_id: str, body: dict[str, Any], key: str
     ) -> dict[str, Any]:
         require_idempotency_key(key)
+        if not self.semantic_execution_available:
+            raise Conflict("model_unavailable", "The selected model profile is unavailable.")
         dialogue = self._dialogue(workspace_id, run_id, finding_id)
         digest = digest_value(body)
         turn_id = str(uuid4())
@@ -2842,10 +2965,16 @@ class PostgresReviewPlatform:
                 raise Conflict("revision_conflict", "Dialogue revision changed.")
             if not row["value"]["can_send_message"]:
                 raise Conflict("dialogue_blocked", "Dialogue cannot accept a new turn.")
+            if row["value"]["turn_count"] >= self.max_dialogue_turns:
+                raise Conflict("dialogue_blocked", "Dialogue turn limit reached.")
             message = body.get("message")
-            if not isinstance(message, str) or not message.strip() or len(message) > 8000:
+            if (
+                not isinstance(message, str)
+                or not message.strip()
+                or len(message) > self.max_dialogue_message_codepoints
+            ):
                 raise InvalidRequest(
-                    "invalid_message", "Dialogue message must be non-empty and at most 8000 characters."
+                    "invalid_message", "Dialogue message exceeds the configured limit."
                 )
             turn = {
                 "id": turn_id,
@@ -2931,6 +3060,8 @@ class PostgresReviewPlatform:
         self, workspace_id: str, run_id: str, finding_id: str, turn_id: str, body: dict[str, Any], key: str
     ) -> dict[str, Any]:
         require_idempotency_key(key)
+        if not self.semantic_execution_available:
+            raise Conflict("model_unavailable", "The selected model profile is unavailable.")
         dialogue = self._dialogue(workspace_id, run_id, finding_id)
         turn = next((item for item in dialogue["turns"] if item["id"] == turn_id), None)
         if turn is None:
@@ -2955,6 +3086,12 @@ class PostgresReviewPlatform:
                 (self.organization_id, workspace_id, finding_id),
             ).fetchone()
             assert state is not None
+            dialogue_row = connection.execute(
+                "SELECT revision,value FROM finding_dialogues WHERE organization_id=%s AND workspace_id=%s AND id=%s FOR UPDATE",
+                (self.organization_id, workspace_id, dialogue["id"]),
+            ).fetchone()
+            if dialogue_row is None:
+                raise NotFound()
             try:
                 decision = next_decision(
                     state["value"], body, actor=self.actor, decided_at=wire_time(utc_now())
@@ -2974,9 +3111,9 @@ class PostgresReviewPlatform:
                     state["decision_revision"],
                 ),
             )
-            dvalue = dialogue
+            dvalue = cast(dict[str, Any], dialogue_row["value"])
             dvalue.update(
-                revision=dialogue["revision"] + 1,
+                revision=dialogue_row["revision"] + 1,
                 state="open" if decision["status"] == "unreviewed" else "closed",
                 can_send_message=decision["status"] == "unreviewed",
                 blocked_reason=None if decision["status"] == "unreviewed" else "human_decision_recorded",

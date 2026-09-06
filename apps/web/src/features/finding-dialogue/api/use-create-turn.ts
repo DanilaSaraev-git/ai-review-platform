@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCreateFindingDialogueTurn } from '@/api/generated/endpoints';
 import type { FindingDialogue } from '@/api/generated/model';
-import { invalidateAfterDialogueTurn } from '@/api/query-keys';
+import { isRevisionConflict } from '@/api/errors';
+import { dialogueKey, invalidateAfterDialogueTurn } from '@/api/query-keys';
 
 /**
  * Отправка одного хода по замечанию (FR-031, FR-036).
@@ -15,12 +16,20 @@ export function useCreateTurn(workspaceId: string, runId: string, findingId: str
   const mutation = useCreateFindingDialogueTurn();
 
   async function send(message: string, expectedRevision: number): Promise<FindingDialogue> {
-    const dialogue = await mutation.mutateAsync({
-      workspaceId,
-      runId,
-      findingId,
-      data: { message, expected_revision: expectedRevision },
-    });
+    let dialogue: FindingDialogue;
+    try {
+      dialogue = await mutation.mutateAsync({
+        workspaceId,
+        runId,
+        findingId,
+        data: { message, expected_revision: expectedRevision },
+      });
+    } catch (error) {
+      if (isRevisionConflict(error)) {
+        await queryClient.refetchQueries({ queryKey: dialogueKey(workspaceId, runId, findingId), exact: true });
+      }
+      throw error;
+    }
     await invalidateAfterDialogueTurn(queryClient, workspaceId, runId, findingId);
     return dialogue;
   }

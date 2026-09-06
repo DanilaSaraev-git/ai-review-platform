@@ -13,12 +13,13 @@ PROTECTED = (
     "specs/001-review-data-spec-poc",
     "specs/002-target-review-platform",
 )
+PINNED_BASELINE = "52d3b3c6eac4078e1922688d477ec343266860e0"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    # Baseline includes the web v1 import; all other protected paths are unchanged.
-    parser.add_argument("--baseline", default="7e91364579834c75e48d55cb168ba86b563bb3e1")
+    # Baseline includes the accepted MVP web stage; all other protected paths are unchanged.
+    parser.add_argument("--baseline", default=PINNED_BASELINE)
     parser.add_argument("--json", action="store_true")
     parser.add_argument(
         "--allow-path", action="append", default=[],

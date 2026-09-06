@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
@@ -11,29 +11,32 @@ from review_runtime.config.model_profiles import ModelProfile, ModelProfileSet
 
 
 class RetryPolicy(BaseModel):
-    extraction_max_attempts: int = 3
-    review_execution_max_attempts: int = 3
-    dialogue_execution_max_attempts: int = 3
-    model_call_max_attempts_per_work_item: int = 3
-    outbox_publish_max_attempts: int = 12
-    initial_backoff_seconds: float = 1
-    max_backoff_seconds: float = 60
-    backoff_multiplier: float = 2
-    jitter_ratio: float = 0.2
+    model_config = ConfigDict(extra="forbid")
+    extraction_max_attempts: int = Field(default=3, ge=1, le=10)
+    review_execution_max_attempts: int = Field(default=3, ge=1, le=10)
+    dialogue_execution_max_attempts: int = Field(default=3, ge=1, le=10)
+    model_call_max_attempts_per_work_item: int = Field(default=3, ge=1, le=10)
+    outbox_publish_max_attempts: int = Field(default=12, ge=1, le=100)
+    initial_backoff_seconds: float = Field(default=1, ge=0.1, le=60)
+    max_backoff_seconds: float = Field(default=60, ge=1, le=3600)
+    backoff_multiplier: float = Field(default=2, ge=1, le=4)
+    jitter_ratio: float = Field(default=0.2, ge=0, le=0.5)
 
 
 class TimeoutPolicy(BaseModel):
-    parser: int = 120
-    model_call: int = 90
-    outbox_publish: int = 15
-    database_statement: int = 30
-    artifact_io: int = 120
-    graceful_shutdown: int = 30
+    model_config = ConfigDict(extra="forbid")
+    parser: int = Field(default=120, ge=1, le=1800)
+    model_call: int = Field(default=90, ge=1, le=1800)
+    outbox_publish: int = Field(default=15, ge=1, le=300)
+    database_statement: int = Field(default=30, ge=1, le=300)
+    artifact_io: int = Field(default=120, ge=1, le=1800)
+    graceful_shutdown: int = Field(default=30, ge=1, le=300)
 
 
 class Lease(BaseModel):
-    lease_seconds: int
-    heartbeat_seconds: int
+    model_config = ConfigDict(extra="forbid")
+    lease_seconds: int = Field(ge=15, le=3600)
+    heartbeat_seconds: int = Field(ge=1, le=300)
 
     @model_validator(mode="after")
     def heartbeat_fits(self) -> Self:
@@ -43,6 +46,7 @@ class Lease(BaseModel):
 
 
 class Leases(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     extraction: Lease = Field(default_factory=lambda: Lease(lease_seconds=180, heartbeat_seconds=30))
     review_execution: Lease = Field(default_factory=lambda: Lease(lease_seconds=180, heartbeat_seconds=30))
     dialogue_execution: Lease = Field(default_factory=lambda: Lease(lease_seconds=180, heartbeat_seconds=30))
@@ -50,27 +54,30 @@ class Leases(BaseModel):
 
 
 class RecoveryPolicy(BaseModel):
-    scan_interval_seconds: int = 30
-    staging_orphan_grace_seconds: int = 3600
-    promoted_orphan_grace_seconds: int = 86400
-    collector_batch_size: int = 100
+    model_config = ConfigDict(extra="forbid")
+    scan_interval_seconds: int = Field(default=30, ge=1, le=300)
+    staging_orphan_grace_seconds: int = Field(default=3600, ge=300, le=604800)
+    promoted_orphan_grace_seconds: int = Field(default=86400, ge=3600, le=2592000)
+    collector_batch_size: int = Field(default=100, ge=1, le=1000)
 
 
 class Budgets(BaseModel):
-    max_upload_bytes: int = 52_428_800
-    max_context_documents: int = 50
-    max_pages_per_document: int = 1000
-    max_fragments_per_document: int = 20_000
-    max_fragment_codepoints: int = 20_000
-    max_review_input_codepoints: int = 500_000
-    max_model_output_bytes: int = 1_048_576
-    max_dialogue_message_codepoints: int = 20_000
-    max_dialogue_turns: int = 100
-    max_parallel_work_items_per_run: int = 4
-    max_parallel_model_calls: int = 2
+    model_config = ConfigDict(extra="forbid")
+    max_upload_bytes: int = Field(default=52_428_800, ge=1, le=1_073_741_824)
+    max_context_documents: int = Field(default=50, ge=0, le=50)
+    max_pages_per_document: int = Field(default=1000, ge=1, le=10_000)
+    max_fragments_per_document: int = Field(default=20_000, ge=1, le=100_000)
+    max_fragment_codepoints: int = Field(default=20_000, ge=1, le=1_000_000)
+    max_review_input_codepoints: int = Field(default=500_000, ge=1, le=10_000_000)
+    max_model_output_bytes: int = Field(default=1_048_576, ge=1024, le=104_857_600)
+    max_dialogue_message_codepoints: int = Field(default=20_000, ge=1, le=1_000_000)
+    max_dialogue_turns: int = Field(default=100, ge=1, le=1000)
+    max_parallel_work_items_per_run: int = Field(default=4, ge=1, le=64)
+    max_parallel_model_calls: int = Field(default=2, ge=1, le=64)
 
 
 class OptionalOpenAI(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     enabled: bool = False
     endpoint: HttpUrl | None = None
     model: str | None = None
@@ -91,7 +98,8 @@ class OptionalOpenAI(BaseModel):
 
 
 class ModelGatewayPolicy(BaseModel):
-    release_default: str = "deterministic"
+    model_config = ConfigDict(extra="forbid")
+    release_default: Literal["deterministic"] = "deterministic"
     optional_openai_compatible: OptionalOpenAI = Field(default_factory=OptionalOpenAI)
     profiles: tuple[ModelProfile, ...] = ()
 
@@ -114,7 +122,8 @@ class TrustedFixtureBinding(BaseModel):
 
 
 class DeterministicGatewayPolicy(BaseModel):
-    default_behavior: str = "no_semantic_analysis"
+    model_config = ConfigDict(extra="forbid")
+    default_behavior: Literal["no_semantic_analysis"] = "no_semantic_analysis"
     trusted_fixture_bindings: list[TrustedFixtureBinding] = Field(default_factory=list)
 
 
@@ -183,7 +192,7 @@ class OperatorSettings(BaseSettings):
     database_url: str
     queue_database_url: str
     runtime_config_path: Path
-    expected_output_path: Path
+    expected_output_path: Path | None = None
     report_contract_path: Path = Path("contracts/review-platform/v1/openapi.yaml")
     system_profile_id: str
     model_profile_id: str

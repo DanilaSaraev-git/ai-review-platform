@@ -7,14 +7,16 @@ test.describe('Контекстные материалы', () => {
     await page.goto('/new');
     await uploadSyntheticDocument(page);
 
+    await page.getByRole('button', { name: /Контекст/ }).click();
+
     await expect(page.getByRole('heading', { name: 'Контекстные материалы' })).toBeVisible();
-    await expect(page.getByText(/Подключено 0 из \d+/)).toBeVisible();
+    await expect(page.getByText(/0 из \d+/)).toBeVisible();
 
     await page
       .getByLabel('Файл контекстного материала')
       .setInputFiles({ name: 'synthetic-rules.md', mimeType: 'text/markdown', buffer: Buffer.from(SYNTHETIC_SPEC) });
 
-    await expect(page.getByText(/Подключено 1 из \d+/)).toBeVisible();
+    await expect(page.getByText(/1 из \d+/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Отключить' })).toBeVisible();
   });
 
@@ -22,6 +24,8 @@ test.describe('Контекстные материалы', () => {
     await withScenario(page, 'context-partial');
     await page.goto('/new');
     await uploadSyntheticDocument(page);
+
+    await page.getByRole('button', { name: /Контекст/ }).click();
 
     await page
       .getByLabel('Файл контекстного материала')
@@ -32,7 +36,9 @@ test.describe('Контекстные материалы', () => {
 
     // Запуск успешен, но результат честно помечен неполным (US5-4).
     await expect(page.getByText('Неполный охват')).toBeVisible();
+    await page.getByRole('heading', { name: 'Охват проверки' }).click();
     await expect(page.getByText(/Источник контекста не удалось извлечь/)).toBeVisible();
+    await page.getByRole('heading', { name: /Источники проверки/ }).click();
     await expect(page.getByText('Контекст').first()).toBeVisible();
     await expect(page.getByText('Недоступен').first()).toBeVisible();
   });

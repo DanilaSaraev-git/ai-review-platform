@@ -1,0 +1,13 @@
+FROM node:24.20.0-alpine AS builder
+
+WORKDIR /app/apps/web
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci
+
+COPY apps/web/ ./
+COPY contracts/review-platform/v1 /app/contracts/review-platform/v1
+RUN npm run api:generate && npm run build
+
+FROM nginx:1.29.4-alpine
+COPY deploy/compose/nginx.web.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html

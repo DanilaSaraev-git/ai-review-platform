@@ -11,6 +11,11 @@ import { decisionConflict } from './decision-conflict';
 import { dialogueGenerating } from './dialogue-generating';
 import { dialogueFailed } from './dialogue-failed';
 import { dialogueConflict } from './dialogue-conflict';
+import { historyPagination } from './history-pagination';
+import { historyError } from './history-error';
+import { reportErrorRetry } from './report-error-retry';
+import { modelUnconfigured } from './model-unconfigured';
+import { reportLong } from './report-long';
 
 /**
  * Реестр именованных сценариев моков (contracts/msw-scenarios.md).
@@ -30,6 +35,11 @@ export const scenarios = {
   'dialogue-generating': dialogueGenerating,
   'dialogue-failed': dialogueFailed,
   'dialogue-conflict': dialogueConflict,
+  'history-pagination': historyPagination,
+  'history-error': historyError,
+  'report-error-retry': reportErrorRetry,
+  'model-unconfigured': modelUnconfigured,
+  'report-long': reportLong,
 } as const;
 
 export type ScenarioName = keyof typeof scenarios;

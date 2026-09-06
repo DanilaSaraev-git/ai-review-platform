@@ -13,6 +13,7 @@ export interface FindingStatesState {
   reviewedCount: number;
   isLoading: boolean;
   error: unknown;
+  retry: () => Promise<void>;
 }
 
 export function useFindingStates(workspaceId: string, runId: string): FindingStatesState {
@@ -28,5 +29,6 @@ export function useFindingStates(workspaceId: string, runId: string): FindingSta
     reviewedCount: items.filter((item) => item.decision.status !== 'unreviewed').length,
     isLoading: query.isPending,
     error: query.error,
+    retry: async () => void (await query.refetch()),
   };
 }

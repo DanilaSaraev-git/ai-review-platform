@@ -13,15 +13,15 @@ export function CoveragePanel({ coverage }: { coverage: Coverage }) {
   const isPartial = coverage.status === 'partial';
 
   return (
-    <section aria-labelledby="coverage-title" className="rounded border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <details className="border-b border-line px-4 py-3">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
         <h2 id="coverage-title" className="text-sm font-semibold text-ink">
           Охват проверки
         </h2>
         <StatusBadge tone={isPartial ? 'warn' : 'ok'}>{isPartial ? 'Неполный охват' : 'Полный охват'}</StatusBadge>
-      </div>
+      </summary>
 
-      <p className="mt-2 text-xs text-ink-muted">
+      <p className="mt-3 text-xs text-ink-muted">
         Проверено {coverage.reviewed_fragment_ids.length} из {coverage.target_fragment_ids.length} фрагментов.
       </p>
 
@@ -46,6 +46,6 @@ export function CoveragePanel({ coverage }: { coverage: Coverage }) {
           ))}
         </ul>
       ) : null}
-    </section>
+    </details>
   );
 }

@@ -6,11 +6,20 @@ import { startRun, uploadSyntheticDocument, withScenario } from './helpers';
  * её состояние до терминального (SC-002, SC-009, SC-012, SC-013).
  */
 test.describe('Запуск проверки загруженного ТЗ', () => {
+  test('без подключённой модели объясняет причину у главного действия', async ({ page }) => {
+    await withScenario(page, 'model-unconfigured');
+    await page.goto('/new');
+
+    await expect(page.getByText('Модель ещё не подключена')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Запустить проверку' })).toBeDisabled();
+  });
+
   test('проходит путь от стартовых данных до успешного завершения', async ({ page }) => {
     await page.goto('/');
 
-    // Рабочее пространство и лимиты видны сразу (FR-001).
-    await expect(page.getByRole('heading', { name: 'Рабочее пространство' })).toBeVisible();
+    // Имя пространства видно сразу, вторичные лимиты раскрываются по запросу (FR-001).
+    await expect(page.getByText('Команда витрин', { exact: true }).first()).toBeVisible();
+    await page.getByText('Команда витрин', { exact: true }).first().click();
     await expect(page.getByText(/файл до/)).toBeVisible();
 
     await page.getByRole('link', { name: 'Новая проверка' }).click();

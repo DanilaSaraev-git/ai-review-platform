@@ -48,7 +48,7 @@ def _configure_ml(
         "REVIEW_RUNTIME_CONFIG_PATH": str(Path(operator_settings.runtime_config_path).resolve()),
         "REVIEW_EXPECTED_OUTPUT_PATH": str(Path(operator_settings.expected_output_path).resolve()),
         "REVIEW_SYSTEM_PROFILE_ID": operator_settings.system_profile_id,
-        "REVIEW_MODEL_PROFILE_ID": operator_settings.model_profile_id,
+        "REVIEW_MODEL_PROFILE_ID": reference["id"],
         "REVIEW_DIALOGUE_POLICY_ID": operator_settings.dialogue_policy_id,
         "REVIEW_SKILL_ID": operator_settings.skill_id,
         "REVIEW_SKILL_PACKAGE_SHA256": operator_settings.skill_package_sha256,

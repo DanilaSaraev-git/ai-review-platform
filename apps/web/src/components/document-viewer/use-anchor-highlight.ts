@@ -58,6 +58,18 @@ export function matchAnchor(finding: Finding, lines: readonly DocumentLine[]): A
     selected.map((line) => line.text).join('\n').includes(normalizedQuote);
 
   if (!found) {
+    // Некоторые сохранённые отчёты содержат устаревшие номера строк после
+    // нормализации текста. Исправляем координату только если точная цитата
+    // встречается в этом же документе ровно один раз; при неоднозначности
+    // честно оставляем привязку несопоставленной.
+    const fullText = lines.map((line) => line.text).join('\n');
+    const firstIndex = fullText.indexOf(normalizedQuote);
+    if (firstIndex >= 0 && firstIndex === fullText.lastIndexOf(normalizedQuote)) {
+      const startOffset = fullText.slice(0, firstIndex);
+      const lineStart = (startOffset.match(/\n/gu)?.length ?? 0) + 1;
+      const lineEnd = lineStart + (normalizedQuote.match(/\n/gu)?.length ?? 0);
+      return { kind: 'text', lineStart, lineEnd, quote: anchor.quote, matched: true };
+    }
     return { kind: 'unmatched', matched: false, quote: anchor.quote, reason: UNMATCHED_TEXT };
   }
 

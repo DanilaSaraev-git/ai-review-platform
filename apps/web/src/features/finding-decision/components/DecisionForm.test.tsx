@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -39,6 +40,8 @@ describe('DecisionForm (FR-025, FR-027, SC-005)', () => {
     await user.click(screen.getByRole('button', { name: /Сохранить решение/u }));
 
     expect(await screen.findByText(/Решение сохранено/u)).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Обоснование/u), ' Дополнение');
+    expect(screen.queryByText(/Решение сохранено/u)).not.toBeInTheDocument();
   });
 
   it('при конфликте ревизии сохраняет введённый текст и предлагает повтор одним действием', async () => {
@@ -60,13 +63,32 @@ describe('DecisionForm (FR-025, FR-027, SC-005)', () => {
     expect(screen.getByRole('button', { name: /Повторить с актуальной версией/u })).toBeEnabled();
   });
 
-  it('при сбросе в «не рассмотрено» поля обоснования и резолюции недоступны', async () => {
-    const user = userEvent.setup();
+  it('для ещё не рассмотренного замечания не показывает пустые поля', () => {
     renderForm();
 
-    await user.click(screen.getByRole('radio', { name: /Не рассмотрено/u }));
+    expect(screen.queryByLabelText(/Обоснование/u)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Формулировка резолюции/u)).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByLabelText(/Обоснование/u)).toBeDisabled();
-    expect(screen.getByLabelText(/Формулировка резолюции/u)).toBeDisabled();
+  it('принимает сохранённое решение, пришедшее после первого рендера', async () => {
+    const user = userEvent.setup();
+    function DeferredDecision() {
+      const [decision, setDecision] = useState<typeof fixtures.decision | undefined>();
+      return (
+        <>
+          <button type="button" onClick={() => setDecision(fixtures.decision)}>Загрузить состояние</button>
+          <DecisionForm
+            workspaceId={fixtures.workspaceId}
+            runId={fixtures.runId}
+            findingId={fixtures.findingId}
+            decision={decision}
+          />
+        </>
+      );
+    }
+    renderWithQueryClient(<DeferredDecision />);
+
+    await user.click(screen.getByRole('button', { name: 'Загрузить состояние' }));
+    expect(screen.getByRole('radio', { name: /Подтверждено/u })).toBeChecked();
   });
 });

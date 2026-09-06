@@ -83,8 +83,8 @@ export function PdfViewer({ source, match }: { source: Blob | undefined; match: 
     <div className="flex flex-col gap-2">
       {isRendering ? <Spinner label={`Отрисовываем страницу ${page}…`} /> : null}
       {error ? <Callout tone="warn" title={error} /> : null}
-      <p className="text-xs text-ink-muted">Страница {page}</p>
-      <div className="max-h-[32rem] overflow-auto rounded border border-line bg-surface p-2">
+      <p className="text-xs font-medium text-ink-muted">Страница {page}</p>
+      <div className="min-h-[28rem] flex-1 overflow-auto rounded-[6px] border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(23,32,51,0.05),0_12px_32px_rgba(23,32,51,0.06)] lg:min-h-full">
         <canvas ref={canvasRef} className="mx-auto block" />
       </div>
     </div>

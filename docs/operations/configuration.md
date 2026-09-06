@@ -1,17 +1,38 @@
 # Настройка исполнения LLM
 
-Инженерный слой поддерживает два явно разделённых режима: обязательный offline-контур с
-синтетическим fixture и opt-in подключение OpenAI-compatible endpoint. Конкретная модель,
-провайдер и коммерческий режим не выбраны. Успешный synthetic gate не подтверждает качество
-или совместимость реального endpoint.
+Инженерный слой поддерживает три явно разделённых режима: production-запуск без модели,
+локальный synthetic fixture и opt-in подключение OpenAI-compatible endpoint. Конкретная модель,
+провайдер и коммерческий режим не выбраны. Production-конфигурация поэтому использует
+`REVIEW_COMPOSITION=unconfigured`: инфраструктурная readiness остаётся доступной, каталог
+моделей показывает `unavailable` с причиной `not_configured`, а создание review завершается
+канонической ошибкой `model_unavailable` до записи запуска. Fixture не подменяет этот ответ.
 
 ## Режимы запуска
 
-Default Compose остаётся изолированным от внешней сети:
+Production overlay запускается без fixture-файлов и без model credential:
+
+```sh
+docker compose \
+  -f deploy/compose/compose.yaml \
+  -f deploy/compose/compose.production.yaml \
+  up -d
+```
+
+В нём задаются отдельные неизменяемые идентификаторы
+`REVIEW_MODEL_PROFILE_ID=model-not-configured` и
+`REVIEW_DIALOGUE_POLICY_ID=bounded-dialogue-v1`. Изменение payload уже созданной записи под
+тем же ID считается configuration drift и намеренно блокирует readiness.
+
+Default Compose остаётся изолированным synthetic-контуром для локальных тестов:
 
 ```sh
 docker compose -f deploy/compose/compose.yaml up -d
 ```
+
+`REVIEW_COMPOSITION=fixture` использует только in-memory состояние. Durable synthetic Compose
+использует `REVIEW_COMPOSITION=durable`, PostgreSQL и доверенную пару synthetic document/output.
+Оба режима проверяют механику системы, но не выполняют смысловой анализ произвольного текста.
+Неизвестное значение `REVIEW_COMPOSITION` останавливает запуск вместо fallback на fixture.
 
 Внешний model transport включается только вторым файлом:
 
@@ -55,6 +76,37 @@ Configuration validity, availability observation и compatibility evidence — �
 Readiness проверяет БД, миграцию, seed и artifact store; генерацию и платный probe она не
 запускает. Успешный health probe сам по себе не доказывает поддержку schema, budget или
 предметного навыка.
+
+После явного включения внешнего профиля оператор обновляет его availability отдельной
+негенеративной командой:
+
+```sh
+review-cli model-probe
+```
+
+Команда работает только с `REVIEW_COMPOSITION=ml`, проверяет точную пару model profile
+`id/version`, обращается только к объявленному в профиле `probe.url` методом GET и сохраняет
+наблюдение в deployment database. Секрет читается из mounted file. Команда возвращает `0`
+только для свежего состояния `available`; отсутствующий probe, ошибка конфигурации, сети,
+авторизации или ответа возвращает `2` и безопасный JSON без credential и DSN. Probe не вызывает
+генерацию и не входит в `/health/ready`.
+
+Availability ограничена `probe.success_ttl_seconds`. После успешного enable операторский таймер
+должен запускать ту же команду чаще TTL; production deployment использует интервал 60 секунд.
+До явного enable таймер отключён. Просроченное или неуспешное наблюдение снова делает профиль
+недоступным для новых review и требует исправить endpoint/credential, затем повторить probe.
+
+## Runtime limits
+
+`REVIEW_RUNTIME_CONFIG_PATH` задаёт server-side границы admission. При старте конфигурация
+проверяется по canonical schema; неизвестные поля и значения вне диапазонов отклоняются. API
+применяет `max_upload_bytes` во время потокового чтения, а не после загрузки тела в память, и
+проверяет `max_context_documents`, `max_dialogue_message_codepoints` и
+`max_dialogue_turns`. Review и dialogue используют общий семафор
+`max_parallel_model_calls`, поэтому параллельные запросы не обходят операторский лимит.
+
+Имена скачиваемых документов передаются через RFC 5987 `filename*`; исходное имя не
+вставляется в HTTP header как неэкранированный текст.
 
 ## Исполнение и восстановление
 

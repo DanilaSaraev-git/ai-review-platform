@@ -16,6 +16,26 @@ def test_runtime_policy_materializes_closed_safe_defaults() -> None:
     assert policy.model_gateway.optional_openai_compatible.auto_download is False
 
 
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("budgets", "max_upload_bytes", 0),
+        ("budgets", "max_context_documents", 51),
+        ("budgets", "max_parallel_model_calls", 0),
+        ("retries", "review_execution_max_attempts", 11),
+        ("timeouts_seconds", "model_call", 0),
+    ],
+)
+def test_runtime_policy_rejects_values_outside_the_canonical_bounds(
+    section: str, field: str, value: int
+) -> None:
+    policy = RuntimePolicy().model_dump(mode="json")
+    policy[section][field] = value
+
+    with pytest.raises(ValidationError):
+        RuntimePolicy.from_value(policy)
+
+
 def test_operator_settings_require_complete_single_namespace_and_seed() -> None:
     with pytest.raises(ValidationError):
         OperatorSettings()

@@ -22,18 +22,18 @@ const TONE_MARK: Record<Tone, string> = {
 };
 
 const TONE_CLASS: Record<Tone, string> = {
-  neutral: 'border-line text-ink-muted',
-  ok: 'border-ok text-ok',
-  warn: 'border-warn text-warn',
-  danger: 'border-accent text-accent',
-  progress: 'border-line text-ink',
+  neutral: 'border-line bg-surface-muted text-ink-muted',
+  ok: 'border-ok/20 bg-ok-tint text-ok',
+  warn: 'border-warn/20 bg-warn-tint text-warn',
+  danger: 'border-accent/20 bg-accent-tint text-accent-strong',
+  progress: 'border-line-strong bg-surface-muted text-ink',
 };
 
 /** Состояние всегда читается текстом и знаком, а не только цветом (FR-042). */
 export function StatusBadge({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${TONE_CLASS[tone]}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${TONE_CLASS[tone]}`}
     >
       <span aria-hidden="true">{TONE_MARK[tone]}</span>
       {children}
@@ -47,11 +47,11 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' }) {
   const base =
-    'inline-flex items-center justify-center gap-2 rounded border px-3 py-1.5 text-sm font-medium transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50';
+    'inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-[5px] border px-3 py-1.5 text-[13px] font-semibold shadow-sm transition-[background-color,border-color,color,box-shadow,transform] duration-100 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100';
   const styles = {
     primary: 'border-accent bg-accent text-white hover:border-accent-strong hover:bg-accent-strong',
-    secondary: 'border-line bg-surface text-ink hover:bg-surface-muted',
-    ghost: 'border-transparent bg-transparent text-ink hover:bg-surface-muted',
+    secondary: 'border-line-strong bg-surface text-ink hover:border-ink-subtle hover:bg-surface-muted',
+    ghost: 'border-transparent bg-transparent text-ink-muted shadow-none hover:bg-surface-muted hover:text-ink',
   } as const;
   return <button type="button" className={`${base} ${styles[variant]} ${className}`} {...props} />;
 }
@@ -71,12 +71,12 @@ export function Field({ label, hint, error, children }: FieldProps) {
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
 
   return (
-    <div className="flex flex-col gap-1">
-      <Label.Root className="text-sm font-medium text-ink" htmlFor={id}>
+    <div className="flex flex-col gap-1.5">
+      <Label.Root className="text-[13px] font-semibold text-ink" htmlFor={id}>
         {label}
       </Label.Root>
       {hint ? (
-        <p id={hintId} className="text-xs text-ink-muted">
+        <p id={hintId} className="max-w-[68ch] text-xs leading-5 text-ink-subtle">
           {hint}
         </p>
       ) : null}
@@ -93,7 +93,7 @@ export function Field({ label, hint, error, children }: FieldProps) {
 export function TextInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`rounded border border-line bg-surface px-3 py-1.5 text-sm text-ink ${className}`}
+      className={`rounded-[5px] border border-line-strong bg-surface px-3 py-2 text-base text-ink shadow-inner outline-none transition-[border-color,box-shadow] duration-100 focus:border-accent focus:shadow-[0_0_0_2px_rgba(215,25,32,0.1)] sm:text-sm ${className}`}
       {...props}
     />
   );
@@ -102,7 +102,7 @@ export function TextInput({ className = '', ...props }: InputHTMLAttributes<HTML
 export function TextArea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={`min-h-24 rounded border border-line bg-surface px-3 py-1.5 text-sm text-ink ${className}`}
+      className={`min-h-24 resize-y rounded-[5px] border border-line-strong bg-surface px-3 py-2 text-base leading-6 text-ink shadow-inner outline-none transition-[border-color,box-shadow] duration-100 focus:border-accent focus:shadow-[0_0_0_2px_rgba(215,25,32,0.1)] sm:text-sm ${className}`}
       {...props}
     />
   );
@@ -123,18 +123,20 @@ export function RadioCards({
   value,
   onValueChange,
   name,
+  compact = false,
 }: {
   legend: string;
   options: readonly RadioOption[];
   value: string | undefined;
   onValueChange: (value: string) => void;
   name: string;
+  compact?: boolean;
 }) {
   return (
     <fieldset className="border-0 p-0">
-      <legend className="mb-2 text-sm font-medium text-ink">{legend}</legend>
+      <legend className="mb-2 text-[13px] font-semibold text-ink">{legend}</legend>
       <RadioGroup.Root
-        className="flex flex-col gap-2"
+        className={compact ? 'flex flex-wrap gap-1.5' : 'flex flex-col gap-1.5'}
         value={value ?? ''}
         onValueChange={onValueChange}
         name={name}
@@ -143,18 +145,18 @@ export function RadioCards({
         {options.map((option) => {
           const itemId = `${name}-${option.value}`;
           return (
-            <div key={option.value} className="flex items-start gap-2">
+            <div key={option.value} className={`group flex items-start gap-2.5 rounded-[5px] border border-line bg-surface transition-[border-color,background-color] duration-100 hover:border-line-strong hover:bg-surface-muted has-[[data-state=checked]]:border-accent has-[[data-state=checked]]:bg-accent-tint ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2.5'}`}>
               <RadioGroup.Item
                 id={itemId}
                 value={option.value}
                 disabled={option.disabled}
-                className="mt-1 size-4 shrink-0 cursor-pointer rounded-full border border-line bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+                className={`${compact ? 'mt-px size-3.5' : 'mt-0.5 size-4'} shrink-0 cursor-pointer rounded-full border border-line-strong bg-surface disabled:cursor-not-allowed disabled:opacity-40`}
               >
                 <RadioGroup.Indicator className="block size-full rounded-full border-4 border-accent" />
               </RadioGroup.Item>
-              <Label.Root htmlFor={itemId} className="cursor-pointer text-sm text-ink">
-                <span className="font-medium">{option.label}</span>
-                {option.description ? <span className="block text-xs text-ink-muted">{option.description}</span> : null}
+              <Label.Root htmlFor={itemId} className="min-w-0 cursor-pointer text-[13px] leading-5 text-ink">
+                <span className="font-semibold">{option.label}</span>
+                {option.description ? <span className="mt-0.5 block text-xs leading-4 text-ink-muted">{option.description}</span> : null}
                 {option.disabled && option.disabledReason ? (
                   <span className="block text-xs font-medium text-warn">{option.disabledReason}</span>
                 ) : null}
@@ -169,14 +171,14 @@ export function RadioCards({
 
 export function Callout({ tone = 'neutral', title, children }: { tone?: Tone; title: string; children?: ReactNode }) {
   return (
-    <div className={`rounded border-l-4 bg-surface p-3 text-sm ${TONE_CLASS[tone]}`} role="note">
-      <p className="font-medium">
+    <div className={`rounded-[5px] border border-l-[3px] p-3 text-[13px] ${TONE_CLASS[tone]}`} role="note">
+      <p className="font-semibold text-ink">
         <span aria-hidden="true" className="mr-1.5">
           {TONE_MARK[tone]}
         </span>
         {title}
       </p>
-      {children ? <div className="mt-1 text-ink-muted">{children}</div> : null}
+      {children ? <div className="mt-1 leading-5 text-ink-muted">{children}</div> : null}
     </div>
   );
 }

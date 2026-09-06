@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { downloadDocument } from '@/api/generated/endpoints';
 import type { Document, Finding } from '@/api/generated/model';
-import { Callout, Spinner } from '@/components/ui';
+import { Button, Callout, Spinner } from '@/components/ui';
 import { PdfViewer } from './PdfViewer';
 import { TextViewer } from './TextViewer';
 import { toDocumentLines } from './sanitize';
@@ -26,6 +26,7 @@ export function DocumentViewer({
   const [content, setContent] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const isPdf = document?.media_type === 'application/pdf';
 
@@ -62,21 +63,14 @@ export function DocumentViewer({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, document, isPdf]);
+  }, [workspaceId, document, isPdf, reloadKey]);
 
   const lines = content ? toDocumentLines(content) : [];
   const match: AnchorMatch | null = finding ? matchAnchor(finding, lines) : null;
 
   return (
-    <section aria-labelledby="document-viewer-title" className="flex flex-col gap-3">
-      <h2 id="document-viewer-title" className="text-sm font-semibold text-ink">
-        Исходный документ
-      </h2>
-      {document ? (
-        <p className="text-xs text-ink-muted">
-          {document.filename} · только для чтения, документ не редактируется
-        </p>
-      ) : null}
+    <section aria-labelledby="document-viewer-title" className="mx-auto flex h-full w-full max-w-4xl flex-col gap-2.5">
+      <h2 id="document-viewer-title" className="text-[13px] font-semibold text-ink">Исходный документ</h2>
 
       {/* Несопоставленный фрагмент называется прямо: произвольное место
           документа не подсвечивается (SC-003). */}
@@ -89,9 +83,13 @@ export function DocumentViewer({
         </Callout>
       ) : null}
 
-      {error ? <Callout tone="danger" title={error} /> : null}
+      {error ? (
+        <Callout tone="danger" title={error}>
+          <Button className="mt-2" onClick={() => setReloadKey((current) => current + 1)}>Повторить</Button>
+        </Callout>
+      ) : null}
 
-      {isPdf ? (
+      {error ? null : isPdf ? (
         <PdfViewer source={blob} match={match} />
       ) : content !== null ? (
         <TextViewer content={content} match={match} />

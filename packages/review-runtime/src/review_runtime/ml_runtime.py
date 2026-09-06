@@ -142,6 +142,19 @@ class _RecordingAdapter:
         return result
 
 
+class _ConcurrencyLimitedAdapter:
+    def __init__(self, adapter: ModelAdapter, semaphore: Any) -> None:
+        self._adapter = adapter
+        self._semaphore = semaphore
+
+    async def capabilities(self) -> ModelCapabilities:
+        return await self._adapter.capabilities()
+
+    async def generate(self, request: GenerationRequest) -> GenerationResult:
+        async with self._semaphore:
+            return await self._adapter.generate(request)
+
+
 class _DialogueRecordingAdapter:
     def __init__(
         self,
@@ -268,11 +281,19 @@ class LLMReviewRuntime:
             root / "specs/004-llm-review-integration/contracts/model-output.review.v1.schema.json"
         )
         self.dialogue_engine = DialogueEngine()
-        self._recording_adapter = _RecordingAdapter(
-            self.model_runtime.adapter,
-            self.platform.review_storage,
-            self.platform,
-            self.model_profile,
+        import anyio
+
+        self._model_call_semaphore = anyio.Semaphore(
+            self.platform.runtime_policy.budgets.max_parallel_model_calls
+        )
+        self._recording_adapter = _ConcurrencyLimitedAdapter(
+            _RecordingAdapter(
+                self.model_runtime.adapter,
+                self.platform.review_storage,
+                self.platform,
+                self.model_profile,
+            ),
+            self._model_call_semaphore,
         )
         self._coordinator = AsyncExecutionCoordinator[
             ReviewOperation, dict[str, Any], dict[str, Any], dict[str, Any]
@@ -326,15 +347,6 @@ class LLMReviewRuntime:
         self, workspace_id: str, body: dict[str, Any], idempotency_key: str
     ) -> dict[str, Any]:
         reference = body["model_profile"]
-        if reference == {
-            "id": self.platform.model_profile["id"],
-            "version": self.platform.model_profile["version"],
-        }:
-            import anyio
-
-            return await anyio.to_thread.run_sync(
-                self.platform.create_run, workspace_id, body, idempotency_key
-            )
         if reference != {"id": self.model_profile.id, "version": self.model_profile.version}:
             self.platform.exact_model_profile(reference)
             raise RuntimeError("runtime was not composed for the requested model profile")
@@ -588,11 +600,14 @@ class LLMReviewRuntime:
                     )
 
                 result = await generate_with_retry(
-                    _DialogueRecordingAdapter(
-                        self.model_runtime.adapter,
-                        self.platform,
-                        attempt_id,
-                        self.model_profile,
+                    _ConcurrencyLimitedAdapter(
+                        _DialogueRecordingAdapter(
+                            self.model_runtime.adapter,
+                            self.platform,
+                            attempt_id,
+                            self.model_profile,
+                        ),
+                        self._model_call_semaphore,
                     ),
                     request_factory,
                     deadline=time.monotonic()
@@ -678,7 +693,10 @@ class LLMReviewRuntime:
     ) -> ReviewOperation:
         self.platform._workspace(workspace_id)
         context_ids = body.get("context_document_ids", [])
-        if len(context_ids) > 50 or len(context_ids) != len(set(context_ids)):
+        if (
+            len(context_ids) > self.platform.max_context_documents
+            or len(context_ids) != len(set(context_ids))
+        ):
             from review_core.domain.errors import InvalidRequest
 
             raise InvalidRequest("context_limit", "Context document selection is invalid.")

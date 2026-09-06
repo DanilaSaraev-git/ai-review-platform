@@ -11,48 +11,33 @@ import { Link, NavLink, Outlet } from 'react-router';
  */
 export function AppLayout() {
   return (
-    <div className="group flex min-h-screen flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-surface px-4">
+    <div className="flex min-h-screen flex-col bg-canvas lg:h-screen lg:overflow-hidden">
+      <header className="sticky top-0 z-30 flex h-13 shrink-0 items-center gap-3 border-b border-line bg-surface px-3 shadow-[0_1px_2px_rgba(23,32,51,0.03)] md:px-4">
         <span
           aria-hidden="true"
-          className="flex size-7 items-center justify-center rounded bg-accent text-xs font-bold text-white"
+          className="flex size-7 items-center justify-center rounded-[5px] bg-accent text-[11px] font-bold tracking-[-0.02em] text-white"
         >
           AR
         </span>
-        <Link to="/" className="text-base font-semibold text-ink">
+        <Link to="/" className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
           AI Review
         </Link>
-        <span aria-hidden="true" className="h-7 w-px bg-line" />
-
-        {/* Разделы стоят над левым краем контента: с открытой боковой панелью
-            отступ равен её ширине, без панели вкладки уходят влево. */}
-        <nav
-          aria-label="Разделы"
-          className="flex h-full items-stretch gap-10 group-has-[[data-side-panel]]:ml-80"
-        >
+        <span aria-hidden="true" className="mx-1 h-6 w-px bg-line" />
+        <nav aria-label="Разделы" className="flex h-full items-stretch">
           <NavLink
             to="/"
             className={({ isActive }) =>
-              `relative flex items-center text-sm font-semibold ${
-                isActive ? 'text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-accent' : 'text-ink-muted'
+              `relative flex items-center px-2 text-[13px] font-semibold ${
+                isActive ? 'text-ink after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-accent' : 'text-ink-muted hover:text-ink'
               }`
             }
           >
-            Ревью
+            Проверки
           </NavLink>
-          <span className="flex items-center text-sm font-semibold text-ink-muted">Профили</span>
         </nav>
-
-        <div className="ml-auto flex items-center gap-4">
-          <span className="text-xs text-ink-subtle">Статус AI-ревью</span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-line bg-canvas px-3 py-1 text-xs font-medium text-ink">
-            <span aria-hidden="true" className="size-2 rounded-full bg-ink-subtle" />
-            Не запущено
-          </span>
-        </div>
       </header>
 
-      <div className="flex flex-1">
+      <div className="flex min-h-0 flex-1 pb-14 md:pb-0">
         <SectionRail />
         <div className="flex min-w-0 flex-1 flex-col">
           <Outlet />
@@ -65,18 +50,21 @@ export function AppLayout() {
 /** Левая панель разделов шириной 56px из макета. */
 function SectionRail() {
   return (
-    <nav aria-label="Основные разделы" className="flex w-14 shrink-0 flex-col items-center gap-2 bg-rail py-4">
+    <nav
+      aria-label="Основные разделы"
+      className="fixed inset-x-0 bottom-0 z-40 flex h-14 shrink-0 items-center justify-center gap-3 border-t border-rail-active bg-rail px-3 md:static md:h-auto md:w-12 md:flex-col md:justify-start md:border-t-0 md:px-0 md:py-3"
+    >
       <Link
         to="/new"
         aria-label="Создать проверку"
-        className="flex size-10 items-center justify-center rounded bg-surface text-accent"
+        className="flex size-9 items-center justify-center rounded-[5px] bg-white text-accent shadow-sm transition-[background-color,transform] duration-100 active:scale-[0.96]"
       >
         <PlusIcon />
       </Link>
       <Link
         to="/"
         aria-label="Проверки"
-        className="flex size-10 items-center justify-center rounded text-white hover:bg-rail-active"
+        className="flex size-9 items-center justify-center rounded-[5px] text-white/90 transition-[background-color,transform] duration-100 hover:bg-rail-active active:scale-[0.96]"
       >
         <ClockIcon />
       </Link>

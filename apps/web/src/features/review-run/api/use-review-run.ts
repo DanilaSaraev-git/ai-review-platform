@@ -17,6 +17,7 @@ export interface ReviewRunState {
   isTerminal: boolean;
   isLoading: boolean;
   error: unknown;
+  retry: () => Promise<void>;
 }
 
 export function useReviewRun(workspaceId: string, runId: string): ReviewRunState {
@@ -53,5 +54,6 @@ export function useReviewRun(workspaceId: string, runId: string): ReviewRunState
     isTerminal: run ? isTerminalRunState(run.state) : false,
     isLoading: query.isPending,
     error: query.error,
+    retry: async () => void (await query.refetch()),
   };
 }

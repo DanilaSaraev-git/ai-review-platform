@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useListModelProfiles, useListReviewProfiles } from '@/api/generated/endpoints';
 import type { Document, ModelProfile, ReviewProfile } from '@/api/generated/model';
@@ -19,12 +19,12 @@ import { runReadiness } from './lib/run-readiness';
  */
 export function NewReviewPage() {
   const navigate = useNavigate();
-  const { workspaceId, limits, isLoading } = useBootstrap();
+  const { workspaceId, limits, isLoading, error: bootstrapError, retry: retryBootstrap } = useBootstrap();
   const [document, setDocument] = useState<Document | undefined>(undefined);
   const [contextDocuments, setContextDocuments] = useState<Document[]>([]);
   const [profile, setProfile] = useState<ReviewProfile | undefined>(undefined);
   const [modelProfile, setModelProfile] = useState<ModelProfile | undefined>(undefined);
-  const [isContextOpen, setIsContextOpen] = useState(true);
+  const [isContextOpen, setIsContextOpen] = useState(false);
 
   const profilesQuery = useListReviewProfiles(workspaceId, { query: { enabled: Boolean(workspaceId) } });
   const modelProfilesQuery = useListModelProfiles(workspaceId, { query: { enabled: Boolean(workspaceId) } });
@@ -32,6 +32,24 @@ export function NewReviewPage() {
 
   const readiness = runReadiness(document);
   const canStart = readiness.canStart && Boolean(profile && modelProfile) && !isPending;
+  const modelProfiles = modelProfilesQuery.data?.items ?? [];
+  const hasNoAvailableModel = modelProfilesQuery.isSuccess && !modelProfiles.some((item) => item.availability === 'available');
+  const modelWasNotConfigured = modelProfiles.some((item) => /unconfigured|не подключ/iu.test(`${item.id} ${item.name}`));
+
+  useEffect(() => {
+    if (!profile && profilesQuery.data?.items[0]) {
+      setProfile(profilesQuery.data.items[0]);
+    }
+  }, [profile, profilesQuery.data]);
+
+  useEffect(() => {
+    if (!modelProfile) {
+      const available = modelProfilesQuery.data?.items.find((item) => item.availability === 'available');
+      if (available) {
+        setModelProfile(available);
+      }
+    }
+  }, [modelProfile, modelProfilesQuery.data]);
 
   async function handleStart(): Promise<void> {
     if (!document || !profile || !modelProfile) {
@@ -49,6 +67,16 @@ export function NewReviewPage() {
     } catch {
       // Причина показывается сообщением из состояния мутации.
     }
+  }
+
+  if (bootstrapError && !limits) {
+    return (
+      <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
+        <Callout tone="danger" title="Не удалось загрузить рабочее пространство">
+          <Button className="mt-2" onClick={() => void retryBootstrap()}>Повторить</Button>
+        </Callout>
+      </main>
+    );
   }
 
   if (isLoading || !limits) {
@@ -78,7 +106,8 @@ export function NewReviewPage() {
         onToggle={() => setIsContextOpen((open) => !open)}
       />
 
-      <main className="min-w-0 flex-1 p-10">
+      <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+        <div className="mx-auto max-w-5xl">
         <nav aria-label="Хлебные крошки" className="text-xs text-ink-subtle">
           <Link to="/" className="hover:underline">
             Проверки
@@ -87,37 +116,39 @@ export function NewReviewPage() {
           <span>Новая проверка</span>
         </nav>
 
-        <h1 className="mt-3 text-3xl font-bold text-ink">Новая проверка</h1>
-        <p className="mt-2 text-sm text-ink-muted">
-          Загрузите готовое ТЗ и проверьте контекст, который получит агент.
-        </p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-[-0.025em] text-ink">Новая проверка</h1>
+        <p className="mt-1 max-w-2xl text-sm text-ink-muted">Документ, профиль и контекст одного запуска.</p>
 
-        <p className="mt-4 flex items-start gap-2 rounded-lg border border-line bg-surface px-4 py-3 text-xs text-ink-muted">
-          <span
-            aria-hidden="true"
-            className="mt-px flex size-4 shrink-0 items-center justify-center rounded-full border border-ink-subtle text-[10px] font-semibold text-ink-subtle"
-          >
-            i
-          </span>
-          Замечания - это кандидаты на уточнение, а не подтверждённые дефекты. Принимайте итоговые решения
-          самостоятельно.
-        </p>
-
-        <section className="mt-3 rounded-lg border border-line bg-surface p-8">
-          <h2 id="document-title" className="text-base font-bold text-ink">
+        <section className="mt-5 rounded-[7px] border border-line bg-surface p-5 shadow-[0_1px_2px_rgba(23,32,51,0.04),0_8px_24px_rgba(23,32,51,0.03)] sm:p-6">
+          <h2 id="document-title" className="text-[15px] font-semibold text-ink">
             Документ на проверку
           </h2>
           <div className="mt-3" aria-labelledby="document-title">
             <DocumentUpload workspaceId={workspaceId} limits={limits} document={document} onUploaded={setDocument} />
           </div>
 
-          <hr className="my-6 border-line" />
+          <button
+            type="button"
+            className="mt-3 flex min-h-9 w-full cursor-pointer items-center justify-between rounded-[5px] border border-line-strong bg-surface px-3 text-[13px] font-semibold text-ink sm:hidden"
+            aria-expanded={isContextOpen}
+            aria-controls="context-panel"
+            onClick={() => setIsContextOpen(true)}
+          >
+            Контекст
+            {contextDocuments.length > 0 ? <span className="text-ink-subtle">{contextDocuments.length}</span> : null}
+          </button>
 
-          <h2 id="settings-title" className="text-base font-bold text-ink">
-            Параметры проверки
-          </h2>
-          <div aria-labelledby="settings-title" className="mt-4 grid gap-6 lg:grid-cols-2">
-            <div className="flex flex-col gap-6">
+          <hr className="my-5 border-line" />
+
+          <details className="group/settings">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-semibold text-ink [&::-webkit-details-marker]:hidden">
+              <span id="settings-title">Параметры проверки</span>
+              <span className="font-medium text-ink-subtle group-open/settings:hidden">
+                {profile?.name ?? 'Профиль'} · {modelProfile?.name ?? 'Исполнение'}
+              </span>
+              <span className="hidden text-accent group-open/settings:inline">Свернуть</span>
+            </summary>
+            <div aria-labelledby="settings-title" className="mt-3 grid gap-5 lg:grid-cols-2">
               {profilesQuery.data ? (
                 <ReviewProfileSelect
                   profiles={profilesQuery.data.items}
@@ -137,24 +168,9 @@ export function NewReviewPage() {
                 <Spinner label="Загружаем профили модели…" />
               )}
             </div>
+          </details>
 
-            <div className="flex flex-col gap-1">
-              <p className="text-xs font-bold text-ink-muted">Контекст агента</p>
-              <button
-                type="button"
-                onClick={() => setIsContextOpen((open) => !open)}
-                className="flex cursor-pointer items-center justify-between gap-3 rounded border border-accent bg-accent-tint px-3 py-2.5 text-sm text-ink"
-              >
-                <span className="font-medium">
-                  Подключено материалов: {contextDocuments.length} из {limits.max_context_documents}
-                </span>
-                <span className="font-medium text-accent">{isContextOpen ? 'Панель открыта' : 'Открыть панель'}</span>
-              </button>
-              <p className="text-xs text-ink-subtle">Правила команды, шаблон и материалы текущего запуска.</p>
-            </div>
-          </div>
-
-          {readiness.blockedReason ? (
+          {document && readiness.blockedReason ? (
             <div className="mt-6">
               <Callout tone="danger" title={readiness.blockedReason}>
                 {readiness.nextStep}
@@ -176,20 +192,24 @@ export function NewReviewPage() {
             </div>
           ) : null}
 
-          <hr className="my-6 border-line" />
-
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="max-w-md text-xs text-ink-muted">
-              Проверка идёт в фоне: можно закрыть страницу и вернуться к запуску позже.
-            </p>
-            <div className="flex items-center gap-3">
-              <Button onClick={() => void navigate('/')}>Отмена</Button>
-              <Button variant="primary" disabled={!canStart} onClick={() => void handleStart()}>
-                {isPending ? 'Запускаем…' : 'Запустить проверку'}
-              </Button>
+          {hasNoAvailableModel ? (
+            <div className="mt-3">
+              <Callout
+                tone="warn"
+                title={modelWasNotConfigured ? 'Модель ещё не подключена' : 'Нет доступной модели'}
+              >
+                Подключите модель в конфигурации сервиса, чтобы запускать новые проверки.
+              </Callout>
             </div>
+          ) : null}
+
+          <div className="sticky bottom-0 z-10 -mx-5 mt-5 flex justify-end border-t border-line bg-surface px-5 pb-1 pt-4 sm:-mx-6 sm:px-6">
+            <Button variant="primary" disabled={!canStart} onClick={() => void handleStart()}>
+              {isPending ? 'Запускаем…' : 'Запустить проверку'}
+            </Button>
           </div>
         </section>
+        </div>
       </main>
     </div>
   );
@@ -210,6 +230,10 @@ function ContextPanelTab({
   count: number;
   onToggle: () => void;
 }) {
+  if (isOpen) {
+    return null;
+  }
+
   return (
     <button
       type="button"
@@ -217,12 +241,12 @@ function ContextPanelTab({
       aria-expanded={isOpen}
       aria-controls="context-panel"
       title={isOpen ? 'Свернуть контекст проверки' : 'Развернуть контекст проверки'}
-      className="flex w-7 shrink-0 cursor-pointer flex-col items-center gap-3 border-r border-line bg-surface pt-6 text-ink-muted hover:bg-surface-muted hover:text-ink"
+      className="hidden w-8 shrink-0 cursor-pointer flex-col items-center gap-3 border-r border-line bg-surface pt-5 text-ink-muted transition-[background-color,color] duration-100 hover:bg-surface-muted hover:text-ink sm:flex"
     >
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
         <path d={isOpen ? 'M9 2L4 7l5 5' : 'M5 2l5 5-5 5'} strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <span className="text-xs font-medium [writing-mode:vertical-rl]">Контекст · {count}</span>
+      <span className="text-xs font-semibold [writing-mode:vertical-rl]">Контекст {count > 0 ? `· ${count}` : ''}</span>
     </button>
   );
 }

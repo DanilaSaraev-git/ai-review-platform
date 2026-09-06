@@ -2,16 +2,26 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 from review_runtime.config.model_profiles import ModelProfile
 from review_runtime.models.availability import (
     AvailabilityService,
     CompatibilityResult,
+    HTTPProbeTransport,
     ProbeRequest,
     ProbeResponse,
     generation_observation,
     manual_observation,
 )
+
+PROBE_SECRET_REF = "MODEL_API_KEY"  # noqa: S105 - symbolic reference, never a credential
+
+
+class StaticSecretProvider:
+    def resolve(self, reference: str) -> str:
+        assert reference == PROBE_SECRET_REF
+        return "mounted-secret"
 
 
 def _profile(*, probe: dict[str, object] | None) -> ModelProfile:
@@ -103,6 +113,54 @@ async def test_models_probe_does_not_guess_availability_from_a_healthy_response(
 
     assert observation.state == "unavailable"
     assert observation.reason_code == "model_not_found"
+
+
+async def test_http_probe_is_get_only_authenticated_and_does_not_follow_redirects() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(307, headers={"Location": "http://elsewhere.test/models"})
+
+    response = await HTTPProbeTransport(
+        secrets=StaticSecretProvider(),
+        transport=httpx.MockTransport(handler),
+    ).observe(
+        ProbeRequest(
+            mode="models",
+            url="http://provider.test/models",
+            model="synthetic-model",
+            secret_ref=PROBE_SECRET_REF,
+            timeout_seconds=5,
+        )
+    )
+
+    assert response.status_code == 307
+    assert [(request.method, str(request.url)) for request in requests] == [
+        ("GET", "http://provider.test/models")
+    ]
+    assert requests[0].headers["authorization"] == "Bearer mounted-secret"
+
+
+async def test_http_probe_bounds_response_before_parsing() -> None:
+    transport = HTTPProbeTransport(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, content=b'{"data":[' + b" " * 32 + b"]}")
+        ),
+        max_response_bytes=16,
+    )
+
+    response = await transport.observe(
+        ProbeRequest(
+            mode="models",
+            url="http://provider.test/models",
+            model="synthetic-model",
+            secret_ref=None,
+            timeout_seconds=5,
+        )
+    )
+
+    assert response == ProbeResponse(status_code=502)
 
 
 def test_manual_observation_has_explicit_expiry_and_expired_is_unavailable() -> None:

@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 /**
  * Общие шаги E2E-проверок.
@@ -31,13 +31,15 @@ export async function uploadSyntheticDocument(page: Page): Promise<void> {
 }
 
 export async function selectProfiles(page: Page): Promise<void> {
+  await page.getByText('Параметры проверки', { exact: true }).click();
   await page.getByRole('radio').first().check();
   await page.getByRole('radio', { name: /Сбалансированный/ }).check();
 }
 
 export async function startRun(page: Page): Promise<void> {
-  await selectProfiles(page);
-  await page.getByRole('button', { name: /Запустить проверку/ }).click();
+  const button = page.getByRole('button', { name: /Запустить проверку/ });
+  await expect(button).toBeEnabled();
+  await button.click();
 }
 
 /** Быстрый путь к отчёту готового запуска. */
@@ -53,4 +55,11 @@ export async function openFinding(page: Page): Promise<void> {
   await openReport(page);
   await page.getByRole('link', { name: /Не задано расписание обновления/ }).click();
   await page.getByRole('heading', { name: 'Ваше решение' }).waitFor();
+}
+
+/** Открывает адресуемую вкладку диалога, сохраняя документ рядом. */
+export async function openDialogue(page: Page): Promise<void> {
+  await openFinding(page);
+  await page.getByRole('tab', { name: /Диалог/ }).click();
+  await page.getByRole('heading', { name: 'Диалог по замечанию' }).waitFor();
 }

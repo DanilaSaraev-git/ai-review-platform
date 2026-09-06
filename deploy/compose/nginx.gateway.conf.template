@@ -1,0 +1,82 @@
+limit_req_zone $binary_remote_addr zone=review_gateway_rate:10m rate=10r/s;
+limit_conn_zone $binary_remote_addr zone=review_gateway_connections:10m;
+
+map $http_origin $review_origin_allowed {
+  default 0;
+  "" 1;
+  "https://${REVIEW_PUBLIC_IP}" 1;
+}
+
+map $request_method $review_request_mutates {
+  default 0;
+  POST 1;
+  PUT 1;
+  PATCH 1;
+  DELETE 1;
+}
+
+map "$review_request_mutates:$review_origin_allowed" $review_cross_origin_mutation {
+  default 0;
+  "1:0" 1;
+}
+
+server {
+  listen 80 default_server;
+  server_name ${REVIEW_PUBLIC_IP};
+  server_tokens off;
+  access_log off;
+
+  location ^~ /.well-known/acme-challenge/ {
+    auth_basic off;
+    root /var/www/certbot;
+    default_type text/plain;
+    try_files $uri =404;
+  }
+
+  location / {
+    return 308 https://${REVIEW_PUBLIC_IP}$request_uri;
+  }
+}
+
+server {
+  listen 443 ssl default_server;
+  http2 on;
+  server_name ${REVIEW_PUBLIC_IP};
+  server_tokens off;
+  access_log off;
+
+  ssl_certificate /etc/letsencrypt/live/${REVIEW_PUBLIC_IP}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/${REVIEW_PUBLIC_IP}/privkey.pem;
+  ssl_session_cache shared:review_tls:10m;
+  ssl_session_timeout 1d;
+  ssl_protocols TLSv1.2 TLSv1.3;
+
+  client_max_body_size 52m;
+  limit_conn review_gateway_connections 20;
+  limit_req zone=review_gateway_rate burst=40 nodelay;
+
+  auth_basic "AI Review MVP";
+  auth_basic_user_file /etc/nginx/private/gateway.htpasswd;
+
+  add_header Cache-Control "no-store" always;
+  add_header Content-Security-Policy "frame-ancestors 'none'" always;
+  add_header Referrer-Policy "no-referrer" always;
+  add_header Strict-Transport-Security "max-age=604800" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+
+  if ($review_cross_origin_mutation) {
+    return 403;
+  }
+
+  location / {
+    proxy_http_version 1.1;
+    proxy_read_timeout 330s;
+    proxy_send_timeout 330s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_pass http://proxy:8080;
+  }
+}

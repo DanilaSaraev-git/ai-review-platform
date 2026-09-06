@@ -67,6 +67,30 @@ describe('matchAnchor (FR-021, SC-003)', () => {
     }
   });
 
+  it('исправляет устаревшую строку только для уникальной точной цитаты', () => {
+    const finding: Finding = {
+      ...baseFinding,
+      anchors: [{ ...baseFinding.anchors[0]!, location: { kind: 'text', line_start: 1, line_end: 1, char_start: 0, char_end: 41 } }],
+    };
+
+    const match = matchAnchor(finding, lines);
+    expect(match).toMatchObject({ kind: 'text', matched: true, lineStart: 3, lineEnd: 3 });
+  });
+
+  it('не исправляет координату, если точная цитата неоднозначна', () => {
+    const duplicated = toDocumentLines('Повтор\nДругая строка\nПовтор');
+    const finding: Finding = {
+      ...baseFinding,
+      anchors: [{
+        ...baseFinding.anchors[0]!,
+        quote: 'Повтор',
+        location: { kind: 'text', line_start: 2, line_end: 2, char_start: 0, char_end: 5 },
+      }],
+    };
+
+    expect(matchAnchor(finding, duplicated).kind).toBe('unmatched');
+  });
+
   it('обрабатывает замечание вида missing без привязок как штатный случай', () => {
     const finding: Finding = {
       ...baseFinding,

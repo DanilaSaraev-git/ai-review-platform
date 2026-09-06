@@ -24,7 +24,7 @@ export function TurnList({
     <ol className="flex flex-col gap-4">
       {ordered.map((turn) => (
         <li key={turn.id} className="flex flex-col gap-2">
-          <div className="rounded border border-line bg-surface-muted p-3">
+          <div className="ml-8 rounded-[6px] border border-accent/15 bg-accent-tint p-3">
             <p className="text-xs font-medium text-ink">
               {turn.actor.display_name} · {formatDateTime(turn.created_at)}
             </p>

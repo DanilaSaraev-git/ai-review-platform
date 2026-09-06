@@ -22,8 +22,8 @@ export function TextViewer({ content, match }: { content: string; match: AnchorM
     match && match.kind === 'text' ? { start: match.lineStart, end: match.lineEnd } : null;
 
   return (
-    <div className="max-h-[32rem] overflow-auto rounded border border-line bg-surface">
-      <pre className="m-0 whitespace-pre-wrap p-3 font-mono text-xs leading-relaxed text-ink">
+    <div className="min-h-[28rem] flex-1 overflow-auto rounded-[6px] border border-line bg-surface shadow-[0_1px_2px_rgba(23,32,51,0.05),0_12px_32px_rgba(23,32,51,0.06)] lg:min-h-full">
+      <pre className="m-0 whitespace-pre-wrap p-5 font-mono text-[13px] leading-6 text-ink sm:p-7">
         {lines.map((line) => {
           const isHighlighted =
             highlighted !== null && line.number >= highlighted.start && line.number <= highlighted.end;
@@ -31,7 +31,7 @@ export function TextViewer({ content, match }: { content: string; match: AnchorM
             <code
               key={line.number}
               ref={isHighlighted && line.number === highlighted?.start ? highlightRef : undefined}
-              className={`block ${isHighlighted ? 'bg-amber-100 font-semibold' : ''}`}
+              className={`block border-l-2 px-2 ${isHighlighted ? 'border-accent bg-accent-tint font-semibold' : 'border-transparent'}`}
               data-line={line.number}
             >
               <span aria-hidden="true" className="mr-3 inline-block w-8 select-none text-right text-ink-muted">

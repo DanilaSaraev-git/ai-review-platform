@@ -34,20 +34,20 @@ export function ContextDocuments({
       id="context-panel"
       data-side-panel
       aria-labelledby="context-documents-title"
-      className="flex w-90 shrink-0 flex-col bg-surface"
+      className="fixed inset-x-0 bottom-14 top-13 z-20 flex flex-col border-r border-line bg-surface shadow-[8px_0_24px_rgba(23,32,51,0.08)] sm:static sm:w-80 sm:shrink-0 sm:shadow-none"
     >
-      <div className="flex items-start justify-between gap-3 px-5 py-4">
+      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5">
         <div>
-          <h2 id="context-documents-title" className="text-lg font-bold text-ink">
+          <h2 id="context-documents-title" className="text-[15px] font-semibold text-ink">
             Контекстные материалы
           </h2>
-          <p className="mt-0.5 text-xs text-ink-subtle">Материалы, доступные агенту</p>
+          <p className="mt-0.5 text-xs text-ink-subtle">{limitState.used} из {limitState.max}</p>
         </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Свернуть панель контекста"
-          className="flex size-8 cursor-pointer items-center justify-center rounded border border-line text-ink-muted hover:bg-surface-muted"
+          className="flex size-8 cursor-pointer items-center justify-center rounded-[5px] border border-transparent text-ink-muted transition-[background-color,color,transform] duration-100 hover:bg-surface-muted hover:text-ink active:scale-[0.96]"
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
             <path d="M3 3l8 8M11 3l-8 8" strokeLinecap="round" />
@@ -55,22 +55,17 @@ export function ContextDocuments({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-4">
-        <p className="text-xs text-ink-muted">
-          Правила команды, модель данных, регламент. Подключено {limitState.used} из {limitState.max}; можно добавить
-          ещё {limitState.remaining}.
-        </p>
-
+      <div className="flex-1 overflow-y-auto px-4 py-4">
         {documents.length > 0 ? (
-          <ul className="mt-4 flex flex-col gap-2">
+          <ul className="mb-4 flex flex-col gap-2">
             {documents.map((document) => (
-              <li key={document.id} className="rounded border border-line bg-surface-muted p-3">
-                <p className="text-sm font-medium text-ink">{document.filename}</p>
+              <li key={document.id} className="rounded-[5px] border border-line bg-surface-muted p-3">
+                <p className="overflow-wrap-anywhere text-[13px] font-semibold text-ink">{document.filename}</p>
                 <p className="mt-0.5 text-xs text-ink-subtle">
                   {formatMediaType(document.media_type)} · {formatBytes(document.size_bytes)} ·{' '}
                   {EXTRACTION_STATE_TEXT[document.extraction_state]}
                 </p>
-                <Button variant="ghost" className="mt-2" onClick={() => onDetach(document.id)}>
+                <Button variant="ghost" className="mt-1.5 min-h-7 px-2 py-0.5 text-xs" onClick={() => onDetach(document.id)}>
                   Отключить
                 </Button>
               </li>
@@ -78,7 +73,7 @@ export function ContextDocuments({
           </ul>
         ) : null}
 
-        <div className="mt-4">
+        <div>
           {limitState.canAttachMore ? (
             <DocumentUpload
               workspaceId={workspaceId}
@@ -86,7 +81,7 @@ export function ContextDocuments({
               document={undefined}
               onUploaded={onAttach}
               label="Файл контекстного материала"
-              hint="Материал попадёт в проверку как дополнительный источник, а не как проверяемый документ."
+              hint="Правила, шаблон или описание данных."
             />
           ) : (
             <Callout tone="warn" title="Лимит контекстных материалов достигнут">
@@ -96,9 +91,8 @@ export function ContextDocuments({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-3">
-        <p className="text-sm text-ink-muted">Подключено: {limitState.used}</p>
-        <Button onClick={onClose}>Закрыть</Button>
+      <div className="flex items-center justify-end border-t border-line px-4 py-3 sm:hidden">
+        <Button onClick={onClose}>Готово</Button>
       </div>
     </aside>
   );
