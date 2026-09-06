@@ -45,7 +45,7 @@ def test_real_empty_upgrade_downgrade_current_head_and_immutability(monkeypatch)
     command.upgrade(config, "head")
     connection = psycopg.connect(dsn)
     with connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("20260906_0003",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("20260906_0004",)
         connection.execute(
             "INSERT INTO deployments(id, release_version, created_at) VALUES(%s, %s, now())",
             ("60000000-0000-4000-8000-000000000099", "test"),

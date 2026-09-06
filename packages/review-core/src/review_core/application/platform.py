@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from threading import Lock
 from typing import Any, Protocol
 
+from review_core.application.document_cycle_memory import MemoryDocumentCycles
 from review_core.application.findings import next_decision
 from review_core.application.idempotency import require_idempotency_key
 from review_core.application.profiles import (
@@ -97,6 +98,7 @@ class ReviewPlatform:
         self.review_executions: dict[str, dict[str, Any]] = {}
         self.outbox: dict[str, dict[str, Any]] = {}
         self._dialogue_lock = Lock()
+        self.cycles = MemoryDocumentCycles(self)
 
     def _workspace(self, workspace_id: str) -> None:
         if workspace_id != self.workspace_id:
@@ -150,7 +152,9 @@ class ReviewPlatform:
             created_at=utc_now(),
         )
         self.documents[record.id] = record
-        return self.document_value(record)
+        value = self.document_value(record)
+        self.cycles.register_upload(value)
+        return value
 
     def document_value(self, record: DocumentRecord) -> dict[str, Any]:
         return {
@@ -282,6 +286,7 @@ class ReviewPlatform:
             "state": "queued",
             "progress": {"percent": 0, "message": "Review queued"},
             "document_id": primary.id,
+            "locale": body["locale"],
             "context_document_ids": [item.id for item in contexts],
             "execution_snapshot": self._snapshot(profile),
             "created_by": self.actor,
@@ -310,11 +315,13 @@ class ReviewPlatform:
             "payload": {"review_run_id": run_id, "review_execution_id": execution_id},
         }
         self.idempotency[("create_run", key)] = (digest, run_id)
+        self.cycles.admit(run, body["locale"])
         self._execute_run(record, primary, contexts)
         self.review_executions[execution_id].update(
             state="completed", attempt_count=1, checkpoint="published"
         )
         self.outbox[outbox_id]["state"] = "published"
+        self.cycles.get(workspace_id, run_id)
         return run
 
     def _execute_run(
@@ -551,6 +558,12 @@ class ReviewPlatform:
         return dialogue
 
     def put_decision(
+        self, workspace_id: str, run_id: str, finding_id: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        with self.cycles.lock:
+            return self._put_decision_unlocked(workspace_id, run_id, finding_id, body)
+
+    def _put_decision_unlocked(
         self, workspace_id: str, run_id: str, finding_id: str, body: dict[str, Any]
     ) -> dict[str, Any]:
         dialogue = self._get_finding_dialogue(workspace_id, run_id, finding_id)

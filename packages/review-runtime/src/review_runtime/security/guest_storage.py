@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 from dataclasses import dataclass
 from typing import Any
 
+from review_core.canonical import digest_value
 from review_core.domain.errors import DomainError
 
 from review_runtime.postgres.artifact_fence import advisory_fence_key
@@ -44,6 +46,9 @@ def upload_with_guest_limits(
     filename: str,
     media_type: str,
     content: bytes,
+    *,
+    family_id: str | None = None,
+    version_key: str | None = None,
 ) -> dict[str, Any]:
     platform._workspace(workspace_id)
     # All guest uploads share a transaction lock. It spans the platform's own
@@ -51,6 +56,19 @@ def upload_with_guest_limits(
     with platform._connect() as connection:
         key = advisory_fence_key("guest-storage", platform.organization_id, "v1")
         connection.execute("SELECT pg_advisory_xact_lock(%s)", (key,))
+        if family_id is not None and version_key is not None:
+            platform.cycles.family(workspace_id, family_id)
+            digest = digest_value(
+                {
+                    "family_id": family_id,
+                    "filename": filename,
+                    "media_type": media_type,
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                }
+            )
+            replay = platform.cycles.replay_upload(family_id, version_key, digest, connection)
+            if replay is not None:
+                return platform.document_value(platform.get_document(workspace_id, replay))
         usage = connection.execute(
             """SELECT count(*) AS count, COALESCE(sum(size_bytes),0) AS bytes
                FROM document_versions WHERE organization_id=%s AND workspace_id=%s""",
@@ -84,4 +102,6 @@ def upload_with_guest_limits(
                 "Загрузка временно недоступна",
                 "Недостаточно места для новых файлов. Сохранённые документы доступны в истории.",
             )
-        return platform.upload(workspace_id, filename, media_type, content)
+        return platform.upload(
+            workspace_id, filename, media_type, content, family_id=family_id, version_key=version_key
+        )

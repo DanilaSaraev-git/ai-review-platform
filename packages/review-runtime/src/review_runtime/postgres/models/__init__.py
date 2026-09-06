@@ -702,3 +702,89 @@ Index(
     unique=True,
     postgresql_where=ModelAttempt.generation_attempt_id.is_not(None),
 )
+
+
+class DocumentFamily(Base):
+    __tablename__ = "document_families"
+    organization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    created_by: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "created_by"],
+            ["actors.organization_id", "actors.workspace_id", "actors.id"],
+        ),
+    )
+
+
+class DocumentFamilyVersion(Base):
+    __tablename__ = "document_family_versions"
+    organization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    family_id: Mapped[str] = mapped_column(String(36))
+    version_number: Mapped[int] = mapped_column(Integer)
+    unchanged_from_previous: Mapped[bool] = mapped_column()
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "document_id"],
+            ["document_versions.organization_id", "document_versions.workspace_id", "document_versions.id"],
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "family_id"],
+            ["document_families.organization_id", "document_families.workspace_id", "document_families.id"],
+        ),
+        UniqueConstraint("organization_id", "workspace_id", "family_id", "version_number"),
+        CheckConstraint("version_number > 0"),
+    )
+
+
+class ReviewCycle(Base):
+    __tablename__ = "review_cycles"
+    organization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    family_id: Mapped[str] = mapped_column(String(36))
+    baseline_run_id: Mapped[str | None] = mapped_column(String(36))
+    revision: Mapped[int] = mapped_column(Integer)
+    value: Mapped[dict[str, Any]] = mapped_column(JSON)
+    lineage: Mapped[dict[str, Any]] = mapped_column(JSON)
+    previous: Mapped[dict[str, Any]] = mapped_column(JSON)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "run_id"],
+            ["review_runs.organization_id", "review_runs.workspace_id", "review_runs.id"],
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "baseline_run_id"],
+            ["review_runs.organization_id", "review_runs.workspace_id", "review_runs.id"],
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "family_id"],
+            ["document_families.organization_id", "document_families.workspace_id", "document_families.id"],
+        ),
+    )
+
+
+class ReviewCycleEvent(Base):
+    __tablename__ = "review_cycle_events"
+    organization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36))
+    actor_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    value: Mapped[dict[str, Any]] = mapped_column(JSON)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "run_id"],
+            ["review_cycles.organization_id", "review_cycles.workspace_id", "review_cycles.run_id"],
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "actor_id"],
+            ["actors.organization_id", "actors.workspace_id", "actors.id"],
+        ),
+    )

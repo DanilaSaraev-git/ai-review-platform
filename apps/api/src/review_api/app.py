@@ -15,7 +15,7 @@ from review_api.docs import mount_offline_docs
 from review_api.errors import domain_error_handler
 from review_api.guest_access import guest_access_context, guest_access_enabled
 from review_api.middleware import request_context
-from review_api.routes import bootstrap, documents, findings, health, profiles, reviews
+from review_api.routes import bootstrap, cycles, documents, findings, health, profiles, reviews
 
 
 def create_app(
@@ -79,6 +79,7 @@ def create_app(
     for router in (
         bootstrap.router,
         documents.router,
+        cycles.router,
         profiles.router,
         reviews.router,
         findings.router,

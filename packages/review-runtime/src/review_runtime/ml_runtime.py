@@ -770,6 +770,7 @@ class LLMReviewRuntime:
             "state": "queued",
             "progress": {"percent": 0, "message": "Review queued"},
             "document_id": primary.id,
+            "locale": body["locale"],
             "context_document_ids": [item.id for item in contexts],
             "execution_snapshot": snapshot,
             "created_by": self.platform.actor,

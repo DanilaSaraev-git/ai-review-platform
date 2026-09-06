@@ -30,7 +30,7 @@ def ready(request: Request) -> Any:
             checks["database"] = connection.execute("SELECT 1").fetchone() == (1,)
             checks["business_schema"] = connection.execute(
                 "SELECT version_num FROM alembic_version"
-            ).fetchone() == ("20260906_0003",)
+            ).fetchone() == ("20260906_0004",)
     except Exception:
         checks["database"] = False
         checks["business_schema"] = False

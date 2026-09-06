@@ -35,6 +35,7 @@ from review_runtime.config.settings import OperatorSettings, RuntimePolicy
 from review_runtime.documents.pdf import PdfDocumentParser
 from review_runtime.documents.text import TextDocumentParser
 from review_runtime.postgres.artifact_fence import advisory_fence_key
+from review_runtime.postgres.document_cycles import PostgresDocumentCycles, admit_cycle
 from review_runtime.reports import CanonicalReportValidator
 from review_runtime.skills.registry import ResolvedSkill
 
@@ -80,6 +81,7 @@ class PostgresReviewExecutionStorage:
         report_validator: CanonicalReportValidator,
         dialogue_policy: dict[str, Any],
         terminal_committer: Callable[[psycopg.Connection[dict[str, Any]]], None] | None = None,
+        on_published: Callable[[str], None] | None = None,
     ) -> None:
         self.database_url = database_url
         self.organization_id = organization_id
@@ -88,6 +90,7 @@ class PostgresReviewExecutionStorage:
         self.report_validator = report_validator
         self.dialogue_policy = dialogue_policy
         self._terminal_committer = terminal_committer or (lambda connection: connection.commit())
+        self._on_published = on_published
 
     def connect(self) -> psycopg.Connection[dict[str, Any]]:
         return psycopg.connect(self.database_url, row_factory=dict_row)
@@ -299,6 +302,7 @@ class PostgresReviewExecutionStorage:
                     Jsonb(request.run_value),
                 ),
             )
+            admit_cycle(connection, self.organization_id, request.workspace_id, request.run_id, request.request_body["document_id"])
             for source in request.sources:
                 connection.execute(
                     """INSERT INTO review_run_sources(
@@ -742,6 +746,8 @@ class PostgresReviewExecutionStorage:
             raise
         finally:
             connection.close()
+        if self._on_published is not None:
+            self._on_published(claim.resource_id)
         return ExecutionTerminal(claim.resource_id, "completed")
 
     def _insert_findings(
@@ -998,6 +1004,7 @@ class PostgresReviewPlatform:
             **dialogue_policy_payload,
         }
         self._seed_exact()
+        self.cycles = PostgresDocumentCycles(self)
         self.review_storage = PostgresReviewExecutionStorage(
             database_url=self.database_url,
             organization_id=self.organization_id,
@@ -1005,6 +1012,7 @@ class PostgresReviewPlatform:
             artifacts=self.artifacts,
             report_validator=self.report_validator,
             dialogue_policy=self.dialogue_policy,
+            on_published=self.cycles.after_publish,
         )
 
     def for_guest(self, workspace_id: str, actor_id: str) -> PostgresReviewPlatform:
@@ -1439,22 +1447,31 @@ class PostgresReviewPlatform:
             except UnicodeDecodeError as error:
                 raise InvalidRequest("invalid_utf8", "Text document is not valid UTF-8.") from error
 
-    def upload(self, workspace_id: str, filename: str, media_type: str, content: bytes) -> dict[str, Any]:
+    def upload(
+        self, workspace_id: str, filename: str, media_type: str, content: bytes, *,
+        family_id: str | None = None, version_key: str | None = None,
+    ) -> dict[str, Any]:
         self._workspace(workspace_id)
         self._validate_upload(filename, media_type, content, self.max_upload_bytes)
         now = utc_now()
         document_id, artifact_id, extraction_id = str(uuid4()), str(uuid4()), str(uuid4())
         digest = hashlib.sha256(content).hexdigest()
-        staged = self.artifacts.stage(self.workspace_id, bytes(content), expected_sha256=digest)
         parser = PdfDocumentParser() if media_type == "application/pdf" else TextDocumentParser()
         try:
             fragments = parser.parse(content, source_id="source-main", document_id=document_id)
             extraction_state, error_code = "completed", None
         except ValueError:
             fragments, extraction_state, error_code = [], "failed", "extraction_failed"
-        store_key = f"{staged.namespace}/{staged.object_name}"
-        fence = advisory_fence_key(self.workspace_id, store_key, digest)
+        request_digest = digest_value({"family_id": family_id, "filename": filename, "media_type": media_type, "sha256": digest})
         with self._connect() as connection:
+            family, number, _, replay = self.cycles.prepare_upload(
+                connection, family_id, version_key, request_digest, document_id, Path(filename).name, now,
+            )
+            if replay is not None:
+                return self.document_value(self.get_document(workspace_id, replay))
+            staged = self.artifacts.stage(self.workspace_id, bytes(content), expected_sha256=digest)
+            store_key = f"{staged.namespace}/{staged.object_name}"
+            fence = advisory_fence_key(self.workspace_id, store_key, digest)
             connection.execute("SELECT pg_advisory_xact_lock(%s)", (fence,))
             promoted = self.artifacts.promote(staged)
             connection.execute(
@@ -1529,6 +1546,7 @@ class PostgresReviewPlatform:
                         now,
                     ),
                 )
+            self.cycles.finish_upload(connection, document_id, family, number, digest, version_key, request_digest)
         return self.document_value(self.get_document(workspace_id, document_id))
 
     def get_document(self, workspace_id: str, document_id: str) -> DocumentRecord:
@@ -1879,6 +1897,7 @@ class PostgresReviewPlatform:
             "state": "queued",
             "progress": {"percent": 0, "message": "Review queued"},
             "document_id": primary.id,
+            "locale": body["locale"],
             "context_document_ids": [item.id for item in contexts],
             "execution_snapshot": snapshot,
             "created_by": self.actor,
