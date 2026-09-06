@@ -9,16 +9,22 @@ Gateway даёт общий допуск, но не разделяет поль�
 На 6 сентября 2026 года `135.106.195.62` работает на Ubuntu 24.04, Docker 29.1.3 и
 Compose 2.40.3. В нём 2 GiB RAM, 2 GiB swap и 40 GiB диска. Текущая ссылка
 `/opt/ai-review-platform-current` указывает на release
-`9aad090e1d007c16e55d79dbfcd166ce4ca7a8c5`. Сервис доступен по
+`5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`. Сервис доступен по
 [HTTPS](https://135.106.195.62) с общим gateway-допуском; PostgreSQL и artifacts постоянны,
 внутренний proxy доступен только на `127.0.0.1:8080`. Проверенный legacy rollback target —
 `2a613542056dd7b132a077a7c5b0619ff2bb733a`. Полный цикл new→legacy→new и restart прошли
 без потери данных. SSH password нельзя отключать, пока отдельный вход
 непривилегированного оператора по ключу не проверен в новой сессии.
 
-Новые release не используют synthetic review в production. Без подключённой модели health
-готов, каталог показывает `model-not-configured` как `unavailable`, а запуск review возвращает
-`model_unavailable`. Это ожидаемое состояние до выбора поставщика.
+Включена Kimi K2 через Hugging Face Router/Novita: профиль `kimi-k2-hf-novita` 1.0.0,
+модель `moonshotai/Kimi-K2-Instruct:novita`, навык `review-data-spec` 1.0.1. Реальный
+синтетический HTTP smoke прошёл review и dialogue; результаты предметной оценки качества
+из этого не следуют. Предыдущий production release — `c61434de2ecba31e4bcd6d24aa045cd624bc64bd`;
+порядок отключения модели перед откатом описан ниже.
+
+При отключении модели health остаётся готов, каталог показывает `model-not-configured`
+как `unavailable`, а запуск review возвращает `model_unavailable`. Synthetic review
+в production не подставляется.
 
 ## Собрать и установить неизменяемый release
 

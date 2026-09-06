@@ -1,7 +1,7 @@
 # Evidence: 006 MVP launch
 
 Статус: MVP реализован и развёрнут. Дата: 2026-09-05/06. Baseline: `2a61354`.
-Рабочий release: `9aad090e1d007c16e55d79dbfcd166ce4ca7a8c5`.
+Рабочий release: `5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`.
 Адрес: [https://135.106.195.62](https://135.106.195.62). Доступ защищён общим gateway;
 credentials переданы владельцу через приватный локальный файл вне репозитория.
 
@@ -16,8 +16,9 @@ credentials переданы владельцу через приватный л
 ## Границы готовности
 
 Web, runtime, protected gateway, restore, фактический rollback, restart и timers проверены.
-Реальная модель не подключена: осталось задать совместимый профиль поставщика и ключ,
-включить модель и пройти отдельный compatibility smoke по [руководству оператора](../../docs/operations/deployment.md).
+Kimi K2 подключена через Hugging Face/Novita; реальный синтетический review→dialogue smoke
+на публичном серверном API прошёл. Профиль и порядок эксплуатации описаны в
+[руководстве оператора](../../docs/operations/deployment.md).
 Предметное качество LLM и оценка дизайна пользователем не проверялись. MVP рассчитан на одну
 доверенную группу с общим workspace/actor. Постоянное автоматическое внешнее хранилище
 копий ещё не выбрано; проверенная копия с VPS сохранена у владельца. На текущем Mac выявлен
@@ -261,3 +262,48 @@ unconfigured режиме. Историческая запись не менял
 Повторные проверки: 53 integration на чистой PostgreSQL, 52 registry/CLI/ML contract passed;
 Ruff, diff check и стандартный protected-path gate без исключений passed. Ранее пройденные
 web, migration и E2E gates не повторялись: UI, schema и runtime code этим исправлением не менялись.
+
+## Kimi K2 — фактический серверный выпуск 2026-09-06
+
+Установлен `5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`; previous указывает на
+`c61434de2ecba31e4bcd6d24aa045cd624bc64bd`. Штатный promotion создал predeploy backup
+`20260906T075020Z`. Набор скопирован в приватное хранилище владельца вне VPS и Git;
+локальные SHA-256 dump/archive и permissions 0700/0600 проверены. Новый restore drill
+для этого набора не проводился; предыдущий успешный drill сохранён выше.
+
+`model-configure` установил профиль и credential отдельно от release; runtime читает
+смонтированный secret. `model-enable` завершился успешно, declared GET probe сохранил
+`available`; gateway/TLS/origin/private ports passed. Таймеры backup, certificate renewal
+и model probe активны. Server app/web images закреплены на полном SHA нового release.
+
+Реальный smoke через `https://135.106.195.62/api/v1` с системной проверкой TLS и gateway
+credentials использовал только явно синтетический `synthetic-kimi-smoke.md` из двух строк.
+
+| Проверка | Результат |
+| --- | --- |
+| Review run | `542b68e9-2c69-425e-a525-81a37f9e8718`, completed, 47.579 s, 6 findings |
+| Model provenance | `huggingface-novita`, `moonshotai/kimi-k2-instruct`; model version unknown |
+| Review usage | 1 244 input / 1 873 output tokens |
+| Skill snapshot | `review-data-spec` 1.0.1, canonical digest `93f89a407f19fb3035bee58b8aa355aaf2587bfab7f1bcf4663baad9fbdc71f7` |
+| Dialogue turn | `88891ba4-640d-45e8-a999-976dc04c8d7f`, completed, 4.272 s, revision 2 |
+| Immutable report | SHA-256 `ace7735968631e56034d2a017fede73240d71e2a9d2d29a5bb85c527faf34a33`; bytes unchanged after dialogue |
+
+Это один успешный compatibility smoke, без повторов генерации. Он не измеряет качество на
+пользовательских документах, надёжность провайдера или SLA. Прежние локальные неуспешные
+прогоны не опровергаются этим результатом. Сохраняются лимиты профиля: 32 768 UTF-8 bytes
+на полный вход с инструкциями и schema, 4 096 output tokens; chunking и auto-repair не добавлены.
+
+Откат на previous требует успешного `model-disable.sh`, затем `rollback-release.sh` с полным SHA
+`c61434de2ecba31e4bcd6d24aa045cd624bc64bd`: эта версия пригодна для unconfigured работы,
+но не для повторного включения Kimi до возврата исправленного release.
+DB/volumes и immutable версии сохраняются.
+
+После завершения генераций выполнен restart API. Проверка непосредственно в окне запуска
+получила 502; после перехода контейнера в healthy полный deployment probe прошёл.
+Отдельное чтение подтвердило прежний SHA-256 отчёта, completed dialogue с revision 2 и
+доступную модель. Model-probe service завершает обновления с exit 0. Локальные одноразовые
+Compose-стенды проверки удалены вместе с их тестовыми volumes; production volumes сохранены.
+
+T032–T037 выполнены. Документационный commit после установленного release не меняет код
+на сервере. Ключи, документы и журналы не входят в коммиты; постоянное автоматическое
+offsite-хранилище и предметная оценка остаются отдельными продолжениями.
