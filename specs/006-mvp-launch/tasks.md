@@ -92,3 +92,10 @@ SpecKit baseline → visual → backend semantics → functional web → deploym
 - [X] T035 Проверить реальный синтетический review→dialogue через сервер, неизменность report и доступность отката; записать фактический release и результаты в evidence и operator guide.
 - [X] T036 Устранить обнаруженный полным gate старый drift bootstrap/runtime dialogue budget без перезаписи immutable versions, проверить bootstrap→runtime на нестандартном лимите; актуализировать exact model ID и image в synthetic Compose fixture. Предшествует завершению T033.
 - [X] T037 Устранить обнаруженный серверным preflight конфликт legacy/canonical digest у review-data-spec 1.0.0: выпустить пакет 1.0.1, проверить переход unconfigured→ML→unconfigured с сохранением прежней записи; повторить promotion до T034–T035.
+
+## Phase 15: DeepSeek через Yandex AI Studio — 2026-09-06
+
+Пользователь выбрал DeepSeek, запретил пробные генерации и поручил сразу запустить сервер.
+
+- [X] T038 Добавить профиль DeepSeek V4 Flash, общий Yandex auth для generation/probe и сохранение ключа вне Git; проверить конфигурацию и offline transport без внешних генераций.
+- [ ] T039 Выпустить обновление на базе текущего production release, сохранить предыдущие model files, включить профиль Яндекса и проверить только GET каталога и инфраструктурную readiness.

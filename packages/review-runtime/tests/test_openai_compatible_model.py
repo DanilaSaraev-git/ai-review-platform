@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 import pytest
@@ -14,7 +15,7 @@ from review_core.ports.models import (
     ModelProfileSnapshot,
 )
 from review_runtime.config.model_profiles import ModelProfile, profile_config_digest
-from review_runtime.models.config import SecretProvider
+from review_runtime.models.config import FileSecretProvider, SecretProvider
 from review_runtime.models.openai_compatible import OpenAICompatibleModelAdapter
 
 from tests.integration.fake_model_provider import FakeModelProvider, ScriptedReply, chat_completion
@@ -162,6 +163,46 @@ async def test_native_schema_and_nullable_parameters_are_profile_gated() -> None
         {"role": "user", "content": "Untrusted synthetic document text."},
     ]
     assert all(value is not None for value in payload.values())
+
+
+async def test_yandex_uses_mounted_api_key_and_folder_from_model_uri(tmp_path: Path) -> None:
+    provider = FakeModelProvider([ScriptedReply(chat_completion("{}"))])
+    model_profile = profile(provider="yandex", model="gpt://synthetic-folder/deepseek-v4-flash/latest")
+    secret_file = tmp_path / "model-token"
+    secret_file.write_text("synthetic-api-key\n", encoding="utf-8")
+    async with httpx.AsyncClient(transport=provider.transport) as client:
+        adapter = OpenAICompatibleModelAdapter(
+            profile=model_profile,
+            client=client,
+            secrets=FileSecretProvider(reference="REVIEW_SYNTHETIC_TOKEN", path=secret_file),
+            max_response_bytes=4096,
+        )
+        await adapter.generate(request(model_profile))
+
+    sent = provider.requests[0]
+    assert sent.headers["authorization"] == "Api-Key synthetic-api-key"
+    assert sent.headers["openai-project"] == "synthetic-folder"
+    assert sent.headers["content-type"] == "application/json"
+    assert json.loads(sent.content)["model"] == model_profile.model
+
+
+@pytest.mark.parametrize("model", ["deepseek-v4-flash", "gpt:///deepseek-v4-flash"])
+async def test_yandex_invalid_model_uri_fails_safely_before_network(model: str) -> None:
+    provider = FakeModelProvider([])
+    model_profile = profile(provider="yandex", model=model)
+    async with httpx.AsyncClient(transport=provider.transport) as client:
+        adapter = OpenAICompatibleModelAdapter(
+            profile=model_profile,
+            client=client,
+            secrets=StaticSecrets(),
+            max_response_bytes=4096,
+        )
+        with pytest.raises(ModelAdapterError) as caught:
+            await adapter.generate(request(model_profile))
+
+    assert caught.value.code is ModelErrorCode.MODEL_NOT_FOUND
+    assert "synthetic-secret" not in str(caught.value)
+    assert provider.call_count == 0
 
 
 @pytest.mark.parametrize("purpose", [GenerationPurpose.REVIEW, GenerationPurpose.DIALOGUE])

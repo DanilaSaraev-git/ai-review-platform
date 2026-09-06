@@ -8,6 +8,11 @@
 
 ## Technical Context
 
+Дополнение Yandex от 2026-09-06: отдельный выпуск от установленного production commit;
+изменяются только HTTP-заголовки model transport/probe, конфигурация и operator helpers.
+Штатные профиль/секрет и model-enable применяются после сборки. Проверки ограничены offline
+transport, GET каталога и инфраструктурой; model smoke и прогоны документов не выполняются.
+
 - **Language/Version**: TypeScript 6.0.3, React 19.2.8, Node 24; Python 3.14.7.
 - **Primary Dependencies**: Vite 8, TanStack Query, Orval, Radix, FastAPI, existing runtime adapters.
 - **Storage**: PostgreSQL, POSIX artifacts; изменение схемы не запланировано.
