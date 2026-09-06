@@ -2,6 +2,12 @@ import { http, HttpResponse } from 'msw';
 import type { RequestHandler } from 'msw';
 import {
   getGetBootstrapMockHandler,
+  getGetDocumentVersionFamilyMockHandler,
+  getGetDocumentFamilyMockHandler,
+  getListDocumentFamiliesMockHandler,
+  getListDocumentFamilyVersionsMockHandler,
+  getListDocumentFamilyRunsMockHandler,
+  getGetReviewCycleMockHandler,
   getGetDocumentMockHandler,
   getListDocumentsMockHandler,
   getListModelProfilesMockHandler,
@@ -46,6 +52,12 @@ const documentsById = () =>
 export function baseHandlers(): RequestHandler[] {
   return [
     getGetBootstrapMockHandler(fixtures.bootstrap),
+    getGetDocumentVersionFamilyMockHandler(fixtures.documentFamilyVersion),
+    getGetDocumentFamilyMockHandler(fixtures.documentFamily),
+    getListDocumentFamiliesMockHandler({ items: [fixtures.documentFamily], next_cursor: null }),
+    getListDocumentFamilyVersionsMockHandler({ items: [fixtures.documentFamilyVersion], next_cursor: null }),
+    getListDocumentFamilyRunsMockHandler(fixtures.runPage),
+    getGetReviewCycleMockHandler(fixtures.firstCycle),
     getListDocumentsMockHandler(fixtures.documentPage),
     getUploadDocumentMockHandler(fixtures.mainDocument),
     getGetDocumentMockHandler(({ params }) => {

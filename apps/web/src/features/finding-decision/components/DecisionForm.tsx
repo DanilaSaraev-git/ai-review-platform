@@ -27,12 +27,14 @@ export function DecisionForm({
   runId,
   findingId,
   decision,
+  expectedRevision,
   prefilledResolution,
 }: {
   workspaceId: string;
   runId: string;
   findingId: string;
   decision: HumanDecision | undefined;
+  expectedRevision?: number;
   prefilledResolution?: string | null;
 }) {
   const [values, setValues] = useState<DecisionFormValues>(() => toFormValues(decision));
@@ -68,7 +70,7 @@ export function DecisionForm({
     }
     setValidationError(null);
     reset();
-    const body = toPutFindingDecision(nextValues, decision?.revision ?? 0);
+    const body = toPutFindingDecision(nextValues, expectedRevision ?? decision?.revision ?? 0);
     try {
       const result = await save(body);
       setValues(toFormValues(result));

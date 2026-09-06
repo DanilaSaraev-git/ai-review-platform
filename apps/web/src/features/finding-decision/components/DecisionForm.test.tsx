@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as fixtures from '@/mocks/fixtures';
-import { useScenario } from '@/mocks/server';
+import { getPutFindingDecisionMockHandler } from '@/api/generated/endpoints.msw';
+import type { PutFindingDecision } from '@/api/generated/model';
+import { mockServer, useScenario } from '@/mocks/server';
 import { renderWithQueryClient } from '@/test/render';
 import { DecisionForm } from './DecisionForm';
 
@@ -21,6 +23,18 @@ function renderForm() {
 }
 
 describe('DecisionForm (FR-025, FR-027, SC-005)', () => {
+  it('перенесённая оценка сохраняется с ревизией текущего замечания', async () => {
+    let body: PutFindingDecision | undefined;
+    mockServer.use(getPutFindingDecisionMockHandler(async ({ request }) => {
+      body = await request.json() as PutFindingDecision;
+      return { ...fixtures.decision, revision: 1 };
+    }));
+    renderWithQueryClient(<DecisionForm workspaceId={fixtures.workspaceId} runId={fixtures.runId} findingId={fixtures.findingId} decision={{ ...fixtures.decision, revision: 7 }} expectedRevision={0} />);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Сохранить решение' }));
+    await screen.findByText(/Решение сохранено/u);
+    expect(body?.expected_revision).toBe(0);
+  });
+
   it('не сохраняет решение без обоснования и объясняет причину', async () => {
     const user = userEvent.setup();
     renderForm();

@@ -16,7 +16,7 @@ export function FindingPage() {
   const navigate = useNavigate();
   const { workspaceId } = useWorkspaceRun();
   const { report, isLoading, isUnavailable, isNotFound, error, retry } = useReviewReport(workspaceId, runId);
-  const { byFindingId, error: statesError, retry: retryStates } = useFindingStates(workspaceId, runId);
+  const { byFindingId, rawByFindingId, carriedByFindingId, error: statesError, retry: retryStates } = useFindingStates(workspaceId, runId);
   const [prefilledResolution, setPrefilledResolution] = useState<string | null>(null);
   const isDialogue = location.pathname.endsWith('/dialogue');
 
@@ -48,6 +48,7 @@ export function FindingPage() {
         <Button className="mt-2" onClick={() => void retryStates()}>Повторить</Button>
       </Callout></div> : null}
       <FindingCard finding={finding} state={state} runId={runId} isSelected />
+      {carriedByFindingId.has(finding.id) ? <p className="px-5 py-3 text-xs text-ink-muted">Оценка перенесена из предыдущей проверки с исходным автором и датой. <Link to={`/runs/${runId}/report/changes`} className="text-accent">Посмотреть происхождение</Link></p> : null}
       <div className="numbat-finding-tabs" role="tablist" aria-label="Работа с замечанием" aria-orientation="horizontal"
         onKeyDown={(event) => {
           const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
@@ -75,7 +76,7 @@ export function FindingPage() {
       </div>
       <div id={`decision-panel-${finding.id}`} role="tabpanel" aria-labelledby={`decision-tab-${finding.id}`} tabIndex={0} hidden={isDialogue}>
         <DecisionForm key={`decision-${finding.id}`} workspaceId={workspaceId} runId={runId} findingId={finding.id}
-          decision={state?.decision} prefilledResolution={prefilledResolution} />
+          decision={state?.decision} expectedRevision={rawByFindingId.get(finding.id)?.decision.revision ?? 0} prefilledResolution={prefilledResolution} />
       </div>
     </div>
   );

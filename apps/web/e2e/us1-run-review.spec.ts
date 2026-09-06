@@ -34,22 +34,22 @@ test.describe('Запуск проверки загруженного ТЗ', () 
     await expect(page.getByRole('link', { name: 'Открыть отчёт' })).toBeVisible();
   });
 
-  test('повторный запуск с теми же настройками не создаёт второй запуск', async ({ page }) => {
+  test('новое намерение с теми же настройками создаёт отдельный запуск', async ({ page }) => {
     await page.goto('/new');
     await uploadSyntheticDocument(page);
     await startRun(page);
     await expect(page).toHaveURL(/\/runs\/[0-9a-f-]+$/);
 
-    // Повтор того же намерения: тот же документ, тот же профиль, тот же
-    // профиль модели. Ключ идемпотентности совпадает, поэтому сервис
-    // воспроизводит исходный запуск (FR-012, SC-009).
+    // Новая открытая форма — новое намерение (SpecKit 009). Сетевые повторы
+    // внутри одной формы сохраняют ключ; одинаковые параметры новой формы
+    // больше не возвращают навсегда прежний запуск.
     await page.goto('/new');
     await uploadSyntheticDocument(page);
     await startRun(page);
     await expect(page).toHaveURL(/\/runs\/[0-9a-f-]+$/);
 
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /Проверка от/ })).toHaveCount(1);
+    await expect(page.getByRole('link', { name: /Проверка от/ })).toHaveCount(2);
   });
 
   test('неудачное завершение называет причину и не предлагает отчёт', async ({ page }) => {
@@ -59,7 +59,7 @@ test.describe('Запуск проверки загруженного ТЗ', () 
     await startRun(page);
 
     await expect(page.getByText('Не удалось')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Отчёт не опубликован.')).toBeVisible();
+    await expect(page.getByText('Отчёт не опубликован.', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Открыть отчёт' })).toHaveCount(0);
   });
 

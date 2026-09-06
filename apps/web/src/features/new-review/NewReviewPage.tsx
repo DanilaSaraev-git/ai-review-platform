@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { useListModelProfiles, useListReviewProfiles } from '@/api/generated/endpoints';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useQueries } from '@tanstack/react-query';
+import { getGetDocumentQueryOptions, useGetDocument, useGetReviewRun, useListModelProfiles, useListReviewProfiles } from '@/api/generated/endpoints';
 import type { Document, ModelProfile, ReviewProfile } from '@/api/generated/model';
 import { isProblem } from '@/api/errors';
 import { Button, Callout, Spinner } from '@/components/ui';
@@ -20,6 +21,13 @@ import { runReadiness } from './lib/run-readiness';
  * Основной документ остаётся рядом с параметрами и контекстом запуска.
  */
 export function NewReviewPage() {
+  const [params] = useSearchParams();
+  const repeatRunId = params.get('repeat') ?? '';
+  const savedDocumentId = params.get('document') ?? '';
+  return <ReviewSetup key={`${repeatRunId}:${savedDocumentId}`} repeatRunId={repeatRunId} savedDocumentId={savedDocumentId} />;
+}
+
+function ReviewSetup({ repeatRunId, savedDocumentId }: { repeatRunId: string; savedDocumentId: string }) {
   const navigate = useNavigate();
   const { workspaceId, limits, isLoading, error: bootstrapError, retry: retryBootstrap } = useBootstrap();
   const [document, setDocument] = useState<Document | undefined>(undefined);
@@ -32,26 +40,56 @@ export function NewReviewPage() {
   const modelProfilesQuery = useListModelProfiles(workspaceId, { query: { enabled: Boolean(workspaceId) } });
   const { createRun, isPending, error } = useCreateReviewRun();
 
+  const isSaved = Boolean(repeatRunId || savedDocumentId);
+  const priorRun = useGetReviewRun(workspaceId, repeatRunId, { query: { enabled: Boolean(workspaceId && repeatRunId) } });
+  const sourceDocumentId = priorRun.data?.document_id ?? (savedDocumentId || document?.id || '');
+  const savedDocument = useGetDocument(workspaceId, sourceDocumentId, { query: { enabled: Boolean(workspaceId && sourceDocumentId), refetchInterval: (query) => query.state.data?.extraction_state === 'pending' ? 2000 : false } });
+  const contexts = useQueries({ queries: (priorRun.data?.context_document_ids ?? []).map((id) => getGetDocumentQueryOptions(workspaceId, id)) });
+  const [initialized, setInitialized] = useState(!isSaved);
+  const [prefillWarnings, setPrefillWarnings] = useState<string[]>([]);
+  const contextReady = contexts.every((query) => query.isSuccess);
+  const contextError = contexts.some((query) => query.isError);
+
+  useEffect(() => {
+    if (initialized || !savedDocument.data || !profilesQuery.data || !modelProfilesQuery.data || !contextReady || (repeatRunId && !priorRun.data)) return;
+    const previous = priorRun.data?.execution_snapshot;
+    const previousProfile = profilesQuery.data.items.find((item) => item.id === previous?.profile.id && item.version === previous.profile.version);
+    const previousModel = modelProfilesQuery.data.items.find((item) => item.id === previous?.model_profile.id && item.version === previous.model_profile.version && item.availability === 'available');
+    setDocument(savedDocument.data);
+    setContextDocuments(contexts.flatMap((query) => query.data ? [query.data] : []));
+    setProfile(previousProfile ?? profilesQuery.data.items[0]);
+    setModelProfile(previousModel ?? modelProfilesQuery.data.items.find((item) => item.availability === 'available'));
+    setPrefillWarnings([
+      ...(previous && !previousProfile ? ['Прежний профиль проверки недоступен. Проверьте доступные профили перед запуском.'] : []),
+      ...(previous && !previousModel ? ['Прежняя модель недоступна. Проверьте доступные модели перед запуском.'] : []),
+    ]);
+    setInitialized(true);
+  }, [initialized, savedDocument.data, profilesQuery.data, modelProfilesQuery.data, contextReady, contexts, repeatRunId, priorRun.data]);
+
+  useEffect(() => {
+    if (savedDocument.data && ((isSaved && !document) || (savedDocument.data.id === document?.id && savedDocument.data.extraction_state !== document.extraction_state))) setDocument(savedDocument.data);
+  }, [isSaved, document, savedDocument.data]);
+
   const readiness = runReadiness(document);
-  const canStart = readiness.canStart && Boolean(profile && modelProfile) && !isPending;
+  const canStart = initialized && readiness.canStart && Boolean(profile && modelProfile) && !isPending;
   const modelProfiles = modelProfilesQuery.data?.items ?? [];
   const hasNoAvailableModel = modelProfilesQuery.isSuccess && !modelProfiles.some((item) => item.availability === 'available');
   const modelWasNotConfigured = modelProfiles.some((item) => /unconfigured|не подключ/iu.test(`${item.id} ${item.name}`));
 
   useEffect(() => {
-    if (!profile && profilesQuery.data?.items[0]) {
+    if (!isSaved && !profile && profilesQuery.data?.items[0]) {
       setProfile(profilesQuery.data.items[0]);
     }
-  }, [profile, profilesQuery.data]);
+  }, [isSaved, profile, profilesQuery.data]);
 
   useEffect(() => {
-    if (!modelProfile) {
+    if (!isSaved && !modelProfile) {
       const available = modelProfilesQuery.data?.items.find((item) => item.availability === 'available');
       if (available) {
         setModelProfile(available);
       }
     }
-  }, [modelProfile, modelProfilesQuery.data]);
+  }, [isSaved, modelProfile, modelProfilesQuery.data]);
 
   async function handleStart(): Promise<void> {
     if (!document || !profile || !modelProfile) {
@@ -64,6 +102,7 @@ export function NewReviewPage() {
         contextDocumentIds: contextDocuments.map((item) => item.id),
         profile,
         modelProfile,
+        locale: priorRun.data?.locale ?? 'ru-RU',
       });
       void navigate(`/runs/${run.id}`);
     } catch {
@@ -98,8 +137,15 @@ export function NewReviewPage() {
           </div>
         ) : null}
         <div className="entry-setup">
-          <h1>Новая проверка</h1>
-          <DocumentUpload workspaceId={workspaceId} limits={limits} document={document} onUploaded={setDocument} />
+          <h1>{repeatRunId ? 'Повторная проверка' : 'Новая проверка'}</h1>
+          {isSaved ? <section className="rounded-[6px] border border-line p-4" aria-label="Сохранённый документ">
+            {document ? <><p className="break-words text-sm font-medium">{document.filename}</p><p className="mt-2 text-xs text-ink-muted">Сохранённая версия. Запуск использует её исходник.</p></> : <Spinner label="Загружаем сохранённую версию и параметры…" />}
+            {repeatRunId ? <Link to={`/runs/${repeatRunId}`} className="mt-2 inline-block text-xs text-accent">Предыдущая проверка</Link> : null}
+          </section> : <DocumentUpload workspaceId={workspaceId} limits={limits} document={document} onUploaded={setDocument} />}
+          {prefillWarnings.map((warning) => <div key={warning} className="mt-3"><Callout tone="warn" title={warning} /></div>)}
+          {priorRun.isError || savedDocument.isError || contextError ? <div className="mt-3"><Callout tone="danger" title="Не удалось загрузить сохранённые параметры">
+            <Button onClick={() => { if (repeatRunId) void priorRun.refetch(); if (sourceDocumentId) void savedDocument.refetch(); contexts.forEach((query) => { void query.refetch(); }); }}>Повторить загрузку</Button>
+          </Callout></div> : null}
 
           <section aria-labelledby="settings-title" className="entry-settings-section">
             <h2 id="settings-title">Параметры проверки</h2>

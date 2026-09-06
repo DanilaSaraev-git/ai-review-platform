@@ -1,6 +1,9 @@
 import { createBrowserRouter } from 'react-router';
 import { AppLayout } from './layout/AppLayout';
 import { NotFoundPage } from './NotFoundPage';
+import { DocumentsPage } from '@/features/document-cycle/DocumentsPage';
+import { DocumentFamilyPage } from '@/features/document-cycle/DocumentFamilyPage';
+import { ReviewCyclePage } from '@/features/document-cycle/ReviewCyclePage';
 import { HomePage } from '@/features/review-run/HomePage';
 import { RunPage } from '@/features/review-run/RunPage';
 import { NewReviewPage } from '@/features/new-review/NewReviewPage';
@@ -24,12 +27,15 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'new', element: <NewReviewPage /> },
+      { path: 'documents', element: <DocumentsPage /> },
+      { path: 'documents/:familyId', element: <DocumentFamilyPage /> },
       {
         path: 'runs/:runId',
         element: <ReviewWorkspaceLayout />,
         children: [
           { index: true, element: <RunPage /> },
           { path: 'report', element: <ReportPage /> },
+          { path: 'report/changes', element: <ReviewCyclePage /> },
           { path: 'report/findings/:findingId', element: <FindingPage /> },
           { path: 'report/findings/:findingId/dialogue', element: <FindingPage /> },
         ],

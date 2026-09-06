@@ -1,5 +1,7 @@
 import { Link, Outlet, useLocation, useOutletContext, useParams } from 'react-router';
-import { useGetDocument } from '@/api/generated/endpoints';
+import { useGetDocument, useGetDocumentVersionFamily } from '@/api/generated/endpoints';
+import { formatDateTime } from '@/lib/format';
+import { isDemoMode } from '@/app/demo-mode';
 import { isNotFound } from '@/api/errors';
 import { NotFoundPage } from '@/app/NotFoundPage';
 import { DocumentViewer } from '@/components/document-viewer';
@@ -33,6 +35,7 @@ export function ReviewWorkspaceLayout() {
   const documentQuery = useGetDocument(workspaceId, documentId, {
     query: { enabled: Boolean(workspaceId && documentId), staleTime: Infinity },
   });
+  const membership = useGetDocumentVersionFamily(workspaceId, documentId, { query: { enabled: Boolean(workspaceId && documentId && !isDemoMode), staleTime: Infinity } });
   const finding = report?.findings.find((item) => item.id === findingId);
 
   if (bootstrapError && !workspaceId) {
@@ -52,6 +55,8 @@ export function ReviewWorkspaceLayout() {
           <span aria-hidden="true">/</span>
         </nav>
         <h1 className="numbat-workspace-filename">{documentQuery.data?.filename ?? 'Проверка документа'}</h1>
+        {membership.data ? <Link to={`/documents/${membership.data.family_id}`} className="text-xs text-accent">Версия {membership.data.version_number} · История документа</Link> : null}
+        {runState.run ? <><time className="text-xs text-ink-muted" dateTime={runState.run.created_at}>{formatDateTime(runState.run.created_at)}</time><Link to={`/new?repeat=${runId}`} className="text-xs text-accent">Проверить повторно</Link></> : null}
         {isReport && report ? <div className="numbat-workspace-progress">
           <DecisionProgress reviewed={reviewedCount} total={report.findings.length} />
         </div> : null}
