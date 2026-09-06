@@ -13,12 +13,12 @@ PROTECTED = (
     "specs/001-review-data-spec-poc",
     "specs/002-target-review-platform",
 )
-PINNED_BASELINE = "6ee9afcd01cfbd75e030d1a6e6641d7c965ddf53"
+PINNED_BASELINE = "e35bd79a2100106e7c300a23121e856cecebf4c2"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    # Baseline includes the accepted unified review workflow on main.
+    # Baseline includes the user-requested integration of cancellation and the full demo cycle.
     parser.add_argument("--baseline", default=PINNED_BASELINE)
     parser.add_argument("--json", action="store_true")
     parser.add_argument(
