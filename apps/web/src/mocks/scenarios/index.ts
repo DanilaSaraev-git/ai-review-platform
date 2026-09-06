@@ -16,6 +16,8 @@ import { historyError } from './history-error';
 import { reportErrorRetry } from './report-error-retry';
 import { modelUnconfigured } from './model-unconfigured';
 import { reportLong } from './report-long';
+import { demo } from './demo';
+import type { DemoPackage } from '@/mocks/demo-package';
 
 /**
  * Реестр именованных сценариев моков (contracts/msw-scenarios.md).
@@ -42,15 +44,19 @@ export const scenarios = {
   'report-long': reportLong,
 } as const;
 
-export type ScenarioName = keyof typeof scenarios;
+export type ScenarioName = keyof typeof scenarios | 'demo';
 
-export const DEFAULT_SCENARIO: ScenarioName = 'happy-path';
+export const DEFAULT_SCENARIO = 'happy-path';
 
 export function isScenarioName(value: string): value is ScenarioName {
-  return value in scenarios;
+  return value === 'demo' || value in scenarios;
 }
 
-export function handlersFor(name: string = DEFAULT_SCENARIO): RequestHandler[] {
-  const scenario = isScenarioName(name) ? scenarios[name] : scenarios[DEFAULT_SCENARIO];
+export function handlersFor(name: string = DEFAULT_SCENARIO, data?: DemoPackage): RequestHandler[] {
+  if (name === 'demo') {
+    if (!data) throw new Error('Демонстрационные материалы не загружены.');
+    return demo(data);
+  }
+  const scenario = name in scenarios ? scenarios[name as keyof typeof scenarios] : scenarios[DEFAULT_SCENARIO];
   return scenario();
 }

@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet } from 'react-router';
+import { appBaseUrl, DEMO_NOTICE, isDemoMode } from '@/app/demo-mode';
 
 /**
  * Каркас страницы: шапка, левая панель разделов и область маршрута.
@@ -13,14 +14,9 @@ export function AppLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-canvas lg:h-screen lg:overflow-hidden">
       <header className="sticky top-0 z-30 flex h-13 shrink-0 items-center gap-3 border-b border-line bg-surface px-3 shadow-[0_1px_2px_rgba(23,32,51,0.03)] md:px-4">
-        <span
-          aria-hidden="true"
-          className="flex size-7 items-center justify-center rounded-[5px] bg-accent text-[11px] font-bold tracking-[-0.02em] text-white"
-        >
-          AR
-        </span>
+        <img src={`${appBaseUrl}numbat-icon.png`} alt="" className="size-7 rounded-[5px]" />
         <Link to="/" className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
-          AI Review
+          Numbat
         </Link>
         <span aria-hidden="true" className="mx-1 h-6 w-px bg-line" />
         <nav aria-label="Разделы" className="flex h-full items-stretch">
@@ -35,7 +31,17 @@ export function AppLayout() {
             Проверки
           </NavLink>
         </nav>
+        <a href={isDemoMode ? '/' : '/demo/new'} className="ml-auto text-xs font-semibold text-accent hover:underline">
+          {isDemoMode ? 'К рабочему сервису' : 'Деморежим'}
+        </a>
       </header>
+
+      {isDemoMode ? (
+        <aside aria-label="Демонстрационный режим" className="shrink-0 border-b border-accent/25 bg-accent/5 px-4 py-2 text-xs leading-relaxed text-ink">
+          <strong className="mr-2 text-accent">Деморежим · без модели</strong>
+          {DEMO_NOTICE} Диалог содержит готовые ответы. Решения сохраняются только в этой вкладке.
+        </aside>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 pb-14 md:pb-0">
         <SectionRail />

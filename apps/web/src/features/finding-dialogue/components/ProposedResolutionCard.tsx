@@ -1,6 +1,7 @@
 import type { ProposedResolution } from '@/api/generated/model';
 import { Button } from '@/components/ui';
 import { TRANSFER_HINT, TRANSFER_LABEL } from '../lib/apply-proposed-resolution';
+import { isDemoMode } from '@/app/demo-mode';
 
 /**
  * Предложенная моделью резолюция (FR-029, SC-007).
@@ -17,7 +18,7 @@ export function ProposedResolutionCard({
 }) {
   return (
     <div className="rounded border border-line bg-surface-muted p-3">
-      <h4 className="text-xs font-semibold text-ink">Предложенная моделью формулировка</h4>
+      <h4 className="text-xs font-semibold text-ink">{isDemoMode ? 'Подготовленная формулировка' : 'Предложенная моделью формулировка'}</h4>
       <p className="mt-1 text-sm text-ink">{proposal.text}</p>
       <p className="mt-1 text-xs text-ink-muted">{proposal.rationale}</p>
       <p className="mt-2 text-xs text-ink-muted">{TRANSFER_HINT}</p>

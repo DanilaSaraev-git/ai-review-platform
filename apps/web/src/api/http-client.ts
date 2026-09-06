@@ -1,5 +1,6 @@
 import { ApiProblemError, parseProblem } from './errors';
 import { idempotencyKeyFor, requestIntent } from './idempotency';
+import { appBaseUrl, isDemoMode } from '@/app/demo-mode';
 
 /**
  * Единственная точка выхода в сеть. Отвечает за базовый URL, заголовок
@@ -19,6 +20,9 @@ import { idempotencyKeyFor, requestIntent } from './idempotency';
 const IDEMPOTENT_PATHS = /\/(review-runs|turns|retry)$/u;
 
 export function apiBaseUrl(): string {
+  if (isDemoMode) {
+    return `${appBaseUrl}api`;
+  }
   return import.meta.env.VITE_API_BASE_URL ?? '/api';
 }
 
@@ -43,6 +47,9 @@ async function readBody(response: Response): Promise<unknown> {
 export async function httpClient<T>(url: string, options: RequestInit = {}): Promise<T> {
   const absolute = url.startsWith('http') ? url : `${apiBaseUrl()}${url}`;
   const pathname = new URL(absolute, globalThis.location?.origin ?? 'http://localhost').pathname;
+  if (isDemoMode && !absolute.startsWith(`${apiBaseUrl()}/`)) {
+    throw new Error('В деморежиме доступен только демонстрационный API.');
+  }
   const method = options.method ?? 'GET';
   const headers = new Headers(options.headers);
 

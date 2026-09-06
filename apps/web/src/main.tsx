@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router';
 import { AppProviders } from './app/providers';
 import { router } from './app/router';
 import './styles/index.css';
+import { appBaseUrl, isDemoMode } from './app/demo-mode';
 
 /**
  * Worker моков включается только по переменной окружения VITE_MSW_SCENARIO.
@@ -28,7 +29,14 @@ async function startMocks(): Promise<void> {
     return;
   }
   const { createWorker } = await import('./mocks/browser');
-  await createWorker(scenario).start({ onUnhandledRequest: 'bypass', quiet: true });
+  const worker = await createWorker(scenario);
+  await worker.start({
+    serviceWorker: { url: `${appBaseUrl}mockServiceWorker.js`, options: { scope: appBaseUrl } },
+    onUnhandledRequest(request, print) {
+      if (isDemoMode && /\/(?:api|v1)(?:\/|$)/u.test(new URL(request.url).pathname)) print.error();
+    },
+    quiet: true,
+  });
 }
 
 async function bootstrap(): Promise<void> {
@@ -46,4 +54,14 @@ async function bootstrap(): Promise<void> {
   );
 }
 
-void bootstrap();
+void bootstrap().catch(() => {
+  const container = document.getElementById('root');
+  if (!container) return;
+  createRoot(container).render(
+    <main className="mx-auto max-w-xl p-6">
+      <h1 className="text-lg font-semibold">{isDemoMode ? 'Деморежим недоступен' : 'Не удалось открыть приложение'}</h1>
+      <p className="mt-3 text-sm">{isDemoMode ? 'Не удалось загрузить демонстрационные материалы или запустить деморежим. Модель не вызывалась.' : 'Обновите страницу и повторите попытку.'}</p>
+      <button className="mt-4 text-sm font-semibold text-accent underline" onClick={() => window.location.reload()}>Повторить</button>
+    </main>,
+  );
+});

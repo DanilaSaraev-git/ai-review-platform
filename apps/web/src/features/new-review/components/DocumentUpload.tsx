@@ -6,6 +6,7 @@ import { Button, Callout, Field, StatusBadge } from '@/components/ui';
 import { EXTRACTION_STATE_TEXT } from '@/lib/error-messages';
 import { formatBytes, formatMediaType } from '@/lib/format';
 import { SUPPORTED_EXTENSIONS, SUPPORTED_FORMATS_TEXT, validateUpload } from '../lib/validate-upload';
+import { isDemoMode } from '@/app/demo-mode';
 
 /**
  * Загрузка одного основного документа на проверку (FR-005).
@@ -28,6 +29,7 @@ export function DocumentUpload({
   hint?: string;
 }) {
   const [localError, setLocalError] = useState<string | null>(null);
+  const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useUploadDocument();
 
@@ -47,7 +49,10 @@ export function DocumentUpload({
       return;
     }
     try {
-      const uploaded = await upload.mutateAsync({ workspaceId, data: { file } });
+      // Demo only uses the selection as a trigger. The file bytes stay in the browser.
+      const uploadFile = isDemoMode ? new File([], file.name, { type: file.type }) : file;
+      const uploaded = await upload.mutateAsync({ workspaceId, data: { file: uploadFile } });
+      setSelectedFilename(file.name);
       onUploaded(uploaded);
     } catch {
       // Причина показывается в поле формы из состояния мутации.
@@ -90,6 +95,13 @@ export function DocumentUpload({
       ) : null}
 
       {upload.isPending ? <Callout title="Загружаем документ…" tone="progress" /> : null}
+
+      {isDemoMode && selectedFilename ? (
+        <p className="text-xs leading-relaxed text-ink-muted">
+          Выбран файл «{selectedFilename}». Он запускает демосценарий; его содержимое не отправляется и не анализируется.
+          Ниже — документ подготовленного примера.
+        </p>
+      ) : null}
 
       {document ? (
         <div className="flex flex-wrap items-center gap-3 rounded-[5px] border border-line bg-surface-muted p-3">

@@ -5,6 +5,7 @@ import { Button, Callout, Field, TextArea } from '@/components/ui';
 import { blockedReasonText } from '@/lib/error-messages';
 import { dialogueConflictState } from '../lib/conflict';
 import { useCreateTurn } from '../api/use-create-turn';
+import { DEMO_REPLY_NOTICE, isDemoMode } from '@/app/demo-mode';
 
 /**
  * Отправка одного хода (FR-031, FR-032, FR-036).
@@ -49,7 +50,7 @@ export function TurnComposer({
 
   return (
     <div className="flex flex-col gap-2">
-      <Field label="Уточняющий вопрос по замечанию" hint="Один вопрос за раз: следующий станет доступен после ответа.">
+      <Field label="Уточняющий вопрос по замечанию" hint={isDemoMode ? DEMO_REPLY_NOTICE : 'Один вопрос за раз: следующий станет доступен после ответа.'}>
         {(id, describedBy) => (
           <TextArea
             id={id}

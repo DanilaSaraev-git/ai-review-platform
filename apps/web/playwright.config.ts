@@ -4,6 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Тот же набор спецификаций выполняется против реального backend,
 // если VITE_MSW_SCENARIO пуст, а VITE_API_BASE_URL указывает на API.
 const scenario = process.env.VITE_MSW_SCENARIO ?? 'happy-path';
+const port = Number(process.env.PLAYWRIGHT_PORT ?? 5173);
 
 export default defineConfig({
   testDir: './e2e',
@@ -12,7 +13,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${port}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -22,8 +23,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --port 5173 --strictPort',
-    url: 'http://localhost:5173',
+    command: `npm run dev -- --port ${port} --strictPort`,
+    url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
     env: {
       VITE_MSW_SCENARIO: scenario,

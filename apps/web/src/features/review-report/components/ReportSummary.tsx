@@ -1,6 +1,7 @@
 import type { ReviewReport } from '@/api/generated/model';
 import { StatusBadge } from '@/components/ui';
 import { formatDateTime } from '@/lib/format';
+import { isDemoMode } from '@/app/demo-mode';
 
 /** Сервер прямо маркирует офлайн/примерное исполнение в provenance. */
 export function isTestReport(report: ReviewReport): boolean {
@@ -24,7 +25,7 @@ export function ReportSummary({ report }: { report: ReviewReport; reviewedCount:
         <h2 id="report-summary-title" className="text-[15px] font-semibold text-ink">
           Результат проверки
         </h2>
-        {isTestReport(report) ? <StatusBadge tone="warn">Тестовый результат</StatusBadge> : null}
+        {isDemoMode || isTestReport(report) ? <StatusBadge tone="warn">Тестовый результат</StatusBadge> : null}
       </div>
       <p className="mt-1.5 text-[13px] leading-5 text-ink-muted">{report.summary}</p>
       {report.limitations.length > 0 ? (

@@ -20,6 +20,8 @@ services:
     logging: *bounded-logging
 
   proxy:
+    volumes:
+      - ${REVIEW_DEMO_DATA_DIR:-/opt/ai-review-state/demo}:/var/lib/review-demo:ro
     restart: unless-stopped
     logging: *bounded-logging
 
