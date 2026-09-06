@@ -1,6 +1,5 @@
 import { useGetReviewCycle, useListFindingStates } from '@/api/generated/endpoints';
 import type { CycleEntry, FindingState } from '@/api/generated/model';
-import { isDemoMode } from '@/app/demo-mode';
 import { effectiveDecision } from '@/features/document-cycle/effective-decision';
 
 /**
@@ -24,7 +23,7 @@ export function useFindingStates(workspaceId: string, runId: string, enabled = t
   const query = useListFindingStates(workspaceId, runId, {
     query: { enabled: Boolean(workspaceId && runId && enabled) },
   });
-  const cycle = useGetReviewCycle(workspaceId, runId, { query: { enabled: Boolean(workspaceId && runId && enabled && !isDemoMode) } });
+  const cycle = useGetReviewCycle(workspaceId, runId, { query: { enabled: Boolean(workspaceId && runId && enabled) } });
 
   const items = query.data?.items ?? [];
   const cycleEntries = new Map(cycle.data?.entries.filter((entry) => entry.current_finding_id).map((entry) => [entry.current_finding_id!, entry]) ?? []);
@@ -42,6 +41,6 @@ export function useFindingStates(workspaceId: string, runId: string, enabled = t
     reviewedCount: effectiveItems.filter((item) => item.decision.status !== 'unreviewed').length,
     isLoading: query.isPending,
     error: query.error ?? cycle.error,
-    retry: async () => { await query.refetch(); if (!isDemoMode) await cycle.refetch(); },
+    retry: async () => { await query.refetch(); await cycle.refetch(); },
   };
 }

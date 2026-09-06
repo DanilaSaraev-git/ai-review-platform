@@ -1,6 +1,6 @@
 import { setupWorker } from 'msw/browser';
 import { handlersFor } from './scenarios';
-import { loadDemoPackage } from './demo-package';
+import { syntheticDemo } from './synthetic-demo';
 
 /**
  * Worker моков для браузера. Включается только по переменной окружения:
@@ -8,6 +8,6 @@ import { loadDemoPackage } from './demo-package';
  * единственное отличие — код компонентов и hooks не меняется (принцип III).
  */
 export async function createWorker(scenario: string) {
-  const data = scenario === 'demo' ? await loadDemoPackage() : undefined;
+  const data = scenario === 'demo' ? syntheticDemo() : undefined;
   return setupWorker(...handlersFor(scenario, data));
 }

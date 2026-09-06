@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { isDemoMode } from '@/app/demo-mode';
+import { demoFile } from '@/app/demo-files';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQueries } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
@@ -79,6 +81,7 @@ export function NewVersionDialog({ workspaceId, familyId, prior, onClose }: { wo
       <p>{file?.name ?? 'Перетащите файл новой версии'}</p><p className="text-xs text-ink-muted">PDF, Markdown или TXT</p>
       <input ref={input} type="file" aria-label="Файл новой версии" hidden accept={SUPPORTED_EXTENSIONS.join(',')} onChange={e => { const f = e.target.files?.[0]; if (f) void choose(f); e.target.value = ''; }} />
       <Button disabled={pending || !limits} onClick={() => input.current?.click()}>{upload.isPending ? 'Загружаем…' : 'Выбрать файл'}</Button>
+      {isDemoMode ? <Button disabled={pending || !limits} onClick={() => void choose(demoFile(2))}>Взять демоверсию с правками</Button> : null}
     </div>
     <label className="block text-sm" htmlFor="version-context">Контекст и уточнения</label><textarea className="review-note" id="version-context" rows={2} value={note} disabled={pending} onChange={e => { setNote(e.target.value); setNoteDocument(undefined); }} placeholder="Добавьте уточнения для проверки" />
     <DialogueAttachments workspaceId={workspaceId} documents={contexts} disabled={pending} onBusy={setBusy} onChange={next => {

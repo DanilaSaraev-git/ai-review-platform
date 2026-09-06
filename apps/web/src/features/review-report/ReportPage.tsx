@@ -1,4 +1,3 @@
-import { isDemoMode } from '@/app/demo-mode';
 import { Link, useParams } from 'react-router';
 import { Button, Callout, Spinner } from '@/components/ui';
 import { NotFoundPage } from '@/app/NotFoundPage';
@@ -32,7 +31,7 @@ export function ReportPage() {
 
   return (
     <div className="numbat-panel-scroll">
-      {!isDemoMode ? <ReviewNextStep /> : null}
+      <ReviewNextStep />
       <div className="numbat-panel-heading">
         <h2 id="findings-title">Замечания <span className="ml-1 text-sm text-ink-subtle">{report.findings.length}</span></h2>
         <Link to={`/runs/${runId}`}>О проверке</Link>
@@ -45,7 +44,7 @@ export function ReportPage() {
       <section aria-labelledby="findings-title">
         <FindingList findings={report.findings} states={byFindingId} runId={runId} />
       </section>
-      {!isDemoMode ? <div id="review-fixes"><ReviewCyclePanel workspaceId={workspaceId} runId={runId} embedded readOnly={historical} /></div> : null}
+      <div id="review-fixes"><ReviewCyclePanel workspaceId={workspaceId} runId={runId} embedded readOnly={historical} /></div>
       <CoveragePanel coverage={report.coverage} />
       <SourceList sources={report.provenance.sources} />
       <ProvenancePanel model={report.provenance.model} />

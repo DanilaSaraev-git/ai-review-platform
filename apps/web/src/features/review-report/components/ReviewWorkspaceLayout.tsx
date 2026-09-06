@@ -7,7 +7,6 @@ import '@/styles/unified-review.css';
 import { Link, Outlet, useLocation, useOutletContext, useParams } from 'react-router';
 import { listDocumentFamilyRuns, useGetDocument, useGetDocumentVersionFamily } from '@/api/generated/endpoints';
 import { formatDateTime } from '@/lib/format';
-import { isDemoMode } from '@/app/demo-mode';
 import { isNotFound } from '@/api/errors';
 import { NotFoundPage } from '@/app/NotFoundPage';
 import { DocumentViewer } from '@/components/document-viewer';
@@ -42,11 +41,11 @@ export function ReviewWorkspaceLayout() {
   const documentQuery = useGetDocument(workspaceId, documentId, {
     query: { enabled: Boolean(workspaceId && documentId), staleTime: Infinity },
   });
-  const membership = useGetDocumentVersionFamily(workspaceId, documentId, { query: { enabled: Boolean(workspaceId && documentId && !isDemoMode), staleTime: Infinity } });
+  const membership = useGetDocumentVersionFamily(workspaceId, documentId, { query: { enabled: Boolean(workspaceId && documentId), staleTime: Infinity } });
   const familyId = membership.data?.family_id ?? '';
   const familyRuns = useQuery({ queryKey: ['latest-family-run', workspaceId, familyId], queryFn: () => listDocumentFamilyRuns(workspaceId, familyId, { limit: 1 }), enabled: Boolean(familyId) });
   const latestRun = familyRuns.data?.items[0];
-  const historical = !isDemoMode && (!latestRun || latestRun.id !== runId);
+  const historical = (!latestRun || latestRun.id !== runId);
   const finding = report?.findings.find((item) => item.id === findingId);
 
   if (bootstrapError && !workspaceId) {
@@ -69,7 +68,7 @@ export function ReviewWorkspaceLayout() {
         <h1 className="numbat-workspace-filename">{documentQuery.data?.filename ?? 'Проверка документа'}</h1>
         {membership.data ? <span className="text-xs text-ink-muted">Версия {membership.data.version_number}</span> : null}
         {runState.run ? <><time className="text-xs text-ink-muted" dateTime={runState.run.created_at}>{formatDateTime(runState.run.created_at)}</time></> : null}
-        {!isDemoMode && familyId ? <div className="ml-auto flex gap-2"><Button onClick={() => setHistoryOpen(true)}>История</Button>{report ? <DownloadPdfButton workspaceId={workspaceId} runId={runId} /> : null}<Button onClick={() => setVersionOpen(true)}>Загрузить новую версию</Button></div> : null}
+        {familyId ? <div className="ml-auto flex gap-2"><Button onClick={() => setHistoryOpen(true)}>История</Button>{report ? <DownloadPdfButton workspaceId={workspaceId} runId={runId} /> : null}<Button onClick={() => setVersionOpen(true)}>Загрузить новую версию</Button></div> : null}
         {historical && latestRun ? <div className="review-archive">Вы смотрите предыдущий результат. <Link to={`/runs/${latestRun.id}${latestRun.report_available ? '/report' : ''}`}>К текущему результату</Link></div> : null}
       </>}
       document={documentQuery.isError ? (
