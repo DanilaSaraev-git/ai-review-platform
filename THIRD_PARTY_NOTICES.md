@@ -23,3 +23,10 @@ Swagger UI поставляется локально. Рядом с `swagger-ui-
 - Source: <https://github.com/google/fonts/tree/main/ofl/onest>.
 - License: SIL Open Font License 1.1; upstream notice is included in `apps/web/public/fonts/OFL.txt`.
 - The web app serves the Cyrillic and Latin WOFF2 subsets locally.
+
+## DejaVu Sans
+
+- Fonts: DejaVu Sans and DejaVu Sans Bold, version 2.37, unmodified upstream TTF files.
+- Source: <https://github.com/dejavu-fonts/dejavu-fonts/releases/tag/version_2_37>.
+- License: Bitstream Vera and included upstream notices; complete license shipped at `packages/review-runtime/src/review_runtime/fonts/LICENSE`.
+- Used by the PDF renderer to embed Cyrillic glyphs without relying on system fonts.

@@ -15,9 +15,9 @@ def _operation_block(text: str, operation_id: str) -> str:
     return text[start:end]
 
 
-def test_exact_additive_http_v1_0_2_delta() -> None:
+def test_v1_1_preserves_additive_http_v1_0_2_delta() -> None:
     text = OPENAPI.read_text()
-    assert re.search(r"^\s*version: 1\.0\.2$", text, re.MULTILINE)
+    assert re.search(r"^\s*version: 1\.1\.0$", text, re.MULTILINE)
     for operation, status in (
         ("listDocuments", '"400"'),
         ("listReviewRuns", '"400"'),
@@ -72,6 +72,17 @@ def test_only_allowlisted_contract_files_changed_from_v1_0_1() -> None:
         "contracts/review-platform/v1/swagger/NOTICE",
         "contracts/review-platform/v1/swagger/swagger-ui-bundle.js.LICENSE.txt",
         "contracts/review-platform/v1/examples/http/README.md",
+        "contracts/review-platform/v1/examples/http/compare-review-cycle.json",
+        "contracts/review-platform/v1/examples/http/document-families.json",
+        "contracts/review-platform/v1/examples/http/document-family-version.json",
+        "contracts/review-platform/v1/examples/http/document-family-versions.json",
+        "contracts/review-platform/v1/examples/http/document-family.json",
+        "contracts/review-platform/v1/examples/http/put-issue-resolution.json",
+        "contracts/review-platform/v1/examples/http/put-review-cycle-link.json",
+        "contracts/review-platform/v1/examples/http/review-cycle.first.json",
+        "contracts/review-platform/v1/examples/http/review-cycle.partial.json",
+        "contracts/review-platform/v1/examples/http/review-cycle.persisting.json",
+        "contracts/review-platform/v1/examples/http/review-cycle.unavailable.json",
     }
     assert set(changed.splitlines()) <= allowed
 
