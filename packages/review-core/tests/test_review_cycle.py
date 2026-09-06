@@ -32,7 +32,12 @@ def finding(identity: str, *, problem: str = "Не указано время", q
 def test_match_survives_new_ids_and_page_moves() -> None:
     current = finding("new")
     current["anchors"][0]["location"] = {"page": 7}
-    result = match_findings([finding("old")], [current])
+    result = match_findings(
+        [finding("old")],
+        [current],
+        previous_evidence_keys={"old": ("source-main|unique-fragment|0:10",)},
+        current_evidence_keys={"new": ("source-main|unique-fragment|0:10",)},
+    )
     assert [(m.previous_id, m.current_id, m.status) for m in result] == [("old", "new", "persisting")]
 
 
@@ -61,10 +66,17 @@ def test_new_and_absent_are_separate_records() -> None:
 
 def test_decision_transfer_requires_all_invariants() -> None:
     old, new = finding("old"), finding("new")
-    assert can_carry_decision(old, new, same_sources=True, same_conditions=True)
+    assert can_carry_decision(old, new, same_sources=True, same_conditions=True, evidence_unchanged=True)
     assert not can_carry_decision(old, new, same_sources=False, same_conditions=True)
     assert not can_carry_decision(old, new, same_sources=True, same_conditions=False)
     new["reason"] = "Другое основание"
+    assert not can_carry_decision(old, new, same_sources=True, same_conditions=True)
+
+
+def test_identical_quotes_in_different_fragments_require_review() -> None:
+    old, new = finding("old"), finding("new")
+    result = match_findings([old], [new])
+    assert all(m.status == "uncertain" for m in result)
     assert not can_carry_decision(old, new, same_sources=True, same_conditions=True)
 
 

@@ -10,7 +10,7 @@
 
 ## Phase 2: Foundational contracts
 
-- [ ] T003 Add compatible cycle/family/PDF resources, examples and changelog in `contracts/review-platform/v1/`; regenerate guest/static variants through `tools/contracts/` and validate compatibility.
+- [x] T003 Add compatible cycle/family/PDF resources, examples and changelog in `contracts/review-platform/v1/`; regenerate guest/static variants through `tools/contracts/` and validate compatibility.
 - [ ] T004 Add storage migration and metadata for families, version membership and cycle snapshots in `packages/review-runtime/migrations/versions/` and `packages/review-runtime/src/review_runtime/postgres/models/__init__.py`.
 
 ## Phase 3: US1 — Повторить проверку
@@ -32,7 +32,7 @@
 
 **Independent test**: unchanged/changed/new/absent/ambiguous and v1→v2 resolved absent→v3 reappeared; manual corrections and retry preserve history.
 
-- [ ] T010 [P] [US3] Test and implement pure conservative matching in `packages/review-core/src/review_core/application/review_cycle.py` and `packages/review-core/tests/test_review_cycle.py`.
+- [x] T010 [P] [US3] Test and implement pure conservative matching in `packages/review-core/src/review_core/application/review_cycle.py` and `packages/review-core/tests/test_review_cycle.py`.
 - [ ] T011 [US3] Persist lineage, previous decision snapshots, manual links and resolution history in `packages/review-runtime/src/review_runtime/postgres/`; expose revision-checked routes in `apps/api/src/review_api/routes/`.
 - [ ] T012 [P] [US3] Implement comparison, former decisions, manual linking and fix confirmation UI in `apps/web/src/features/document-cycle/` with MSW scenarios.
 - [ ] T013 [US3] Cover partial/changed context, non-destructive retry and concurrent revision conflicts in `tests/integration/test_document_cycle.py`.
@@ -41,7 +41,7 @@
 
 **Independent test**: Download a coherent, complete and readable PDF of selected run with current decisions.
 
-- [ ] T014 [P] [US4] Test and implement PDF renderer and bundled licensed Cyrillic font in `packages/review-runtime/src/review_runtime/report_export.py`; lock dependency in `packages/review-runtime/pyproject.toml` and `uv.lock`.
+- [x] T014 [P] [US4] Test and implement PDF renderer and bundled licensed Cyrillic font in `packages/review-runtime/src/review_runtime/report_export.py`; lock dependency in `packages/review-runtime/pyproject.toml` and `uv.lock`.
 - [ ] T015 [US4] Build coherent export snapshot and protected attachment endpoint in `packages/review-runtime/src/review_runtime/postgres/` and `apps/api/src/review_api/routes/`.
 - [ ] T016 [P] [US4] Add PDF download UI to `apps/web/src/features/review-report/`; verify network/export errors and selected-run semantics.
 - [ ] T017 [US4] Extract and visually render synthetic multi-page Cyrillic PDF; test snapshot consistency and immutable ETag in `packages/review-runtime/tests/` and `tests/integration/test_document_cycle.py`.

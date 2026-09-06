@@ -61,7 +61,7 @@ def _fonts() -> None:
 
 def effective_decision(state: dict[str, Any] | None, entry: dict[str, Any] | None) -> dict[str, Any]:
     decision = (state or {}).get("decision", {})
-    if decision.get("status", "unreviewed") != "unreviewed":
+    if decision.get("revision", 0) > 0 or decision.get("status", "unreviewed") != "unreviewed":
         return dict(decision)
     if entry and entry.get("decision_carried") and entry.get("previous_decision"):
         return dict(entry["previous_decision"])
@@ -150,14 +150,15 @@ def render_review_pdf(snapshot: dict[str, Any]) -> bytes:
         resolution = entry.get("resolution") or {}
         if resolution.get("status") == "resolved":
             field("Исправление:", "Подтверждено аналитиком")
+        else:
+            field("Исправление:", "Не подтверждено", muted)
+        if resolution.get("revision", 0) > 0 or resolution.get("status") == "resolved":
             field("Пояснение:", resolution.get("reason"))
             actor = resolution.get("actor") or {}
             paragraph(
                 " · ".join(str(v) for v in (actor.get("display_name"), resolution.get("decided_at")) if v),
                 muted,
             )
-        else:
-            field("Исправление:", "Не подтверждено", muted)
         if entry.get("previous_finding_id"):
             field("Предыдущее замечание:", entry["previous_finding_id"], muted)
         if entry.get("previous_run_id"):
@@ -173,6 +174,10 @@ def render_review_pdf(snapshot: dict[str, Any]) -> bytes:
         paragraph(f"{finding.get('ordinal', '')}. {finding.get('title', 'Замечание')}", finding_heading)
         field("Приоритет:", PRIORITIES.get(finding.get("priority", {}).get("level"), "Не задан"))
         field("Основание приоритета:", finding.get("priority", {}).get("rationale"), muted)
+        if finding.get("scope"):
+            field("Область проверки:", ", ".join(str(item) for item in finding["scope"]), muted)
+        if not finding.get("anchors"):
+            paragraph("Точная цитата отсутствует: замечание относится к области проверки.", muted)
         for anchor in finding.get("anchors", []):
             location = anchor.get("location", {})
             if location.get("kind") == "pdf":

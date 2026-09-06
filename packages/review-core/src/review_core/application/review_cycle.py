@@ -8,10 +8,10 @@ it never authorizes carrying a decision or declaring an issue resolved.
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 from typing import Any
 
 
@@ -47,6 +47,31 @@ def _canonical(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _same_occurrence(previous: dict[str, Any], current: dict[str, Any]) -> bool:
+    def locations(finding: dict[str, Any]) -> tuple[Any, ...]:
+        return tuple(
+            sorted(
+                (
+                    a.get("source_id", ""),
+                    a.get("fragment_id", ""),
+                    a.get("quote_start", -1),
+                    a.get("quote_end", -1),
+                )
+                for a in finding.get("anchors", [])
+            )
+        )
+
+    old = locations(previous)
+    return bool(old) and all(a[1] and a[2] >= 0 and a[3] > a[2] for a in old) and old == locations(current)
+
+
+def _overlap(left: str, right: str) -> float:
+    # Token overlap is used only for suggestions. Avoid quadratic character
+    # alignment on repeated, long document fragments.
+    a, b = set(re.findall(r"\w+", left.casefold())), set(re.findall(r"\w+", right.casefold()))
+    return len(a & b) / len(a | b) if a and b else 0.0
+
+
 def _decision_basis(finding: dict[str, Any]) -> tuple[Any, ...]:
     # Scope contains fragment identities whose remapping cannot be inferred here.
     # A non-identical scope conservatively prevents transfer.
@@ -68,21 +93,26 @@ def _candidate(previous: dict[str, Any], current: dict[str, Any]) -> bool:
         return True
     # These thresholds are a candidate-display heuristic, never confidence in a
     # match. Empty evidence must not match merely because both sets are empty.
-    quote_similarity = max(
-        (SequenceMatcher(None, p, c, autojunk=False).ratio() for p in p_quotes for c in c_quotes), default=0.0
-    )
-    problem_similarity = SequenceMatcher(
-        None, _text(previous.get("problem")), _text(current.get("problem")), autojunk=False
-    ).ratio()
+    quote_similarity = max((_overlap(p, c) for p in p_quotes for c in c_quotes), default=0.0)
+    problem_similarity = _overlap(_text(previous.get("problem")), _text(current.get("problem")))
     return quote_similarity >= 0.72 and problem_similarity >= 0.55
 
 
-def match_findings(previous: list[dict[str, Any]], current: list[dict[str, Any]]) -> list[FindingMatch]:
+def match_findings(
+    previous: list[dict[str, Any]],
+    current: list[dict[str, Any]],
+    *,
+    previous_evidence_keys: dict[str, tuple[str, ...]] | None = None,
+    current_evidence_keys: dict[str, tuple[str, ...]] | None = None,
+) -> list[FindingMatch]:
     """Match the previous lineage pool against one current report, one-to-one.
 
     The caller supplies a unique previous ID per issue (its latest occurrence,
     including issues absent from the preceding report). For unmatched candidates,
     both sides remain represented so no previous problem silently disappears.
+    Cross-version auto-links additionally require caller-verified evidence keys:
+    ordered source identity + unique full fragment text + quote offsets. Missing
+    keys only permit links to the exact same validated fragment occurrence.
     """
     p_by_id = {str(f["id"]): f for f in previous}
     c_by_id = {str(f["id"]): f for f in current}
@@ -99,7 +129,12 @@ def match_findings(previous: list[dict[str, Any]], current: list[dict[str, Any]]
         p_ids = p_groups.get(identity, [])
         # Empty/missing evidence cannot establish an automatic correspondence.
         if len(p_ids) == len(c_ids) == 1 and any(q for _, q in identity[-1]):
-            matches[c_ids[0]] = p_ids[0]
+            previous_key = (previous_evidence_keys or {}).get(p_ids[0])
+            current_key = (current_evidence_keys or {}).get(c_ids[0])
+            if (previous_key and previous_key == current_key) or _same_occurrence(
+                p_by_id[p_ids[0]], c_by_id[c_ids[0]]
+            ):
+                matches[c_ids[0]] = p_ids[0]
     used = set(matches.values())
     suggested: set[str] = set()
     result: list[FindingMatch] = []
@@ -139,12 +174,14 @@ def can_carry_decision(
     *,
     same_sources: bool,
     same_conditions: bool,
+    evidence_unchanged: bool = False,
 ) -> bool:
     """Necessary semantic gate; caller must also establish an exact unique link."""
     return (
         same_sources
         and same_conditions
         and bool(_anchors(previous_finding))
+        and (evidence_unchanged or _same_occurrence(previous_finding, current_finding))
         and _decision_basis(previous_finding) == _decision_basis(current_finding)
     )
 

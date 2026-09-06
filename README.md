@@ -40,6 +40,12 @@
 
 Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Сейчас подключена DeepSeek V4 Flash через Yandex AI Studio; [конфигурация](docs/operations/configuration.md#deepseek-через-yandex-ai-studio) и [серверные результаты](specs/006-mvp-launch/evidence.md) отделены от предметной оценки. Chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
 
+## Цикл документа и PDF
+
+Функция описана в [SpecKit 009](specs/009-document-review-cycle/spec.md), [плане](specs/009-document-review-cycle/plan.md) и [задачах](specs/009-document-review-cycle/tasks.md). Документ объединяет неизменяемые версии и отдельные запуски. Сохранённую версию можно проверить повторно; новую версию загружают в ту же карточку. Сопоставление сохраняет историю замечаний, а исправление подтверждает аналитик. PDF содержит согласованный снимок текущих решений и ограничений выбранной проверки.
+
+Разработка и проверки этой функции выполняются локально. Удалённая выкладка требует отдельной команды пользователя. Результаты приёмки будут зафиксированы в evidence функции; точность на реальных документах этим не подтверждается.
+
 ## Подготовка MVP
 
 Срез [006 MVP launch](specs/006-mvp-launch/spec.md) реализован и развёрнут: упрощён веб-интерфейс, завершены диалоги по замечаниям и подготовлен защищённый сервис для одной доверенной группы. Работа выполнена по [плану](specs/006-mvp-launch/plan.md) и [задачам SpecKit](specs/006-mvp-launch/tasks.md), отдельными коммитами. DeepSeek подключена с успешным GET probe, без пробных генераций по поручению пользователя. Исторический smoke Kimi не подтверждает совместимость ответов DeepSeek. Фактически пройденные проверки и ограничения собраны в [evidence](specs/006-mvp-launch/evidence.md). Предметная оценка модели выполняется отдельно.

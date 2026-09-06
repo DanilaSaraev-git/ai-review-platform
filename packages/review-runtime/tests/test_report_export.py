@@ -4,9 +4,15 @@ from copy import deepcopy
 from pathlib import Path
 
 import pdfplumber
-from review_runtime.report_export import render_review_pdf
+from review_runtime.report_export import effective_decision, render_review_pdf
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_explicit_reset_overrides_carried_decision() -> None:
+    state = {"decision": {"status": "unreviewed", "revision": 1, "reason": None}}
+    entry = {"decision_carried": True, "previous_decision": {"status": "confirmed", "revision": 3}}
+    assert effective_decision(state, entry) == state["decision"]
 
 
 def snapshot() -> dict:
@@ -85,3 +91,29 @@ def test_absent_issue_and_partial_coverage_are_explicit() -> None:
     assert "Частичная проверка" in text
     assert "Не удалось подтвердить" in text
     assert "Ранее найденные замечания" in text
+
+
+def test_reopened_resolution_keeps_human_reason_and_missing_scope() -> None:
+    value = snapshot()
+    finding = value["report"]["findings"][0]
+    finding.update(kind="missing", anchors=[], scope=["source-main-lines-1-3"])
+    value["cycle"]["entries"] = [
+        {
+            "current_finding_id": finding["id"],
+            "status": "reappeared",
+            "decision_carried": False,
+            "resolution": {
+                "status": "open",
+                "revision": 2,
+                "reason": "Исправление оказалось неполным",
+                "actor": {"display_name": "Тестовый аналитик"},
+                "decided_at": "2026-09-06T12:00:00Z",
+            },
+        }
+    ]
+    with pdfplumber.open(io.BytesIO(render_review_pdf(value))) as pdf:
+        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+    assert "Исправление оказалось неполным" in text
+    assert "2026-09-06T12:00:00Z" in text
+    assert "source-main-lines-1-3" in text
+    assert "Точная цитата отсутствует" in text
