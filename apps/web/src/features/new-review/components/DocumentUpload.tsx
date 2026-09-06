@@ -35,13 +35,19 @@ export function DocumentUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useUploadDocument();
 
-  const serverError = upload.error
+  const guestErrors: Record<string, string> = {
+    guest_storage_limit: 'Лимит гостевого пространства исчерпан. Сохранённые документы доступны в истории.',
+    storage_unavailable: 'Новые загрузки временно недоступны: недостаточно места. История сохранена.',
+    guest_session_required: 'Сессия завершилась. Обновите страницу, чтобы продолжить.',
+  };
+  const guestError = isProblem(upload.error) ? guestErrors[upload.error.code] : undefined;
+  const serverError = guestError ?? (upload.error
     ? isPayloadTooLarge(upload.error)
       ? `Файл больше лимита ${formatBytes(limits.document_upload_max_bytes)}.`
       : isProblem(upload.error)
         ? upload.error.problem.title
         : 'Не удалось загрузить документ.'
-    : null;
+    : null);
 
   async function handleFile(file: File): Promise<void> {
     setLocalError(null);
