@@ -204,8 +204,6 @@ class ReviewEngine:
                 fragment = context.fragments.get(fragment_id)
                 if fragment is None:
                     raise ReviewSemanticValidationError("anchor_fragment_unknown")
-                if compact_anchor["source_id"] != fragment.source_id:
-                    raise ReviewSemanticValidationError("anchor_source_mismatch")
                 quote = compact_anchor["quote"]
                 if not isinstance(quote, str) or not quote:
                     raise ReviewSemanticValidationError("anchor_quote_invalid")

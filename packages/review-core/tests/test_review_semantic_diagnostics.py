@@ -72,7 +72,6 @@ def anchor(value: dict[str, Any]) -> dict[str, Any]:
         (lambda value: anchor(value).update(quote="Retry"), "anchor_quote_ambiguous"),
         (lambda value: anchor(value).update(quote=""), "anchor_quote_invalid"),
         (lambda value: anchor(value).update(fragment_id="CANARY_PRIVATE_TEXT"), "anchor_fragment_unknown"),
-        (lambda value: anchor(value).update(source_id="CANARY_PRIVATE_TEXT"), "anchor_source_mismatch"),
         (
             lambda value: value["coverage"]["reviewed_fragment_ids"].append("f1"),
             "coverage_partition_duplicates",
@@ -117,6 +116,15 @@ def test_mapper_preserves_a_safe_semantic_reason(mutate: Callable[[dict[str, Any
     assert isinstance(caught.value, validation.ReviewSemanticValidationError)
     assert caught.value.code == code
     assert "CANARY_PRIVATE_TEXT" not in str(caught.value)
+
+
+def test_mapper_derives_anchor_source_from_the_known_fragment() -> None:
+    output = compact()
+    anchor(output)["source_id"] = "hallucinated-source"
+
+    report = ReviewEngine().map_model_output(output, context=context())
+
+    assert report["findings"][0]["anchors"][0]["source_id"] == "source-main"
 
 
 @pytest.mark.parametrize(

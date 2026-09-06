@@ -127,6 +127,15 @@ def test_mapping_resolves_exact_evidence_and_attaches_only_factual_provenance() 
     Draft202012Validator(_assistant_schema()).validate(response)
 
 
+def test_dialogue_mapping_derives_anchor_source_from_the_known_fragment() -> None:
+    output = _compact()
+    output["anchors"][0]["source_id"] = "hallucinated-source"
+
+    response = DialogueEngine().map_model_output(output, context=_context())
+
+    assert response["anchors"][0]["source_id"] == "source-main"
+
+
 def test_dialogue_mapping_rejects_ambiguous_evidence() -> None:
     output = _compact()
     output["anchors"][0]["quote"] = "r"

@@ -147,8 +147,6 @@ class DialogueEngine:
             fragment = context.fragments.get(compact_anchor["fragment_id"])
             if fragment is None:
                 raise ValueError("dialogue anchor references an unknown fragment")
-            if compact_anchor["source_id"] != fragment.source_id:
-                raise ValueError("dialogue anchor source identity mismatch")
             quote = compact_anchor["quote"]
             if not isinstance(quote, str) or not quote:
                 raise ValueError("dialogue anchor quote is required")

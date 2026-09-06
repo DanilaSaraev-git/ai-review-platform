@@ -31,6 +31,8 @@ Dialogue возвращает смысловой assistant_message из finding-
 
 Контекстный anchor разрешается по доступным supporting sources, не по primary reviewed set. Для primary anchor/scope сохраняется принадлежность reviewed set, а каждому finding требуется основание в основном документе. Исправление overly-strict проверки context anchors в 003 не должно ослаблять первичное основание или точность цитаты.
 
+`fragment_id` является серверным уникальным адресом фрагмента и определяет его источник. Переданный моделью дублирующий `source_id` не переносится в канонический отчёт: engine назначает `source_id`, `document_id`, location и offsets из найденного фрагмента. Неизвестный `fragment_id` и неточная или неоднозначная quote по-прежнему отклоняются.
+
 Coverage сохраняет точные поля v1: reviewed_fragment_ids, unreviewed и source_gaps. reviewed_fragment_ids и fragment_id из unreviewed разбивают весь target set исходного документа ровно один раз; source_gaps отдельно объясняет недоступность/ограничения источников. Ошибочный ответ не превращается в completed с пустыми findings. Валидный нулевой список находок разрешён; он не считается доказательством отсутствия ошибок в ТЗ.
 
 ## Профиль подключения
