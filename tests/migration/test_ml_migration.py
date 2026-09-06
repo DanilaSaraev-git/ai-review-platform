@@ -210,7 +210,7 @@ def test_empty_database_upgrades_to_ml_schema(monkeypatch: pytest.MonkeyPatch) -
     _, dsn = _database()
     command.downgrade(config, "base")
 
-    command.upgrade(config, "head")
+    command.upgrade(config, HEAD)
 
     with psycopg.connect(dsn) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (HEAD,)
@@ -245,7 +245,7 @@ def test_model_attempt_owner_and_active_generation_are_namespace_safe(
 ) -> None:
     config = _config(monkeypatch)
     _, dsn = _database()
-    command.upgrade(config, "head")
+    command.upgrade(config, HEAD)
     with psycopg.connect(dsn) as connection:
         _seed_execution_and_dialogue(connection)
         connection.execute(
@@ -321,7 +321,7 @@ def test_prepared_source_can_be_filled_once_without_weakening_immutability(
 ) -> None:
     config = _config(monkeypatch)
     _, dsn = _database()
-    command.upgrade(config, "head")
+    command.upgrade(config, HEAD)
     with psycopg.connect(dsn) as connection:
         _seed_execution_and_dialogue(connection)
         connection.execute(
@@ -396,7 +396,7 @@ def test_legacy_history_and_published_report_survive_upgrade_and_downgrade(
         73,
     )
 
-    command.upgrade(config, "head")
+    command.upgrade(config, HEAD)
     with psycopg.connect(dsn) as connection:
         after_upgrade = connection.execute(
             """SELECT r.graph::text, r.canonical_sha256, r.etag, a.sha256, a.size_bytes
@@ -443,7 +443,7 @@ def test_downgrade_rejects_incompatible_ml_history_until_operator_cleanup(
 ) -> None:
     config = _config(monkeypatch)
     _, dsn = _database()
-    command.upgrade(config, "head")
+    command.upgrade(config, HEAD)
     with psycopg.connect(dsn) as connection:
         _seed_execution_and_dialogue(connection)
         connection.execute(

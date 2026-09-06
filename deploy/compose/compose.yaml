@@ -5,6 +5,10 @@ x-runtime-environment: &runtime-environment
   REVIEW_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-review}:${POSTGRES_PASSWORD:-review-local-only}@postgres/${POSTGRES_DB:-review}
   REVIEW_QUEUE_DATABASE_URL: postgresql://${POSTGRES_USER:-review}:${POSTGRES_PASSWORD:-review-local-only}@postgres/${POSTGRES_DB:-review}
   REVIEW_ARTIFACT_ROOT: /var/lib/review/artifacts
+  REVIEW_GUEST_STORAGE_BYTES: ${REVIEW_GUEST_STORAGE_BYTES:-209715200}
+  REVIEW_GUEST_TOTAL_STORAGE_BYTES: ${REVIEW_GUEST_TOTAL_STORAGE_BYTES:-1073741824}
+  REVIEW_GUEST_DOCUMENT_LIMIT: ${REVIEW_GUEST_DOCUMENT_LIMIT:-20}
+  REVIEW_GUEST_DISK_RESERVE_BYTES: ${REVIEW_GUEST_DISK_RESERVE_BYTES:-3221225472}
   REVIEW_RUNTIME_CONFIG_PATH: /app/config/runtime-config.synthetic.v1.json
   REVIEW_EXPECTED_OUTPUT_PATH: /app/config/trusted-fixture-output.synthetic.v1.json
   REVIEW_DEPLOYMENT_ID: ${REVIEW_DEPLOYMENT_ID:-60000000-0000-4000-8000-000000000001}
@@ -68,6 +72,7 @@ services:
     command: ["uvicorn", "review_api.app:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       <<: *runtime-environment
+      REVIEW_GUEST_ACCESS: ${REVIEW_GUEST_ACCESS:-false}
     volumes:
       - artifacts:/var/lib/review
       - ./config:/app/config:ro

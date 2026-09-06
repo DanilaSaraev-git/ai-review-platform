@@ -144,6 +144,16 @@ class AsyncExecutionCoordinator[RequestT, PreparedT, GeneratedT, PublishedT]:
         self._operations: dict[str, _OperationState] = {}
         self._admission_lock = anyio.Lock()
 
+    @property
+    def has_pending_work(self) -> bool:
+        return any(not state.event.is_set() for state in self._operations.values())
+
+    async def wait_idle(self) -> None:
+        """Wait for work already owned by this coordinator, without stopping admission."""
+        while self.has_pending_work:
+            for state in tuple(self._operations.values()):
+                await state.event.wait()
+
     async def __aenter__(self) -> AsyncExecutionCoordinator[RequestT, PreparedT, GeneratedT, PublishedT]:
         if self._task_group is not None:
             raise RuntimeError("coordinator is already running")
