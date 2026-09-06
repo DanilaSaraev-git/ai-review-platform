@@ -6,7 +6,12 @@
 
 ## Summary
 
-Добавить `./dev` с командами `start`, `stop`, `status`, `logs` и небольшой launcher на Python. API работает нативно с `uvicorn --reload`, web — с Vite HMR; Docker/Colima нужен только для отдельной PostgreSQL. Обычные правки не собирают Docker images. Локальные процессы используют существующие runtime adapters, ограничения, Kimi K2 и пакет навыка 1.0.1.
+Добавить `./dev` с командами `start`, `stop`, `status`, `logs` и небольшой launcher на Python. API работает нативно с `uvicorn --reload`, web — с Vite HMR; Docker/Colima нужен только для отдельной PostgreSQL. Обычные правки не собирают Docker images. Локальные процессы используют существующие runtime adapters, ограничения и пакет навыка 1.0.1.
+
+Дополнение 2026-09-06: `start` по умолчанию выбирает OpenAI, `--model kimi` сохраняет Kimi;
+credential — `openai.token` или `huggingface.token` в прежнем приватном каталоге.
+Смена через `stop`/`start`, остальной lifecycle сохранён. Прежняя стратегия проверок ниже
+не выполнялась для OpenAI по поручению пользователя; [evidence](../006-mvp-launch/evidence.md).
 
 ## Technical Context
 
@@ -58,7 +63,7 @@
 | Native API + web, Docker только для PostgreSQL | Нужны uvicorn reload и Vite HMR; зависимости уже установлены | Полный Compose приложения потребовал бы иной dev-конфигурации и лишней пересборки |
 | Существующие Compose YAML, project `review-platform-dev`, только сервис `postgres` | Уже есть volume и loopback port override | Новый Compose файл дублировал бы текущую БД-конфигурацию |
 | Существующий `review-cli model-probe` | Код `apps/cli/src/review_cli/commands/model_probe.py` сохраняет observation без `platform.startup` и reconciliation | API startup из timer конфликтовал бы с lifecycle API |
-| Внешний Kimi K2 через существующий профиль | `deploy/compose/config/model-profile.huggingface-kimi-k2.json`: `kimi-k2-hf-novita`, TTL 300 секунд | Новая модель/adapter выходит за поручение |
+| Внешний профиль модели | Первоначально Kimi K2; дополнение 006 выбирает OpenAI по умолчанию, TTL обоих профилей 300 секунд | Неявная смена модели работающего стенда не используется |
 | Приватное состояние и проверка владения процессами | Нужны сохранность данных и сосуществование со старыми стендами | Остановка по одному PID или имени процесса недостаточна |
 
 Неопределённости runtime — свободные порты, Docker readiness и доступность поставщика — проверяются при запуске и в evidence, а не объявляются заранее решёнными.

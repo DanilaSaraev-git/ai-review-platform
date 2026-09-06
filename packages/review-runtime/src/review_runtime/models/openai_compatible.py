@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
@@ -22,6 +23,54 @@ from review_core.ports.models import (
 from review_runtime.config.model_profiles import ModelProfile, profile_config_digest
 from review_runtime.models.config import SecretProvider
 from review_runtime.models.headers import provider_headers
+
+
+def _openai_response_schema(schema: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """Project the current output schemas onto OpenAI's strict schema subset.
+
+    The original schema still validates every response before publication. In
+    particular, uniqueness and conditional finding/dialogue rules remain server
+    checks; relaxing the transport schema must not mutate that contract.
+    """
+    result = deepcopy(schema)
+    application_rules = {
+        keyword: schema[keyword]
+        for keyword in ("allOf", "if", "then", "else", "uniqueItems")
+        if keyword in schema
+    }
+    for keyword in ("$schema", "$id", "allOf", "if", "then", "else", "uniqueItems"):
+        result.pop(keyword, None)
+    if application_rules:
+        # Keep these rules visible to the model as guidance without submitting
+        # unsupported schema keywords. Only the original validator enforces them.
+        rules = json.dumps(application_rules, ensure_ascii=False, separators=(",", ":"))
+        result["description"] = (
+            f"{schema.get('description', '')}\nAdditional application rules (JSON Schema): {rules}"
+        ).lstrip()
+    for keyword in ("properties", "$defs"):
+        children = result.get(keyword)
+        if isinstance(children, dict):
+            result[keyword] = {
+                name: _openai_response_schema(child) if isinstance(child, dict) else child
+                for name, child in children.items()
+            }
+    items = result.get("items")
+    if isinstance(items, dict):
+        result["items"] = _openai_response_schema(items)
+    for keyword in ("anyOf", "oneOf"):
+        alternatives = result.pop(keyword, None)
+        if isinstance(alternatives, list):
+            # The current oneOf is the disjoint null / resolution-object union.
+            result["anyOf"] = [
+                _openai_response_schema(child) if isinstance(child, dict) else child
+                for child in alternatives
+            ]
+    enum = result.get("enum")
+    if "type" not in result and isinstance(enum, list) and enum and all(
+        isinstance(value, str) for value in enum
+    ):
+        result["type"] = "string"
+    return result
 
 
 class OpenAICompatibleModelAdapter:
@@ -190,7 +239,11 @@ class OpenAICompatibleModelAdapter:
                 "json_schema": {
                     "name": f"{request.purpose.value}_response",
                     "strict": True,
-                    "schema": request.response_schema,
+                    "schema": (
+                        _openai_response_schema(request.response_schema)
+                        if self.profile.provider == "openai"
+                        else request.response_schema
+                    ),
                 },
             }
         return payload, safe
@@ -240,17 +293,28 @@ class OpenAICompatibleModelAdapter:
             value = json.loads(raw)
             choices = value["choices"]
             choice = choices[0]
-            content = choice["message"]["content"]
+            message = choice["message"]
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as error:
             raise self._safe_error(
                 ModelErrorCode.INVALID_PROVIDER_RESPONSE,
                 "model provider returned an invalid response envelope",
             ) from error
-        if not isinstance(value, dict) or not isinstance(choices, list) or not isinstance(choice, dict):
+        if (
+            not isinstance(value, dict)
+            or not isinstance(choices, list)
+            or not isinstance(choice, dict)
+            or not isinstance(message, dict)
+        ):
             raise self._safe_error(
                 ModelErrorCode.INVALID_PROVIDER_RESPONSE,
                 "model provider returned an invalid response envelope",
             )
+        if message.get("refusal"):
+            raise self._safe_error(
+                ModelErrorCode.CONTENT_BLOCKED,
+                "model provider refused the request",
+            )
+        content = message.get("content")
         if not isinstance(content, str):
             raise self._safe_error(
                 ModelErrorCode.INVALID_PROVIDER_RESPONSE,

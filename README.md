@@ -29,11 +29,13 @@
 в [evidence параллельной загрузки](specs/008-guest-access/evidence.md#локальное-исправление-параллельной-загрузки--2026-09-06).
 Удалённая выкладка этой правки не выполнялась.
 
+[Доступность LLM-провайдеров из России](docs/operations/provider-availability.md): обзор официальных каталогов и условий на 2026-09-06, ограничения внешних моделей и непроверенные параметры подключения.
+
 ## Локальная разработка
 
 Из корня технического checkout выполните `./dev start`, затем откройте [http://localhost:5173](http://localhost:5173). Web работает с Vite HMR, API — с `uvicorn --reload`, PostgreSQL хранит данные в отдельном локальном volume. `./dev stop` останавливает этот стенд и сохраняет документы и отчёты; `./dev status` и `./dev logs` показывают состояние и журналы.
 
-Зависимости, credential Kimi K2, хранение данных и особенности reload: [руководство локальной разработки](docs/operations/local-development.md). Объём работ: [SpecKit 007](specs/007-local-dev-loop/spec.md), [план](specs/007-local-dev-loop/plan.md) и [задачи](specs/007-local-dev-loop/tasks.md) и [результаты проверок](specs/007-local-dev-loop/evidence.md).
+По умолчанию выбран OpenAI `gpt-5.4-mini`; явный выбор — `./dev start --model openai`, Kimi K2 — `./dev start --model kimi`. Перед сменой выполните `./dev stop`. Ключ OpenAI нужно добавить через локальный редактор в приватный `~/.config/ai-analytics-review/openai.token`; точный порядок, зависимости, хранение данных и особенности reload: [руководство локальной разработки](docs/operations/local-development.md). Объём работ: [SpecKit 007](specs/007-local-dev-loop/spec.md), [план](specs/007-local-dev-loop/plan.md), [задачи](specs/007-local-dev-loop/tasks.md) и [результаты прежних проверок](specs/007-local-dev-loop/evidence.md).
 
 ## Ветки реализации
 
@@ -67,6 +69,8 @@
 renderer профиля с ID каталога. [Настройка подключения](docs/operations/configuration.md#deepseek-через-yandex-ai-studio).
 По поручению пользователя эта интеграция включена без пробных генераций; GET списка моделей
 и readiness не считаются проверкой качества ревью.
+
+Подключение OpenAI подготовлено в коде и локальных настройках; серверная выкладка этого изменения не выполнялась. По поручению пользователя для него тесты не добавлялись и не запускались, бенчмарки, probes и платные вызовы не выполнялись. Работоспособность OpenAI реальным запросом не проверялась.
 
 ## Лицензирование
 

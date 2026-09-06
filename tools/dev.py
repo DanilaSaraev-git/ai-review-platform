@@ -27,9 +27,22 @@ PROJECT = "review-platform-dev"
 WEB = "http://localhost:5173"
 API = "http://127.0.0.1:18000"
 PROBE_INTERVAL = 60
+MODEL_OPTIONS = {
+    "openai": (
+        "model-profile.openai-gpt-5.4-mini.json",
+        "openai-gpt-5.4-mini",
+        "openai.token",
+    ),
+    "kimi": (
+        "model-profile.huggingface-kimi-k2.json",
+        "kimi-k2-hf-novita",
+        "huggingface.token",
+    ),
+}
 
 
-def environment() -> dict[str, str]:
+def environment(model: str = "openai") -> dict[str, str]:
+    profile_file, profile_id, credential_file = MODEL_OPTIONS[model]
     # An exported production DSN, Compose overlay or MSW scenario must not leak in.
     env = {
         k: v
@@ -51,11 +64,11 @@ def environment() -> dict[str, str]:
                 ROOT / "deploy/compose/config/runtime-config.synthetic.v1.json"
             ),
             "REVIEW_MODEL_PROFILE_PATH": str(
-                ROOT / "deploy/compose/config/model-profile.huggingface-kimi-k2.json"
+                ROOT / "deploy/compose/config" / profile_file
             ),
-            "REVIEW_MODEL_PROFILE_ID": "kimi-k2-hf-novita",
+            "REVIEW_MODEL_PROFILE_ID": profile_id,
             "REVIEW_MODEL_CREDENTIAL_PATH": str(
-                Path.home() / ".config/ai-analytics-review/huggingface.token"
+                Path.home() / ".config/ai-analytics-review" / credential_file
             ),
             "REVIEW_SKILL_PACKAGE_PATH": str(ROOT / "skills/review-data-spec"),
             "REVIEW_SKILL_ID": "review-data-spec",
@@ -133,8 +146,8 @@ def stop_processes(processes: list[subprocess.Popen]) -> None:
 
 
 class Supervisor:
-    def __init__(self) -> None:
-        self.env = environment()
+    def __init__(self, model: str = "openai") -> None:
+        self.env = environment(model)
         self.stopping = threading.Event()
         self.phase = "starting"
         self.processes: list[subprocess.Popen] = []
@@ -190,7 +203,13 @@ class Supervisor:
                     message = json.loads(connection.recv(16384))
                     connection.sendall(
                         json.dumps(
-                            {"root": str(ROOT), "phase": self.phase, "url": WEB, "logs": str(STATE)}
+                            {
+                                "root": str(ROOT),
+                                "phase": self.phase,
+                                "url": WEB,
+                                "logs": str(STATE),
+                                "model": self.env["REVIEW_MODEL_PROFILE_ID"],
+                            }
                         ).encode()
                     )
                     if message.get("command") == "stop" and message.get("root") == str(ROOT):
@@ -220,7 +239,9 @@ class Supervisor:
                 raise RuntimeError(f"Нужен {name}; см. docs/operations/local-development.md")
         credential = Path(self.env["REVIEW_MODEL_CREDENTIAL_PATH"])
         if not credential.is_file() or not os.access(credential, os.R_OK):
-            raise RuntimeError("Нет читаемого huggingface.token; см. инструкцию локального запуска")
+            raise RuntimeError(
+                f"Нет читаемого {credential.name}; см. инструкцию локального запуска"
+            )
         for port in (5173, 18000):
             require_free_port(port)
         self.env["DOCKER_CONTEXT"] = self.docker("context", "show")
@@ -357,13 +378,15 @@ class Supervisor:
 def main() -> int:
     parser = argparse.ArgumentParser(description="AI Review localhost: start / stop / status / logs")
     parser.add_argument("command", choices=("start", "stop", "status", "logs", "_serve"))
-    command = parser.parse_args().command
+    parser.add_argument("--model", choices=tuple(MODEL_OPTIONS), default="openai")
+    args = parser.parse_args()
+    command = args.command
     os.umask(0o077)
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     STATE.chmod(0o700)
     (STATE / "artifacts").mkdir(exist_ok=True)
     if command == "_serve":
-        Supervisor().serve()
+        Supervisor(args.model).serve()
         return 0
     if command == "logs":
         print(f"Журналы: {STATE}", flush=True)
@@ -403,10 +426,15 @@ def main() -> int:
     with (STATE / "command.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         current = request()
+        if current is not None and current.get("model") != MODEL_OPTIONS[args.model][1]:
+            raise RuntimeError(
+                "Локальный стенд уже запущен с другим или неизвестным профилем модели. "
+                f"Выполните ./dev stop, затем ./dev start --model {args.model}."
+            )
         if current is None:
             with (STATE / "launcher.log").open("ab") as output:
                 process = subprocess.Popen(
-                    [sys.executable, str(Path(__file__).resolve()), "_serve"],
+                    [sys.executable, str(Path(__file__).resolve()), "_serve", "--model", args.model],
                     cwd=ROOT,
                     stdout=output,
                     stderr=subprocess.STDOUT,
@@ -423,7 +451,10 @@ def main() -> int:
     while time.monotonic() < deadline:
         current = request()
         if current and current["phase"] == "running":
-            print(f"Работает: {WEB}\nОстановка: ./dev stop\nЖурналы: ./dev logs")
+            print(
+                f"Работает: {WEB}\nПрофиль модели: {current['model']}\n"
+                "Остановка: ./dev stop\nЖурналы: ./dev logs"
+            )
             return 0
         if current and current["phase"] == "stopping":
             raise RuntimeError(f"Локальный стенд останавливается; см. {STATE / 'launcher.log'}")
