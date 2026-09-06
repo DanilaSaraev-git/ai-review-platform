@@ -76,7 +76,7 @@ export const EXTRACTION_STATE_TEXT = {
 
 export const DECISION_STATUS_TEXT = {
   unreviewed: 'Не рассмотрено',
-  confirmed: 'Подтверждено',
+  confirmed: 'Принято к доработке',
   rejected: 'Отклонено',
   needs_context: 'Нужен контекст',
 } as const;

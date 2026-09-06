@@ -81,6 +81,7 @@ async def test_explicit_models_probe_is_non_generative_and_profile_driven() -> N
             model="synthetic-model",
             secret_ref=None,
             timeout_seconds=5,
+            provider="synthetic",
         )
     ]
     assert observation.state == "available"
@@ -105,9 +106,7 @@ async def test_models_probe_does_not_guess_availability_from_a_healthy_response(
             "success_ttl_seconds": 300,
         }
     )
-    transport = RecordingProbe(
-        ProbeResponse(status_code=200, json_value={"data": [{"id": "another-model"}]})
-    )
+    transport = RecordingProbe(ProbeResponse(status_code=200, json_value={"data": [{"id": "another-model"}]}))
 
     observation = await AvailabilityService().refresh(profile, transport)
 
@@ -140,6 +139,37 @@ async def test_http_probe_is_get_only_authenticated_and_does_not_follow_redirect
         ("GET", "http://provider.test/models")
     ]
     assert requests[0].headers["authorization"] == "Bearer mounted-secret"
+    assert "openai-project" not in requests[0].headers
+
+
+async def test_yandex_probe_uses_profile_provider_and_folder_without_generation() -> None:
+    model = "gpt://synthetic-folder/deepseek-v4-flash/latest"
+    profile = _profile(
+        probe={
+            "mode": "models",
+            "url": "http://provider.test/models",
+            "timeout_seconds": 5,
+            "success_ttl_seconds": 300,
+        }
+    ).model_copy(update={"provider": "yandex", "model": model, "secret_ref": PROBE_SECRET_REF})
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"id": model}]})
+
+    observation = await AvailabilityService().refresh(
+        profile,
+        HTTPProbeTransport(secrets=StaticSecretProvider(), transport=httpx.MockTransport(handler)),
+    )
+
+    assert observation.state == "available"
+    assert len(requests) == 1
+    assert requests[0].method == "GET"
+    assert requests[0].headers["authorization"] == "Api-Key mounted-secret"
+    assert requests[0].headers["openai-project"] == "synthetic-folder"
+    assert requests[0].headers["accept"] == "application/json"
+    assert requests[0].content == b""
 
 
 async def test_http_probe_bounds_response_before_parsing() -> None:

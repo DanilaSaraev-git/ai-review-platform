@@ -30,12 +30,6 @@ export function DecisionSummary({ decision }: { decision: HumanDecision | undefi
           <dd className="mt-1 whitespace-pre-wrap break-words text-ink-muted">{decision.reason}</dd>
         </div>
       ) : null}
-      {decision.resolution ? (
-        <div>
-          <dt className="font-medium text-ink">Резолюция</dt>
-          <dd className="mt-1 whitespace-pre-wrap break-words text-ink-muted">{decision.resolution}</dd>
-        </div>
-      ) : null}
       {decision.actor ? (
         <div>
           <dt className="font-medium text-ink">Сохранил</dt>

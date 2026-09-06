@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import type { FindingDialogue } from '@/api/generated/model';
+import { useQueries } from '@tanstack/react-query';
+import { getGetDocumentQueryOptions } from '@/api/generated/endpoints';
+import { DialogueAttachments } from './DialogueAttachments';
+import type { Document, FindingDialogue } from '@/api/generated/model';
 import { isProblem, isRevisionConflict } from '@/api/errors';
 import { Button, Callout, Field, TextArea } from '@/components/ui';
 import { blockedReasonText } from '@/lib/error-messages';
@@ -29,18 +32,23 @@ export function TurnComposer({
   dialogue: FindingDialogue;
 }) {
   const [message, setMessage] = useState('');
+  const [attachments, setAttachments] = useState<Document[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const documents = useQueries({ queries: attachments.map(d => getGetDocumentQueryOptions(workspaceId, d.id, { query: { refetchInterval: q => q.state.data?.extraction_state === 'pending' ? 1000 : false } })) });
+  const attachmentsReady = !uploading && documents.every(q => q.data && ['completed', 'partial'].includes(q.data.extraction_state));
   const { send, isPending, error, reset } = useCreateTurn(workspaceId, runId, findingId);
   const conflict = dialogueConflictState(error);
   const blocked = blockedReasonText(dialogue.blocked_reason);
-  const canSend = dialogue.can_send_message && message.trim().length > 0 && !isPending;
+  const canSend = dialogue.can_send_message && (message.trim().length > 0 || attachments.length > 0) && !isPending && attachmentsReady;
 
   async function submit(): Promise<void> {
-    if (message.trim().length === 0) {
+    if (!canSend) {
       return;
     }
     reset();
     try {
-      await send(message.trim(), dialogue.revision);
+      await send(message.trim() || 'Прикреплены материалы для уточнения замечания.', dialogue.revision, attachments.map(d => d.id));
+      setAttachments([]);
       setMessage('');
     } catch {
       // Состояние ошибки хранит мутация; введённый вопрос намеренно остаётся
@@ -50,13 +58,13 @@ export function TurnComposer({
 
   return (
     <div className="flex flex-col gap-3">
-      <Field label="Уточняющий вопрос по замечанию" hint={isDemoMode ? DEMO_REPLY_NOTICE : undefined}>
+      <Field label="Ответ или уточняющий вопрос по замечанию" hint={isDemoMode ? DEMO_REPLY_NOTICE : undefined}>
         {(id, describedBy) => (
           <TextArea
             id={id}
             aria-describedby={describedBy}
             rows={3}
-            placeholder="Введите вопрос…"
+            placeholder="Введите сообщение…"
             value={message}
             disabled={!dialogue.can_send_message}
             onChange={(event) => setMessage(event.target.value)}
@@ -64,6 +72,8 @@ export function TurnComposer({
         )}
       </Field>
 
+      <DialogueAttachments workspaceId={workspaceId} documents={attachments} onChange={setAttachments} onBusy={setUploading} disabled={!dialogue.can_send_message || isPending} />
+      {!attachmentsReady && attachments.length > 0 ? <p className="text-xs text-ink-muted">Дождитесь извлечения текста. Если обработка не удалась, удалите файл и выберите другой.</p> : null}
       {/* Причина недоступности называется всегда (FR-032). */}
       {!dialogue.can_send_message && blocked ? <Callout tone="warn" title="Отправка недоступна">{blocked}</Callout> : null}
 
@@ -86,7 +96,7 @@ export function TurnComposer({
 
       <div className="flex justify-end">
         <Button variant="primary" disabled={!canSend} onClick={() => void submit()}>
-          {isPending ? 'Отправляем…' : 'Отправить вопрос'}
+          {isPending ? 'Отправляем…' : 'Отправить'}
         </Button>
       </div>
     </div>

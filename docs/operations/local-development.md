@@ -61,4 +61,37 @@ PostgreSQL использует Compose project `review-platform-dev` и volume 
 
 Сначала выполните `./dev status` и `./dev logs`. Проверьте указанную в сообщении зависимость, занятый порт или credential. Если недоступна только модель, смотрите `probe.log`: восстановите сеть или доступ поставщика и дождитесь следующей проверки. Для повторного запуска после изменения конфигурации используйте `stop`/`start`.
 
+## Локальная проверка цикла документа
+
+Feature 009 проверяется в отдельном checkout и Compose project `review-cycle-local`. Локальный адрес — [http://localhost:18109/documents](http://localhost:18109/documents); публикация порта ограничена loopback. База и исходники используют отдельные volumes. Существующие локальные и удалённые экземпляры не изменяются.
+
+Приватный wrapper `~/.local/state/ai-review-platform/document-cycle-local/manage.sh` принимает команды Compose: `ps`, `stop`, `up --detach --build --wait`. Выбранный профиль DeepSeek хранится отдельным локальным JSON, а путь к credential берётся из существующей конфигурации Яндекса без копирования секрета в репозиторий. GET-probe проверяет доступность; генерация происходит только при действии пользователя. Для HTTP на loopback используется trusted режим; гостевая изоляция проверяется отдельно интеграционными тестами.
+
+После обновления кода стенд необходимо пересобрать. Остановка сохраняет данные. Результаты приёмки описаны в [SpecKit 009](../../specs/009-document-review-cycle/quickstart.md); production deployment допускается только после отдельной команды пользователя.
+
+## Отдельный локальный стенд DeepSeek
+
+Для локального тестирования 6 сентября 2026 года настроен отдельный Compose project
+`review-platform-yandex-local` из checkout с принятым Numbat и правкой языка ответов.
+Адрес — [http://localhost:18101/new](http://localhost:18101/new), порт опубликован только
+на loopback. Ранее работающий `./dev` другого checkout на 5173 не изменяется.
+
+Приватные настройки и управляющий wrapper находятся вне Git в
+`~/.local/state/ai-review-platform/yandex-local`. Профиль и credential Яндекса читаются
+из существующего приватного каталога; значения ключей в env и команды не включаются.
+Модель — `yandex-deepseek-v4-flash` 1.0.0. Отдельный сервис раз в 60 секунд выполняет
+только GET-проверку доступности; генерации выполняются по действиям пользователя.
+
+```sh
+sh ~/.local/state/ai-review-platform/yandex-local/manage.sh ps
+sh ~/.local/state/ai-review-platform/yandex-local/manage.sh stop
+sh ~/.local/state/ai-review-platform/yandex-local/manage.sh up --detach --build --wait
+```
+
+Этот стенд использует собранные images: после изменений кода повторите последнюю команду.
+Его PostgreSQL и artifacts находятся в отдельных Docker volumes; остановка сохраняет
+данные. Серверные документы и отчёты в локальную базу не переносились. Wrapper привязан
+к текущему checkout и приватной конфигурации владельца; это локальная настройка машины,
+а не переносимый скрипт с встроенными credentials.
+
 Объём и проверки этого режима зафиксированы в [SpecKit 007](../../specs/007-local-dev-loop/spec.md) и [списке задач](../../specs/007-local-dev-loop/tasks.md). Фактические проверки и их границы записаны в [evidence](../../specs/007-local-dev-loop/evidence.md). Production остаётся отдельным стабильным стендом; новая серверная выкладка и повторный release gate не входят в локальный запуск. Серверная эксплуатация описана в [deployment.md](deployment.md).

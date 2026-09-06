@@ -1,0 +1,39 @@
+# Implementation Plan: Гостевой доступ
+
+Основание: [spec.md](spec.md), [ADR-0002](../../docs/adr/0002-optional-guest-workspaces.md). Реализация ведётся в отдельном worktree, основанном на развёрнутом release и синхронизированном с актуальными UI/модельными изменениями перед выпуском. Рабочие результаты: [evidence.md](evidence.md).
+
+## Швы и порядок
+
+| Срез | Изменение | Проверка до следующего этапа |
+| --- | --- | --- |
+| 1. Контракт и сессия | Отдельный guest-v1 OpenAPI; миграция `guest_sessions`; hash lookup, bootstrap, request context | Cookie persistence, tamper/expiry, исходный no-auth контракт неизменён |
+| 2. Изоляция и lifecycle | Workspace/actor на гостя, `GuestContextRegistry`, общий model adapter/semaphore, startup reconciliation | Два гостя, чужие ID/контекст/профили, disconnect, restart, общий concurrency limit |
+| 3. Загрузка | `guest_storage.py` проверяет квоты под общей блокировкой перед upload | Личная квота, общий бюджет, низкий free disk, конкурентные загрузки; старые данные читаются |
+| 4. Gateway и документация | Публичный основной сервис, приватный `/demo`, fail-closed проверка API, инструкции | Nginx tests, encoded paths, несовпадение режимов, ссылки и симлинк |
+| 5. Приёмка и выпуск | Совместные gates, резервная копия, версия приложения, миграция, HTTPS smoke | Результаты и фактический release внесены в evidence; rollback описан оператору |
+
+## Lifecycle
+
+`GuestContextRegistry.use(workspace_id, actor_id)` принимает только identity из серверного session store и возвращает `GuestContext(platform, runtime)`. Создание одного workspace идёт single-flight. Каждый активный context имеет отдельную lifespan-owned task; она сама открывает и закрывает AnyIO task groups своего runtime.
+
+После последнего caller registry ждёт фоновые операции, затем закрывает runtime и удаляет context из памяти. PostgreSQL/POSIX при этом не очищаются. Максимум 128 живых contexts; новые ожидают свободное место. Корневой runtime единолично владеет HTTP client, гости заимствуют adapter и общий semaphore.
+
+Корневой platform берёт deployment lock, обрабатывает своё прерванное состояние; registry до приёма запросов вызывает reconciliation каждого зарегистрированного гостя. Expired sessions включены, поскольку их данные и прерванные операции сохраняются.
+
+## Хранение
+
+Одна организация и существующий PostgreSQL/POSIX volume; каждому гостю назначаются отдельные workspace/actor. Миграция добавляет связь сессии и не переносит существующие документы. Срок cookie не является сроком хранения файлов. Точные значения и область квот — [guest-v1](../../contracts/review-platform/guest-v1/README.md#хранение-и-лимиты).
+
+## Тестовое решение
+
+Изоляция доступа, параллельность и restart требуют unit и реальных PostgreSQL integration tests. Провайдер модели в этих тестах синтетический; выпуск не требует пробной генерации у действующего поставщика. Проверяется общий лимит модели, владение HTTP client, независимость guest scopes и сохранность завершённых результатов.
+
+Gateway проверяется отдельно на публичном основном пути, приватном `/demo`, вариантах encoded paths и ошибочном сочетании настроек. До rollout проверяются контракт, миграция, UI/backend compatibility и документированный откат. После rollout нужны фактические HTTPS и persistence evidence; локальные результаты их не заменяют.
+
+## Риски
+
+- Переключение `platform.workspace_id` общего экземпляра создаёт гонку доступа; используются отдельные экземпляры.
+- Отдельный `platform.startup()` на каждого гостя конфликтует с deployment lock; lock принадлежит только родителю.
+- Per-guest semaphore умножил бы вызовы модели; semaphore заимствуется у родителя.
+- Потеря cookie не удаляет данные, но самостоятельное восстановление доступа не реализовано.
+- Квота исходных загрузок не ограничивает общий размер БД и результатов; резерв диска сохраняет эксплуатационный запас, а не заменяет мониторинг.

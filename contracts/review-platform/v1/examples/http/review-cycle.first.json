@@ -1,0 +1,32 @@
+{
+  "run_id": "60000000-0000-4000-8000-000000000001",
+  "family_id": "90000000-0000-4000-8000-000000000001",
+  "document_id": "40000000-0000-4000-8000-000000000001",
+  "version_number": 1,
+  "baseline_run_id": null,
+  "status": "ready",
+  "revision": 1,
+  "compared_at": "2026-09-06T10:00:00Z",
+  "entries": [
+    {
+      "issue_id": "91000000-0000-4000-8000-000000000001",
+      "origin_run_id": "60000000-0000-4000-8000-000000000001",
+      "origin_finding_id": "80000000-0000-4000-8000-000000000001",
+      "previous_run_id": null,
+      "previous_finding_id": null,
+      "current_finding_id": "80000000-0000-4000-8000-000000000001",
+      "status": "new",
+      "match_basis": "Первый опубликованный результат; базы сравнения нет.",
+      "decision_carried": false,
+      "previous_decision": null,
+      "resolution": {
+        "status": "open",
+        "revision": 0,
+        "actor": null,
+        "reason": null,
+        "decided_at": null
+      }
+    }
+  ],
+  "limitations": []
+}

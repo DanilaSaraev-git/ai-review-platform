@@ -1,3 +1,4 @@
+import { isDemoMode } from '@/app/demo-mode';
 import { Link, useParams } from 'react-router';
 import { Button, Callout, Spinner } from '@/components/ui';
 import { NotFoundPage } from '@/app/NotFoundPage';
@@ -6,6 +7,8 @@ import { useReviewReport } from './api/use-review-report';
 import { CoveragePanel } from './components/CoveragePanel';
 import { FindingList } from './components/FindingList';
 import { ProvenancePanel } from './components/ProvenancePanel';
+import { ReviewNextStep } from '@/features/document-cycle/ReviewNextStep';
+import { ReviewCyclePanel } from '@/features/document-cycle/ReviewCyclePage';
 import { ReportSummary } from './components/ReportSummary';
 import { SourceList } from './components/SourceList';
 import { useWorkspaceRun } from './components/ReviewWorkspaceLayout';
@@ -13,7 +16,7 @@ import { useWorkspaceRun } from './components/ReviewWorkspaceLayout';
 /** Immutable report in the right panel; the source stays mounted in the parent route. */
 export function ReportPage() {
   const { runId = '' } = useParams();
-  const { workspaceId } = useWorkspaceRun();
+  const { workspaceId, historical } = useWorkspaceRun();
   const { report, isLoading, isUnavailable, isNotFound, error, retry } = useReviewReport(workspaceId, runId);
   const { byFindingId, reviewedCount, error: statesError, retry: retryStates } = useFindingStates(workspaceId, runId);
 
@@ -29,10 +32,12 @@ export function ReportPage() {
 
   return (
     <div className="numbat-panel-scroll">
+      {!isDemoMode ? <ReviewNextStep /> : null}
       <div className="numbat-panel-heading">
         <h2 id="findings-title">Замечания <span className="ml-1 text-sm text-ink-subtle">{report.findings.length}</span></h2>
         <Link to={`/runs/${runId}`}>О проверке</Link>
       </div>
+
       {statesError ? <div className="px-5 pb-4"><Callout tone="warn" title="Статусы замечаний не обновились">
         <Button className="mt-2" onClick={() => void retryStates()}>Повторить</Button>
       </Callout></div> : null}
@@ -40,6 +45,7 @@ export function ReportPage() {
       <section aria-labelledby="findings-title">
         <FindingList findings={report.findings} states={byFindingId} runId={runId} />
       </section>
+      {!isDemoMode ? <div id="review-fixes"><ReviewCyclePanel workspaceId={workspaceId} runId={runId} embedded readOnly={historical} /></div> : null}
       <CoveragePanel coverage={report.coverage} />
       <SourceList sources={report.provenance.sources} />
       <ProvenancePanel model={report.provenance.model} />

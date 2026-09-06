@@ -12,6 +12,9 @@ require_command python3
 public_ip="${REVIEW_PUBLIC_IP:-$(env_value REVIEW_PUBLIC_IP)}"
 credentials_file="${REVIEW_GATEWAY_CREDENTIALS_FILE:-$(env_value REVIEW_GATEWAY_CREDENTIALS_FILE)}"
 tls_dir="${REVIEW_TLS_DIR:-$(env_value REVIEW_TLS_DIR)}"
+guest_access="${REVIEW_GUEST_ACCESS:-$(env_value REVIEW_GUEST_ACCESS 2>/dev/null || printf false)}"
+[[ "$guest_access" == true || "$guest_access" == false ]] \
+  || die "REVIEW_GUEST_ACCESS must be true or false"
 check_private_file "$credentials_file"
 
 username="$(awk -F= '$1 == "username" {sub(/^[^=]*=/, ""); print}' "$credentials_file")"
@@ -19,7 +22,8 @@ password="$(awk -F= '$1 == "password" {sub(/^[^=]*=/, ""); print}' "$credentials
 [[ -n "$username" && -n "$password" ]] || die "gateway credentials file is incomplete"
 
 curl_config="$(mktemp)"
-cleanup() { rm -f -- "$curl_config"; }
+probe_dir="$(mktemp -d)"
+cleanup() { rm -f -- "$curl_config"; rm -rf -- "$probe_dir"; }
 trap cleanup EXIT INT TERM
 chmod 600 "$curl_config"
 printf 'user = "%s:%s"\n' "$username" "$password" > "$curl_config"
@@ -27,7 +31,11 @@ printf 'user = "%s:%s"\n' "$username" "$password" > "$curl_config"
 redirect_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "http://$public_ip/")"
 [[ "$redirect_status" == 308 ]] || die "plaintext endpoint did not redirect (status $redirect_status)"
 
-for protected_path in / /api/v1/bootstrap /v1/bootstrap /docs /docs/ /openapi.json /api/openapi.json /health/ready; do
+protected_paths=(/demo /demo/ /demo/new /demo/data/demo.json /demo/data/document.pdf /demo/api/v1/bootstrap)
+if [[ "$guest_access" == false ]]; then
+  protected_paths+=(/ /api/v1/bootstrap /v1/bootstrap /docs /docs/ /openapi.json /api/openapi.json /health/ready)
+fi
+for protected_path in "${protected_paths[@]}"; do
   unauthorized_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
     "https://$public_ip$protected_path")"
   [[ "$unauthorized_status" == 401 ]] \
@@ -37,19 +45,25 @@ done
 authorized_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --config "$curl_config" "https://$public_ip/")"
 [[ "$authorized_status" == 200 ]] || die "gateway did not accept operator credentials (status $authorized_status)"
 
-cross_origin_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --config "$curl_config" \
+cross_origin_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST --header 'Origin: https://cross-origin.invalid' "https://$public_ip/api/v1/review-runs")"
 [[ "$cross_origin_status" == 403 ]] || die "cross-origin mutation was not rejected (status $cross_origin_status)"
 
-bootstrap_file="$(mktemp)"
-profiles_file="$(mktemp)"
-documents_file="$(mktemp)"
-openapi_file="$(mktemp)"
-docs_file="$(mktemp)"
-docs_headers="$(mktemp)"
-trap 'rm -f -- "$curl_config" "$bootstrap_file" "$profiles_file" "$documents_file" "$openapi_file" "$docs_file" "$docs_headers"' EXIT INT TERM
-chmod 600 "$bootstrap_file" "$profiles_file" "$documents_file" "$openapi_file" "$docs_file" "$docs_headers"
-curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/api/v1/bootstrap" > "$bootstrap_file"
+bootstrap_file="$probe_dir/bootstrap.json"
+profiles_file="$probe_dir/profiles.json"
+documents_file="$probe_dir/documents.json"
+openapi_file="$probe_dir/openapi.json"
+docs_file="$probe_dir/docs.html"
+docs_headers="$probe_dir/docs.headers"
+cookie_jar="$probe_dir/guest.cookies"
+request_auth=(--config "$curl_config")
+if [[ "$guest_access" == true ]]; then
+  request_auth=(--cookie "$cookie_jar" --cookie-jar "$cookie_jar")
+  public_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://$public_ip/")"
+  [[ "$public_status" == 200 ]] || die "guest UI did not open without credentials (status $public_status)"
+fi
+curl --silent --show-error --fail "${request_auth[@]}" --dump-header "$probe_dir/bootstrap.headers" \
+  "https://$public_ip/api/v1/bootstrap" > "$bootstrap_file"
 workspace_id="$(python3 - "$bootstrap_file" <<'PY'
 import json
 import sys
@@ -59,7 +73,53 @@ value = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 print(value["workspace"]["id"])
 PY
 )"
-curl --silent --show-error --fail --config "$curl_config" \
+if [[ "$guest_access" == true ]]; then
+  python3 - "$probe_dir/bootstrap.headers" <<'PY'
+import sys
+from http.cookies import SimpleCookie
+from pathlib import Path
+
+cookies = SimpleCookie()
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    if line.lower().startswith("set-cookie:"):
+        cookies.load(line.partition(":")[2].strip())
+session = cookies.get("review_guest")
+if not session or not session["secure"] or not session["httponly"]:
+    raise SystemExit("guest bootstrap did not set a Secure HttpOnly cookie")
+if session["samesite"].lower() != "lax" or session["path"] != "/" or session["max-age"] != "2592000":
+    raise SystemExit("guest cookie must use SameSite=Lax, Path=/, and a 30-day lifetime")
+PY
+  curl --silent --show-error --fail "${request_auth[@]}" \
+    "https://$public_ip/v1/bootstrap" > "$probe_dir/returning.json"
+  curl --silent --show-error --fail --cookie-jar "$probe_dir/other.cookies" \
+    "https://$public_ip/v1/bootstrap" > "$probe_dir/other.json"
+  python3 - "$bootstrap_file" "$probe_dir/returning.json" "$probe_dir/other.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+first, returning, other = [json.loads(Path(path).read_text(encoding="utf-8")) for path in sys.argv[1:]]
+if first["workspace"]["id"] != returning["workspace"]["id"] or first["actor"]["id"] != returning["actor"]["id"]:
+    raise SystemExit("guest cookie did not preserve browser identity")
+if first["workspace"]["id"] == other["workspace"]["id"] or first["actor"]["id"] == other["actor"]["id"]:
+    raise SystemExit("independent guests share an identity")
+PY
+  for api_prefix in /api/v1 /v1; do
+    guest_path="$api_prefix/workspaces/$workspace_id/documents"
+    no_cookie_status="$(curl --silent --output /dev/null --write-out '%{http_code}' "https://$public_ip$guest_path")"
+    [[ "$no_cookie_status" == 401 ]] || die "guest API accepted a request without a cookie ($no_cookie_status)"
+    other_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+      --cookie "$probe_dir/other.cookies" "https://$public_ip$guest_path")"
+    [[ "$other_status" == 404 ]] || die "another guest workspace was exposed ($other_status)"
+    trusted_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+      "${request_auth[@]}" "https://$public_ip$api_prefix/workspaces/$(env_value REVIEW_WORKSPACE_ID)/documents")"
+    [[ "$trusted_status" == 404 ]] || die "guest cookie exposed the trusted workspace ($trusted_status)"
+  done
+  demo_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    "${request_auth[@]}" "https://$public_ip/demo/data/demo.json")"
+  [[ "$demo_status" == 401 ]] || die "guest cookie bypassed demo Basic auth ($demo_status)"
+fi
+curl --silent --show-error --fail "${request_auth[@]}" \
   "https://$public_ip/api/v1/workspaces/$workspace_id/documents?limit=1" > "$documents_file"
 document_id="$(python3 - "$documents_file" <<'PY'
 import json
@@ -77,14 +137,14 @@ if [[ -n "$document_id" ]]; then
     || die "gateway exposed document content without credentials (status $document_status)"
 fi
 
-curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/openapi.json" > "$openapi_file"
+curl --silent --show-error --fail "${request_auth[@]}" "https://$public_ip/openapi.json" > "$openapi_file"
 docs_redirect_status="$(curl --silent --output /dev/null --dump-header "$docs_headers" --write-out '%{http_code}' \
-  --config "$curl_config" "https://$public_ip/docs")"
+  "${request_auth[@]}" "https://$public_ip/docs")"
 [[ "$docs_redirect_status" == 307 ]] || die "canonical docs URL did not redirect to its directory"
 docs_location="$(awk 'BEGIN {IGNORECASE=1} /^location:/ {sub(/\r$/, ""); sub(/^[^:]*:[[:space:]]*/, ""); print; exit}' "$docs_headers")"
 [[ "$docs_location" == "https://$public_ip/docs/" ]] \
   || die "canonical docs redirect exposed an internal or plaintext address"
-curl --silent --show-error --fail --config "$curl_config" "https://$public_ip/docs/" > "$docs_file"
+curl --silent --show-error --fail "${request_auth[@]}" "https://$public_ip/docs/" > "$docs_file"
 python3 - "$openapi_file" "$docs_file" <<'PY'
 import json
 import sys
@@ -98,7 +158,7 @@ if "<!doctype html" not in docs.lower():
     raise SystemExit("gateway docs route did not return the offline HTML application")
 PY
 
-curl --silent --show-error --fail --config "$curl_config" \
+curl --silent --show-error --fail "${request_auth[@]}" \
   "https://$public_ip/api/v1/workspaces/$workspace_id/model-profiles" > "$profiles_file"
 model_mode="${REVIEW_VERIFY_MODEL_MODE:-}"
 if [[ -z "$model_mode" ]]; then
@@ -141,4 +201,4 @@ if ss -lnt | awk 'NR > 1 {print $4}' | grep -Eq '(^|:)(5432|8000)$'; then
   die "database or API listens on a host port"
 fi
 
-printf 'gateway, TLS, origin policy, private services, and model mode: PASS\n'
+printf 'gateway, TLS, origin policy, private services, and model mode (guest=%s): PASS\n' "$guest_access"

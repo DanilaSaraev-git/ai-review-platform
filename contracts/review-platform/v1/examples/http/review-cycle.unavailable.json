@@ -1,0 +1,14 @@
+{
+  "run_id": "60000000-0000-4000-8000-000000000001",
+  "family_id": "90000000-0000-4000-8000-000000000001",
+  "document_id": "40000000-0000-4000-8000-000000000001",
+  "version_number": 1,
+  "baseline_run_id": null,
+  "status": "unavailable",
+  "revision": 0,
+  "compared_at": null,
+  "entries": [],
+  "limitations": [
+    "Сравнение недоступно; опубликованный отчёт сохранён."
+  ]
+}

@@ -4,7 +4,7 @@ from typing import Any
 
 import psycopg
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 router = APIRouter(tags=["health"])
 
@@ -12,6 +12,12 @@ router = APIRouter(tags=["health"])
 @router.get("/health/live")
 def live() -> dict[str, str]:
     return {"status": "alive"}
+
+
+@router.get("/health/guest-access")
+def guest_access(request: Request) -> Response:
+    """Gateway fail-closed check; contains no user data or credentials."""
+    return Response(status_code=204 if request.app.state.guest_access else 403)
 
 
 @router.get("/health/ready")
@@ -24,7 +30,7 @@ def ready(request: Request) -> Any:
             checks["database"] = connection.execute("SELECT 1").fetchone() == (1,)
             checks["business_schema"] = connection.execute(
                 "SELECT version_num FROM alembic_version"
-            ).fetchone() == ("20260905_0002",)
+            ).fetchone() == ("20260906_0004",)
     except Exception:
         checks["database"] = False
         checks["business_schema"] = False

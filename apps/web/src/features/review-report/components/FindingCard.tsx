@@ -1,5 +1,8 @@
 import { Link } from 'react-router';
 import type { Finding, FindingState } from '@/api/generated/model';
+import { useGetReviewCycle } from '@/api/generated/endpoints';
+import { useBootstrap } from '@/features/new-review/api/use-bootstrap';
+import { isDemoMode } from '@/app/demo-mode';
 import { StatusBadge } from '@/components/ui';
 import { DECISION_STATUS_TEXT, FINDING_KIND_TEXT, PRIORITY_TEXT } from '@/lib/error-messages';
 
@@ -22,6 +25,10 @@ export function FindingCard({
   isSelected?: boolean;
 }) {
   const decision = state?.decision;
+  const { workspaceId } = useBootstrap();
+  const cycle = useGetReviewCycle(workspaceId, runId, { query: { enabled: Boolean(workspaceId && !isDemoMode) } });
+  const entry = cycle.data?.entries.find(e => e.current_finding_id === finding.id);
+  const changes = { new: 'Новое', persisting: 'Повторилось', reappeared: 'Обнаружено снова', uncertain: 'Связь требует проверки', not_checked: 'Не проверено', not_detected: 'Не обнаружено' };
 
   return (
     <article
@@ -37,10 +44,11 @@ export function FindingCard({
             {DECISION_STATUS_TEXT[decision.status]}
           </StatusBadge>
         ) : null}
+        {entry && cycle.data?.baseline_run_id ? <StatusBadge tone="neutral">{changes[entry.status]}</StatusBadge> : null}
       </div>
 
       <h3 className="mt-2.5 text-[14px] font-semibold leading-5 text-ink">
-        <Link className="hover:text-accent" to={`/runs/${runId}/report/findings/${finding.id}`}>
+        <Link className="hover:underline" to={`/runs/${runId}/report/findings/${finding.id}`}>
           <span className="mr-1 text-xs font-medium text-ink-subtle">{finding.ordinal}.</span> {finding.title}
         </Link>
       </h3>

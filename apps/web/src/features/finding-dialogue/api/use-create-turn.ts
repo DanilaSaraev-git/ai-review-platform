@@ -15,14 +15,14 @@ export function useCreateTurn(workspaceId: string, runId: string, findingId: str
   const queryClient = useQueryClient();
   const mutation = useCreateFindingDialogueTurn();
 
-  async function send(message: string, expectedRevision: number): Promise<FindingDialogue> {
+  async function send(message: string, expectedRevision: number, attachmentDocumentIds: string[] = []): Promise<FindingDialogue> {
     let dialogue: FindingDialogue;
     try {
       dialogue = await mutation.mutateAsync({
         workspaceId,
         runId,
         findingId,
-        data: { message, expected_revision: expectedRevision },
+        data: { message, expected_revision: expectedRevision, ...(attachmentDocumentIds.length ? { attachment_document_ids: attachmentDocumentIds } : {}) },
       });
     } catch (error) {
       if (isRevisionConflict(error)) {

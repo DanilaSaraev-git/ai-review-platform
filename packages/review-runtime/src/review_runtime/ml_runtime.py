@@ -41,6 +41,7 @@ from review_core.ports.models import (
 )
 from review_core.review.engine import MappingContext, ReviewEngine, ReviewFragment
 from review_core.review.prompt import PromptBudgetExceeded
+from review_core.review.validation import ReviewSemanticValidationError
 
 from review_runtime.composition import ModelRuntime
 from review_runtime.config.model_profiles import ModelProfile, profile_config_digest
@@ -90,6 +91,14 @@ def _require_complete_model_output(result: GenerationResult) -> None:
 
 class _SemanticValidationFailed(ValueError):
     pass
+
+
+def _semantic_failure(error: _SemanticValidationFailed) -> ExecutionFailure:
+    cause = error.__cause__
+    message = "The model response evidence failed validation."
+    if isinstance(cause, ReviewSemanticValidationError):
+        message = f"The model response evidence failed validation ({cause.code})."
+    return ExecutionFailure("validation_failed", message, False)
 
 
 class _ReviewOperationStorage(
@@ -270,6 +279,7 @@ class LLMReviewRuntime:
         model_profile: ModelProfile,
         skill: ResolvedSkill,
         root: Path,
+        model_call_semaphore: Any = None,
     ) -> None:
         self.platform = platform
         self.model_runtime = model_runtime
@@ -300,8 +310,10 @@ class LLMReviewRuntime:
         self.dialogue_engine = DialogueEngine()
         import anyio
 
-        self._model_call_semaphore = anyio.Semaphore(
-            self.platform.runtime_policy.budgets.max_parallel_model_calls
+        self._model_call_semaphore = (
+            model_call_semaphore
+            if model_call_semaphore is not None
+            else anyio.Semaphore(self.platform.runtime_policy.budgets.max_parallel_model_calls)
         )
         self._recording_adapter = _ConcurrencyLimitedAdapter(
             _RecordingAdapter(
@@ -325,6 +337,28 @@ class LLMReviewRuntime:
         )
         self._dialogue_task_group: Any = None
         self._dialogue_events: dict[str, Any] = {}
+
+    def for_platform(self, platform: PostgresReviewPlatform) -> LLMReviewRuntime:
+        """Bind a separate execution owner to a namespace, borrowing model resources."""
+        return LLMReviewRuntime(
+            platform=platform,
+            model_runtime=ModelRuntime(adapter=self.model_runtime.adapter),
+            model_profile=self.model_profile,
+            skill=self.skill,
+            root=self.root,
+            model_call_semaphore=self._model_call_semaphore,
+        )
+
+    @property
+    def has_pending_work(self) -> bool:
+        return self._coordinator.has_pending_work or bool(self._dialogue_events)
+
+    async def wait_idle(self) -> None:
+        """Keep detached review/dialogue work alive after its HTTP waiter leaves."""
+        while self.has_pending_work:
+            await self._coordinator.wait_idle()
+            for event in tuple(self._dialogue_events.values()):
+                await event.wait()
 
     async def __aenter__(self) -> LLMReviewRuntime:
         await self.model_runtime.__aenter__()
@@ -580,7 +614,7 @@ class LLMReviewRuntime:
                         profile=prepared["profile"],
                         completed_history=tuple(prepared["history"]),
                         follow_up_allowed=True,
-                        locale="en-US",
+                        locale=prepared["locale"],
                         execution_snapshot=prepared["snapshot"],
                     ),
                     skill=PinnedDialogueSkill(
@@ -695,9 +729,7 @@ class LLMReviewRuntime:
                 error.retryable,
             )
         if isinstance(error, _SemanticValidationFailed):
-            return ExecutionFailure(
-                "validation_failed", "The model response evidence failed validation.", False
-            )
+            return _semantic_failure(error)
         if isinstance(error, (_ModelOutputInvalid, ValueError, json.JSONDecodeError)):
             return ExecutionFailure(
                 "model_output_invalid", "The model response failed validation.", False
@@ -738,6 +770,7 @@ class LLMReviewRuntime:
             "state": "queued",
             "progress": {"percent": 0, "message": "Review queued"},
             "document_id": primary.id,
+            "locale": body["locale"],
             "context_document_ids": [item.id for item in contexts],
             "execution_snapshot": snapshot,
             "created_by": self.platform.actor,
@@ -978,9 +1011,7 @@ class LLMReviewRuntime:
             code = public_model_error_code(error, purpose="review")
             return ExecutionFailure(code, "The model request could not be completed.", error.retryable)
         if isinstance(error, _SemanticValidationFailed):
-            return ExecutionFailure(
-                "validation_failed", "The model response evidence failed validation.", False
-            )
+            return _semantic_failure(error)
         if isinstance(error, (_ModelOutputInvalid, ValueError)):
             return ExecutionFailure(
                 "model_output_invalid", "The model response failed validation.", False

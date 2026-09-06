@@ -28,8 +28,9 @@ services:
   gateway:
     image: nginx:1.29.4-alpine
     environment:
-      NGINX_ENVSUBST_FILTER: ^REVIEW_PUBLIC_IP$
+      NGINX_ENVSUBST_FILTER: ^REVIEW_(PUBLIC_IP|GUEST_ACCESS)$
       REVIEW_PUBLIC_IP: ${REVIEW_PUBLIC_IP:?set REVIEW_PUBLIC_IP}
+      REVIEW_GUEST_ACCESS: ${REVIEW_GUEST_ACCESS:-false}
     volumes:
       - ./nginx.gateway.conf.template:/etc/nginx/templates/review.conf.template:ro
       - ./gateway-copy-secrets.sh:/docker-entrypoint.d/20-review-copy-secrets.sh:ro

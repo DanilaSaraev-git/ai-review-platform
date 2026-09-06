@@ -1,3 +1,8 @@
+import familyExample from '@contracts/document-family.json';
+import versionExample from '@contracts/document-family-version.json';
+import firstCycleExample from '@contracts/review-cycle.first.json';
+import persistingCycleExample from '@contracts/review-cycle.persisting.json';
+import type { DocumentFamily, DocumentFamilyVersion, ReviewCycle } from '@/api/generated/model';
 import bootstrapExample from '@contracts/bootstrap.json';
 import documentExample from '@contracts/document.json';
 import profilesExample from '@contracts/profiles.json';
@@ -115,3 +120,8 @@ export const unreviewedDecision: HumanDecision = {
   resolution: null,
   decided_at: null,
 };
+
+export const documentFamily = familyExample as DocumentFamily;
+export const documentFamilyVersion = versionExample as DocumentFamilyVersion;
+export const firstCycle = firstCycleExample as ReviewCycle;
+export const persistingCycle = persistingCycleExample as ReviewCycle;

@@ -12,6 +12,7 @@ require_command docker
 require_command flock
 require_command sha256sum
 require_command tar
+require_command python3
 [[ "$BACKUP_RETENTION" =~ ^[1-9][0-9]*$ ]] || die "REVIEW_BACKUP_RETENTION must be a positive integer"
 
 release_dir="$(realpath -e "${REVIEW_COMPOSE_RELEASE_DIR:-$REVIEW_CURRENT_LINK}")"
@@ -72,6 +73,18 @@ for service in gateway proxy api; do
   fi
 done
 
+artifact_volume="${REVIEW_COMPOSE_PROJECT}_artifacts"
+docker volume inspect "$artifact_volume" >/dev/null
+database_bytes="$(docker compose "${COMPOSE_ARGS[@]}" exec -T postgres sh -ec \
+  'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --tuples-only --no-align --command="SELECT pg_database_size(current_database());"' \
+  | tr -d '[:space:]')"
+artifact_bytes="$(docker run --rm --volume "$artifact_volume:/source:ro" "$ALPINE_IMAGE" \
+  du -sb /source | awk '{print $1}')"
+[[ "$database_bytes" =~ ^[0-9]+$ && "$artifact_bytes" =~ ^[0-9]+$ ]] \
+  || die "backup size preflight did not return valid byte counts"
+backup_reserve="${REVIEW_BACKUP_MIN_FREE_BYTES:-$(env_value REVIEW_BACKUP_MIN_FREE_BYTES 2>/dev/null || printf 2147483648)}"
+python3 "$SCRIPT_DIR/backup_space.py" "$REVIEW_BACKUP_DIR" "$database_bytes" "$artifact_bytes" "$backup_reserve"
+
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 final_dir="$REVIEW_BACKUP_DIR/$timestamp"
 tmp_dir="$(mktemp -d "$REVIEW_BACKUP_DIR/.${timestamp}.XXXXXX")"
@@ -83,8 +96,6 @@ docker compose "${COMPOSE_ARGS[@]}" exec -T postgres sh -ec \
 docker compose "${COMPOSE_ARGS[@]}" exec -T postgres pg_restore --list \
   < "$tmp_dir/database.dump" >/dev/null
 
-artifact_volume="${REVIEW_COMPOSE_PROJECT}_artifacts"
-docker volume inspect "$artifact_volume" >/dev/null
 docker run --rm --volume "$artifact_volume:/source:ro" "$ALPINE_IMAGE" \
   tar -C /source -czf - . > "$tmp_dir/artifacts.tar.gz"
 tar -tzf "$tmp_dir/artifacts.tar.gz" >/dev/null

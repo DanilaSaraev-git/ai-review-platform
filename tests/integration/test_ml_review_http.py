@@ -61,7 +61,9 @@ def _configure_ml(
     return reference
 
 
-def _request_review(client: TestClient, workspace_id: str, reference: dict[str, str]):
+def _request_review(
+    client: TestClient, workspace_id: str, reference: dict[str, str], *, locale: str = "en-US"
+):
     document = client.post(
         f"/v1/workspaces/{workspace_id}/documents",
         files={"file": ("primary.md", (FIXTURES / "primary.md").read_bytes(), "text/markdown")},
@@ -76,7 +78,7 @@ def _request_review(client: TestClient, workspace_id: str, reference: dict[str, 
             "context_document_ids": [],
             "profile": {"id": profiles[0]["id"], "version": profiles[0]["version"]},
             "model_profile": reference,
-            "locale": "en-US",
+            "locale": locale,
         },
     )
 
@@ -152,6 +154,59 @@ def test_ml_review_failure_never_publishes_report(
         assert report.status_code == 409
     assert provider.call_count == (0 if outcome == "oversize" else 1)
 
+@pytest.mark.parametrize(
+    ("violation", "diagnostic"),
+    [
+        ("quote", "anchor_quote_not_found"),
+        ("fragment", "anchor_fragment_unknown"),
+        ("coverage", "coverage_partition_inexact"),
+    ],
+)
+def test_semantic_failure_preserves_safe_reason_without_publishing_or_retrying(
+    monkeypatch: pytest.MonkeyPatch,
+    operator_settings,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    violation: str,
+    diagnostic: str,
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    response = json.loads((FIXTURES / "review-response.json").read_text())
+    private_marker = "synthetic-private-content-not-for-diagnostics"
+    if violation == "quote":
+        response["findings"][0]["anchors"][0]["quote"] = private_marker
+    elif violation == "fragment":
+        response["findings"][0]["anchors"][0]["fragment_id"] = private_marker
+    else:
+        response["coverage"]["reviewed_fragment_ids"] = []
+    provider = FakeModelProvider([ScriptedReply(chat_completion(json.dumps(response)))])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference,
+        state="available",
+        reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    expected_error = {
+        "code": "validation_failed",
+        "message": f"The model response evidence failed validation ({diagnostic}).",
+        "retryable": False,
+    }
+    with TestClient(app) as client:
+        workspace_id = app.state.platform.workspace_id
+        accepted = _request_review(client, workspace_id, reference)
+        assert accepted.status_code == 202
+        run = accepted.json()
+        assert run["state"] == "failed"
+        assert run["error"] == expected_error
+        assert private_marker not in accepted.text
+        report = client.get(f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report")
+        assert report.status_code == 409
+    with psycopg.connect(app.state.platform.database_url) as connection:
+        saved = connection.execute(
+            "SELECT value->'error' FROM review_runs WHERE id=%s", (run["id"],)
+        ).fetchone()
+    assert saved == (expected_error,)
+    assert provider.call_count == 1
 
 @pytest.mark.parametrize("response_shape", ["valid_json", "truncated_json"])
 def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_metadata(
