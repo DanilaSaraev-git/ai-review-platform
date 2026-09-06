@@ -8,8 +8,9 @@ Gateway даёт общий допуск, но не разделяет поль�
 ## Текущее состояние сервера
 
 На 6 сентября 2026 года `135.106.195.62` работает на Ubuntu 24.04, Docker 29.1.3 и
-Compose 2.40.3. В нём 2 GiB RAM, 2 GiB swap и 40 GiB диска. До добавления отдельного деморежима рабочим release был
-`5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`. Актуальный release определяется ссылкой
+Compose 2.40.3. В нём 2 GiB RAM, 2 GiB swap и 40 GiB диска. Текущий runtime release —
+`8913a73e2ff7beef407e6b745d1d84216625a600`, предыдущий —
+`33d94299150259a853bf47566fb77c59655ac4b8`. Актуальный release определяется ссылкой
 `/opt/ai-review-platform-current` (`readlink -f /opt/ai-review-platform-current`). Сервис доступен по
 [HTTPS](https://135.106.195.62) с общим gateway-допуском; PostgreSQL и artifacts постоянны,
 внутренний proxy доступен только на `127.0.0.1:8080`. Проверенный legacy rollback target —
@@ -17,11 +18,18 @@ Compose 2.40.3. В нём 2 GiB RAM, 2 GiB swap и 40 GiB диска. До до�
 без потери данных. SSH password нельзя отключать, пока отдельный вход
 непривилегированного оператора по ключу не проверен в новой сессии.
 
-Включена Kimi K2 через Hugging Face Router/Novita: профиль `kimi-k2-hf-novita` 1.0.1,
-модель `moonshotai/Kimi-K2-Instruct:novita`, навык `review-data-spec` 1.0.1. Реальный
+Включена DeepSeek V4 Flash через Yandex AI Studio: профиль `yandex-deepseek-v4-flash`
+1.0.0, навык `review-data-spec` 1.0.1. Негенеративная GET-проверка доступности прошла
+`2026-09-06T11:57:41Z`. По прямому запрету пользователя пробные генерации, review,
+dialogue и `model-smoke` при подключении не выполнялись. Совместимость фактического ответа
+и качество ревью не проверены. [Настройки Яндекса](configuration.md#deepseek-через-yandex-ai-studio)
+и порядок отката модели ниже описывают текущий контур.
+
+Исторически, до Яндекса, работала Kimi K2 через Hugging Face Router/Novita: профиль
+`kimi-k2-hf-novita` 1.0.1, модель `moonshotai/Kimi-K2-Instruct:novita`. Для неё реальный
 синтетический HTTP smoke прошёл review и dialogue; результаты предметной оценки качества
-из этого не следуют. Предыдущий production release — `c61434de2ecba31e4bcd6d24aa045cd624bc64bd`;
-порядок отключения модели перед откатом описан ниже.
+из этого не следуют и на DeepSeek не переносятся. До отдельного деморежима рабочим release
+был `5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`.
 
 При отключении модели health остаётся готов, каталог показывает `model-not-configured`
 как `unavailable`, а запуск review возвращает `model_unavailable`. Synthetic review
@@ -215,7 +223,8 @@ backup set нужно скопировать с VPS в приватный кат
 `20260905_0002`. Используйте смену режима на новом release, описанную выше; не удаляйте
 таблицу гостевых сессий и не выполняйте downgrade ради readiness старой версии.
 
-Откат приложения на совместимый установленный commit:
+Откат приложения на совместимый установленный commit. Для Yandex-выпуска до миграции
+`20260906_0003` сначала выполните описанный ниже возврат к прежней модели:
 
 ```sh
 /opt/ai-review-platform-current/tools/ops/rollback-release.sh FULL_PREVIOUS_GIT_SHA
@@ -226,15 +235,43 @@ backup set нужно скопировать с VPS в приватный кат
 понижает schema и не восстанавливает данные; восстановление данных — отдельное осознанное
 действие после разбора причины.
 
-Для отката Kimi-выпуска на `c61434de2ecba31e4bcd6d24aa045cd624bc64bd` сначала успешно
-выполните `model-disable.sh`, затем `rollback-release.sh` с этим полным SHA. Эта предыдущая
+Исторический порядок для установки до миграции `20260906_0003`: перед откатом
+Yandex-выпуска на `33d94299150259a853bf47566fb77c59655ac4b8` сначала верните прежнюю
+модель, поскольку старый release не поддерживает авторизацию Яндекса. После `0003`
+этот откат приложения неприменим, даже после возврата прежней модели.
+Приватная копия `/opt/ai-review-state/model-backups/20260906T115706Z-before-yandex`
+содержит `model-profile.json`, `model-api-key` и `model.env` с mode `0600`. Выполняйте команды
+по очереди и продолжайте только после успешного завершения предыдущей:
+
+```sh
+current=/opt/ai-review-platform-current
+model_backup=/opt/ai-review-state/model-backups/20260906T115706Z-before-yandex
+"$current/tools/ops/model-disable.sh"
+"$current/tools/ops/model-configure.sh" \
+  "$model_backup/model-profile.json" \
+  "$model_backup/model-api-key"
+"$current/tools/ops/model-enable.sh"
+"$current/tools/ops/rollback-release.sh" 33d94299150259a853bf47566fb77c59655ac4b8
+```
+
+`model-configure.sh` восстановит профиль и credential через штатную установку и пересоздаст
+`model.env`; копировать сохранённый env поверх работающей конфигурации не нужно. Enable
+проверит только доступность прежней модели и инфраструктуру, без генерации. При ошибке
+configure или enable не откатывайте приложение с профилем Яндекса. Секрет из backup не
+выводите и не передавайте в аргументах; в командах используются только пути к файлам.
+
+Исторический порядок отката Kimi-выпуска на `c61434de2ecba31e4bcd6d24aa045cd624bc64bd`:
+сначала успешно выполните `model-disable.sh`, затем `rollback-release.sh` с этим полным SHA. Эта предыдущая
 версия работает в unconfigured режиме, но ещё содержит конфликт legacy/canonical identity
 навыка 1.0.0. Перед повторным включением Kimi верните исправленный release с навыком 1.0.1.
 Исторические версии навыка и результаты проверок при таком откате сохраняются.
 
 ## Подключить модель
 
-Для выбранной Kimi K2 используется готовый
+Для текущей DeepSeek V4 Flash через Яндекс используйте
+[инструкцию настройки](configuration.md#deepseek-через-yandex-ai-studio) и
+[`model-profile.yandex-deepseek.json`](../../deploy/compose/config/model-profile.yandex-deepseek.json).
+Для прежней Kimi K2 сохранён готовый
 [`model-profile.huggingface-kimi-k2.json`](../../deploy/compose/config/model-profile.huggingface-kimi-k2.json)
 с Hugging Face Router и Novita. Для другого endpoint создайте профиль из
 `deploy/compose/config/model-profile.external.example.json`, заменив
@@ -254,9 +291,11 @@ current=/opt/ai-review-platform-current
 `model-configure.sh` и `model-enable.sh`. Configurator отказывается менять файлы работающей
 модели, чтобы timer и API не увидели разные версии profile/credential.
 
-После enable выполните отдельный compatibility smoke из
-[configuration.md](configuration.md) на синтетическом документе. Только его успешный результат
-подтверждает совместимость endpoint; readiness и config validation не выполняют платный запрос.
+Для подключения Яндекса 2026-09-06 пользователь прямо запретил пробные генерации:
+после enable не запускайте `model-smoke`, тестовый review или dialogue.
+Отдельный compatibility smoke из [configuration.md](configuration.md) возможен по новому
+поручению пользователя. Только его успешный результат подтверждает совместимость endpoint;
+readiness и config validation не выполняют платный запрос.
 Вернуться в честный unavailable mode можно без удаления настроек:
 
 ```sh

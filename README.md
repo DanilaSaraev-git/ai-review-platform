@@ -38,11 +38,11 @@
 - `codex/005-web-review-ui` — web v1;
 - `codex/mvp-launch-20260905` — упрощённый интерфейс и выпуск MVP.
 
-Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Для реального подключения выбран Kimi K2 через Hugging Face/Novita; [конфигурация](docs/operations/configuration.md#профиль-kimi-k2) и [серверные результаты](specs/006-mvp-launch/evidence.md) отделены от предметной оценки. Chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
+Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Сейчас подключена DeepSeek V4 Flash через Yandex AI Studio; [конфигурация](docs/operations/configuration.md#deepseek-через-yandex-ai-studio) и [серверные результаты](specs/006-mvp-launch/evidence.md) отделены от предметной оценки. Chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
 
 ## Подготовка MVP
 
-Срез [006 MVP launch](specs/006-mvp-launch/spec.md) реализован и развёрнут: упрощён веб-интерфейс, завершены диалоги по замечаниям и подготовлен защищённый сервис для одной доверенной группы. Работа выполнена по [плану](specs/006-mvp-launch/plan.md) и [задачам SpecKit](specs/006-mvp-launch/tasks.md), отдельными коммитами. Kimi K2 подключена; реальный серверный smoke прошёл review и dialogue. Фактически пройденные проверки и ограничения собраны в [evidence](specs/006-mvp-launch/evidence.md). Предметная оценка модели выполняется отдельно.
+Срез [006 MVP launch](specs/006-mvp-launch/spec.md) реализован и развёрнут: упрощён веб-интерфейс, завершены диалоги по замечаниям и подготовлен защищённый сервис для одной доверенной группы. Работа выполнена по [плану](specs/006-mvp-launch/plan.md) и [задачам SpecKit](specs/006-mvp-launch/tasks.md), отдельными коммитами. DeepSeek подключена с успешным GET probe, без пробных генераций по поручению пользователя. Исторический smoke Kimi не подтверждает совместимость ответов DeepSeek. Фактически пройденные проверки и ограничения собраны в [evidence](specs/006-mvp-launch/evidence.md). Предметная оценка модели выполняется отдельно.
 
 Сборка, установка, доступ, резервные копии, восстановление, откат и подключение модели описаны в [руководстве оператора](docs/operations/deployment.md).
 
@@ -50,9 +50,9 @@
 
 ## DeepSeek через Яндекс
 
-Для Yandex AI Studio подготовлен профиль DeepSeek V4 Flash, сохранение API-ключа вне Git и
+Для Yandex AI Studio подключён профиль DeepSeek V4 Flash, добавлены сохранение API-ключа вне Git и
 renderer профиля с ID каталога. [Настройка подключения](docs/operations/configuration.md#deepseek-через-yandex-ai-studio).
-По поручению пользователя эта интеграция включается без пробных генераций; GET списка моделей
+По поручению пользователя эта интеграция включена без пробных генераций; GET списка моделей
 и readiness не считаются проверкой качества ревью.
 
 ## Лицензирование
