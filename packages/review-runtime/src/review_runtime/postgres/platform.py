@@ -36,6 +36,7 @@ from review_runtime.documents.pdf import PdfDocumentParser
 from review_runtime.documents.text import TextDocumentParser
 from review_runtime.postgres.artifact_fence import advisory_fence_key
 from review_runtime.postgres.document_cycles import PostgresDocumentCycles, admit_cycle
+from review_runtime.postgres.upload_reservations import UploadReservation
 from review_runtime.reports import CanonicalReportValidator
 from review_runtime.skills.registry import ResolvedSkill
 
@@ -1454,6 +1455,7 @@ class PostgresReviewPlatform:
         *,
         family_id: str | None = None,
         version_key: str | None = None,
+        reservation: UploadReservation | None = None,
     ) -> dict[str, Any]:
         self._workspace(workspace_id)
         self._validate_upload(filename, media_type, content, self.max_upload_bytes)
@@ -1469,7 +1471,7 @@ class PostgresReviewPlatform:
         request_digest = digest_value(
             {"family_id": family_id, "filename": filename, "media_type": media_type, "sha256": digest}
         )
-        with self._connect() as connection:
+        with reservation.persist() if reservation is not None else self._connect() as connection:
             family, number, _, replay = self.cycles.prepare_upload(
                 connection,
                 family_id,
