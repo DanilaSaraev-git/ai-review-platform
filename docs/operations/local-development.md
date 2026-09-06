@@ -25,7 +25,16 @@ cd /path/to/technical-checkout
 - `uv`: при каждом старте выполняется `uv sync --frozen`; backend использует Python 3.14.7 и версии из `uv.lock`.
 - Node.js версии не ниже 22.21.0 и npm. Если frontend dependencies ещё не установлены, выполните из корня `npm --prefix apps/web ci`; при обычных правках повторять установку не требуется.
 - Работающий Docker с Compose и выбранным локальным context через Unix socket. Если используете остановленную Colima, сначала выполните `colima start`. Launcher не запускает и не останавливает VM самостоятельно.
-- Читаемый credential в `~/.config/ai-analytics-review/huggingface.token`. Значение секрета читает существующий `FileSecretProvider` по `REVIEW_MODEL_CREDENTIAL_PATH`; храните файл приватным и вне Git. Launcher передаёт путь, а не значение токена.
+- Читаемый credential выбранной модели: для OpenAI по умолчанию — `~/.config/ai-analytics-review/openai.token`, для Kimi — `~/.config/ai-analytics-review/huggingface.token`. Значение секрета читает существующий `FileSecretProvider` по `REVIEW_MODEL_CREDENTIAL_PATH`; launcher передаёт путь, а не значение токена.
+
+Для OpenAI создайте каталог `~/.config/ai-analytics-review` с правами 700 и файл `openai.token` с правами 600. Через локальный редактор сохраните в файле только значение ключа, без префикса `OPENAI_API_KEY=`. `OPENAI_API_KEY` в профиле — ссылка на этот серверный секрет. Значение не добавляется в `.env`, frontend, Git, аргументы команд, журналы или чат. Права можно установить командами, которые не содержат ключ:
+
+```sh
+mkdir -p ~/.config/ai-analytics-review
+chmod 700 ~/.config/ai-analytics-review
+touch ~/.config/ai-analytics-review/openai.token
+chmod 600 ~/.config/ai-analytics-review/openai.token
+```
 
 Локальные адреса фиксированы:
 
@@ -43,9 +52,19 @@ Vite применяет изменения web через HMR. API автома�
 
 Reload может прервать выполняющийся запуск проверки или ход диалога: после восстановления он получает состояние `process_interrupted`. Сохраняйте правки между такими операциями, если нужен непрерывный прогон. Для изменения профиля модели, навыка или runtime-конфигурации выполните `./dev stop`, затем `./dev start`.
 
-Стенд использует существующий [профиль Kimi K2](../../deploy/compose/config/model-profile.huggingface-kimi-k2.json) `kimi-k2-hf-novita`, модель `moonshotai/Kimi-K2-Instruct:novita`, навык `review-data-spec` 1.0.1 и [действующие runtime limits](configuration.md#runtime-limits). Настройки launcher изолированы от экспортированных `REVIEW_*`, `VITE_*` и Compose overrides.
+`./dev start` выбирает [OpenAI](configuration.md#профиль-openai-для-mvp): профиль `openai-gpt-5.4-mini` 1.0.0, модель `gpt-5.4-mini`, `reasoning_effort=none`, Structured Outputs `json_schema`/`strict=true`, начальный `max_completion_tokens=4096`. Явный выбор:
+
+```sh
+./dev start --model openai
+```
+
+Для [Kimi K2](configuration.md#профиль-kimi-k2) выполните `./dev stop`, затем `./dev start --model kimi`. Для возврата к OpenAI также нужен `stop`/`start`; повторный `start` не переключает уже работающий стенд. У Kimi сохраняются профиль `kimi-k2-hf-novita`, модель `moonshotai/Kimi-K2-Instruct:novita` и отдельный credential `huggingface.token`.
+
+Оба варианта используют навык `review-data-spec` 1.0.1 и [действующие runtime limits](configuration.md#runtime-limits). Настройки launcher изолированы от экспортированных `REVIEW_*`, `VITE_*` и Compose overrides.
 
 После миграций выполняется начальный `review-cli model-probe`, затем проверка повторяется каждые 60 секунд; срок availability — 300 секунд. Probe не генерирует текст, не вызывает API startup/reconciliation и совместим с работающим API. Ошибка поставщика отражается как `unavailable` и запись журнала, а dev-сервисы продолжают работать. Успешный probe подтверждает доступность endpoint; качество ревью и генерацию он не проверяет.
+
+При подготовке OpenAI ключ не был настроен; сервисы и probes не запускались. По поручению пользователя тесты не добавлялись и не запускались, бенчмарки, пробные API-запросы и платные вызовы не выполнялись. Работоспособность OpenAI реальным запросом не проверялась. Запуск стенда по приведённой инструкции впоследствии выполнит негенеративный probe; запуск ревью или отправка реплики вызовет модель.
 
 ## Где остаются данные
 

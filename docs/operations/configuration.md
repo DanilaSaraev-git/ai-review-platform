@@ -1,8 +1,8 @@
 # Настройка исполнения LLM
 
 Инженерный слой поддерживает три явно разделённых режима: production-запуск без модели,
-локальный synthetic fixture и opt-in подключение OpenAI-compatible endpoint. Для первого
-реального подключения 2026-09-06 выбран Kimi K2 через Hugging Face/Novita.
+локальный synthetic fixture и opt-in подключение OpenAI-compatible endpoint. Для MVP выбран
+OpenAI `gpt-5.4-mini`; ранее подключённый Kimi K2 через Hugging Face/Novita сохранён отдельно.
 До явного model-enable production-конфигурация использует
 `REVIEW_COMPOSITION=unconfigured`: инфраструктурная readiness остаётся доступной, каталог
 моделей показывает `unavailable` с причиной `not_configured`, а создание review завершается
@@ -148,6 +148,51 @@ uv run --frozen review-cli model-smoke \
 Команда не запускается ни readiness, ни обязательным release gate. Evidence содержит только
 идентичности, digests, безопасную фактическую provenance, usage/latency и статус; prompt,
 ответ модели и значение credential в него не входят.
+
+## Профиль OpenAI для MVP
+
+Региональное ограничение: на 2026-09-06 Россия отсутствует в
+[списке поддерживаемых стран OpenAI API](https://developers.openai.com/api/docs/supported-countries).
+Подготовленный профиль не подтверждает доступность прямого API с российского сервера;
+его активация требует отдельно установить допустимость аккаунта и сценария использования.
+Варианты провайдеров и границы подтверждения — в [обзоре доступности](provider-availability.md).
+
+Готовый [профиль](../../deploy/compose/config/model-profile.openai-gpt-5.4-mini.json)
+`openai-gpt-5.4-mini` версии 1.0.0 задаёт модель `gpt-5.4-mini`,
+`chat_url=https://api.openai.com/v1/chat/completions`, `reasoning_effort=none` и начальный
+`max_completion_tokens=4096`. Режим `native_json_schema` передаёт Structured Outputs через
+`response_format.type=json_schema` с `strict=true`. Полный вход ограничен 32768 UTF-8 байт;
+`context_window_tokens=400000` описывает окно модели, а не снимает этот локальный бюджет.
+
+Для OpenAI адаптер строит транспортную схему из существующей полной JSON Schema:
+удаляет `$schema`, `$id`, `allOf`, `if`/`then`/`else` и `uniqueItems`, заменяет `oneOf` на
+`anyOf`, добавляет `type=string` строковым enum. Удалённые условные правила и `uniqueItems`
+сохраняются текстом в `description` для модели. Полная локальная проверка исходной схемы,
+цитат и coverage остаётся обязательной перед публикацией. Движки review/dialogue,
+формат и сохранение отчётов остаются существующими. Усечённый ответ или refusal
+завершают операцию ошибкой; автоматического продолжения или repair нет.
+
+`secret_ref=OPENAI_API_KEY` — имя секрета в существующем серверном `FileSecretProvider`,
+а не значение ключа. В локальном запуске `REVIEW_MODEL_CREDENTIAL_PATH` указывает на
+`~/.config/ai-analytics-review/openai.token`. В файл через локальный редактор добавляется
+только значение ключа, без `OPENAI_API_KEY=`; каталог должен иметь права 700, файл — 600.
+Не передавайте значение через Git, `.env`, frontend, командную строку, журналы или чат.
+Инструкция выбора и подготовки файла — в [локальном запуске](local-development.md).
+
+Для серверной активации сначала нужна версия приложения с этим изменением адаптера,
+затем прежние [model-configure/model-enable](deployment.md#подключить-модель) с этим
+профилем и приватным credential file. Production overlay сохраняет `unconfigured` до явного включения;
+добавление профиля само по себе не переключает работающий сервер. Profile probe настроен
+на `GET https://api.openai.com/v1/models`; он проверяет доступность API и не доказывает
+успешную генерацию. При последующем `./dev start` launcher выполняет этот probe и повторяет
+его каждые 60 секунд. В ходе подключения сервисы и probes не запускались.
+
+Для этого изменения по поручению пользователя тесты не добавлялись и не запускались,
+бенчмарки, пробные API-запросы и платные вызовы не выполнялись. Работоспособность OpenAI
+реальным запросом не проверялась. Ранее записанные результаты Kimi не подтверждают OpenAI.
+Основания настроек: [модель GPT-5.4 mini](https://developers.openai.com/api/docs/models/gpt-5.4-mini),
+[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs),
+[Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
 
 ## Профиль Kimi K2
 
