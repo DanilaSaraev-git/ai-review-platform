@@ -364,3 +364,18 @@ nginx 1.29.4 отдавал module worker `.mjs` как `application/octet-strea
 отклонял загрузку и не рисовал PDF. Причина подтверждена browser console и отдельным
 контейнером с фактическим worker asset. Добавлена явная MIME-карта
 `application/javascript mjs`; `nginx -t` и проверка Content-Type проходят.
+
+## Принятый Numbat и деморежим: protected-path baseline, 2026-09-06
+
+По прямому поручению пользователя влить реквест и обновить сервер с новым дизайном
+во всех сценариях принятый UI и действующий деморежим объединены в commit
+`004c8b63020612f8aff70ecade8f9789476e5939`. Он закреплён как новый baseline
+стандартного protected-path gate без `allow-path`. Сравнение с предыдущим baseline
+`52d3b3c6eac4078e1922688d477ec343266860e0` подтвердило неизменность защищённых
+каталогов `client`, `implementation/poc`, `specs/001-review-data-spec-poc` и
+`specs/002-target-review-platform`. Перед фиксацией прошли 2 E2E production-сборки
+демо, 13 E2E решения/диалога/постоянного документа, 25 unit затронутого контура,
+TypeScript и ESLint. Обновлённый gate вернул `status=ok` и пустой список изменений;
+`tests/contract/test_protected_paths.py` прошёл без исключений. Эта запись
+подтверждает локальную интеграцию и проверки;
+результат обновления сервера фиксируется отдельно после развёртывания.
