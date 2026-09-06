@@ -16,6 +16,16 @@ class _Runtime:
         self.model_profile = SimpleNamespace(id=name, version="1.0.0")
         self.events = events
         self.fail_start = fail_start
+        self.children: list[_Runtime] = []
+        self.has_pending_work = False
+
+    def for_platform(self, platform: object) -> _Runtime:
+        child = _Runtime(platform, self.model_profile.id, self.events)
+        self.children.append(child)
+        return child
+
+    async def wait_idle(self) -> None:
+        self.has_pending_work = False
 
     async def __aenter__(self) -> _Runtime:
         self.events.append(f"enter:{self.model_profile.id}")
@@ -56,6 +66,27 @@ async def test_router_unwinds_started_runtime_when_later_startup_fails() -> None
             pytest.fail("failed startup must never admit calls")
 
     assert events == ["enter:first", "enter:second", "exit:first"]
+
+
+async def test_router_rebinds_every_model_for_a_guest_platform() -> None:
+    platform = cast(PostgresReviewPlatform, object())
+    guest_platform = cast(PostgresReviewPlatform, object())
+    events: list[str] = []
+    originals = tuple(_Runtime(platform, name, events) for name in ("first", "second"))
+    router = LLMReviewRouter(
+        platform,
+        tuple(cast(LLMReviewRuntime, runtime) for runtime in originals),
+    )
+
+    guest = router.for_platform(guest_platform)
+
+    assert guest.platform is guest_platform
+    assert all(len(runtime.children) == 1 for runtime in originals)
+    assert not guest.has_pending_work
+    originals[1].children[0].has_pending_work = True
+    assert guest.has_pending_work
+    await guest.wait_idle()
+    assert not guest.has_pending_work
 
 
 @pytest.mark.parametrize("retry", [False, True])

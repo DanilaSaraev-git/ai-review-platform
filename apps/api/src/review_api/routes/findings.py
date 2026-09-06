@@ -11,7 +11,7 @@ router = APIRouter(prefix="/v1/workspaces/{workspace_id}/review-runs/{run_id}/fi
 
 @router.get("/dialogue")
 def get_dialogue(request: Request, workspace_id: str, run_id: str, finding_id: str):  # type: ignore[no-untyped-def]
-    return request.app.state.platform.get_dialogue(workspace_id, run_id, finding_id)
+    return request.state.platform.get_dialogue(workspace_id, run_id, finding_id)
 
 
 @router.post("/dialogue/turns", status_code=202)
@@ -26,15 +26,28 @@ async def create_turn(
     if idempotency_key is None:
         raise InvalidRequest("missing_idempotency_key", "Idempotency-Key is required.")
     try:
-        body = CreateDialogueTurnDTO.model_validate(await request.json()).model_dump(mode="json")
+        body = CreateDialogueTurnDTO.model_validate(await request.json()).model_dump(
+            mode="json", exclude_defaults=True
+        )
     except (ValidationError, ValueError) as error:
         raise InvalidRequest("invalid_dialogue_turn", "Dialogue turn body is invalid.") from error
-    runtime = request.app.state.ml_runtime
+    attachments = body.get("attachment_document_ids", [])
+    if len(set(attachments)) != len(attachments):
+        raise InvalidRequest("duplicate_attachments", "Attachment IDs must be unique.")
+    for document_id in attachments:
+        import anyio
+
+        document = await anyio.to_thread.run_sync(
+            request.state.platform.get_document, workspace_id, document_id
+        )
+        if document.extraction_state not in {"completed", "partial"}:
+            raise InvalidRequest("attachment_not_ready", "Wait for attachment extraction before sending.")
+    runtime = request.state.ml_runtime
     if runtime is None:
         import anyio
 
         value = await anyio.to_thread.run_sync(
-            request.app.state.platform.create_dialogue_turn,
+            request.state.platform.create_dialogue_turn,
             workspace_id,
             run_id,
             finding_id,
@@ -42,9 +55,7 @@ async def create_turn(
             idempotency_key,
         )
     else:
-        value = await runtime.create_dialogue_turn(
-            workspace_id, run_id, finding_id, body, idempotency_key
-        )
+        value = await runtime.create_dialogue_turn(workspace_id, run_id, finding_id, body, idempotency_key)
     response.headers["Location"] = (
         f"/v1/workspaces/{workspace_id}/review-runs/{run_id}/findings/{finding_id}/dialogue"
     )
@@ -66,12 +77,12 @@ async def retry_turn(
         body = RetryDialogueTurnDTO.model_validate(await request.json()).model_dump(mode="json")
     except (ValidationError, ValueError) as error:
         raise InvalidRequest("invalid_dialogue_retry", "Dialogue retry body is invalid.") from error
-    runtime = request.app.state.ml_runtime
+    runtime = request.state.ml_runtime
     if runtime is None:
         import anyio
 
         return await anyio.to_thread.run_sync(
-            request.app.state.platform.retry_dialogue_turn,
+            request.state.platform.retry_dialogue_turn,
             workspace_id,
             run_id,
             finding_id,
@@ -79,9 +90,7 @@ async def retry_turn(
             body,
             idempotency_key,
         )
-    return await runtime.retry_dialogue_turn(
-        workspace_id, run_id, finding_id, turn_id, body, idempotency_key
-    )
+    return await runtime.retry_dialogue_turn(workspace_id, run_id, finding_id, turn_id, body, idempotency_key)
 
 
 @router.put("/decision")
@@ -93,5 +102,5 @@ async def put_decision(request: Request, workspace_id: str, run_id: str, finding
     except (ValidationError, ValueError) as error:
         raise InvalidRequest("invalid_decision", "Human Decision body is invalid.") from error
     return await anyio.to_thread.run_sync(
-        request.app.state.platform.put_decision, workspace_id, run_id, finding_id, body
+        request.state.platform.put_decision, workspace_id, run_id, finding_id, body
     )

@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'msw';
+import { documentCycle } from './document-cycle';
 import { happyPath } from './happy-path';
 import { runFailed } from './run-failed';
 import { runStalled } from './run-stalled';
@@ -28,6 +29,7 @@ import type { DemoPackage } from '@/mocks/demo-package';
  */
 export const scenarios = {
   'happy-path': happyPath,
+  'document-cycle': documentCycle,
   'run-failed': runFailed,
   'run-stalled': runStalled,
   'document-extraction-failed': documentExtractionFailed,

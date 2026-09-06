@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -29,6 +31,7 @@ class CreateReviewProfileDTO(StrictDTO):
 
 
 class CreateDialogueTurnDTO(StrictDTO):
+    attachment_document_ids: list[UUID] = Field(default_factory=list, max_length=10)
     message: str = Field(min_length=1, max_length=20_000)
     expected_revision: int = Field(ge=0)
 

@@ -13,12 +13,12 @@ PROTECTED = (
     "specs/001-review-data-spec-poc",
     "specs/002-target-review-platform",
 )
-PINNED_BASELINE = "004c8b63020612f8aff70ecade8f9789476e5939"
+PINNED_BASELINE = "0affd69b4a29695bd32f0e3c418ca6d6aec289b9"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    # Baseline includes accepted Numbat and demo UI; other protected paths are unchanged.
+    # Baseline includes accepted Numbat UI, guest messages and deployed validation diagnostics.
     parser.add_argument("--baseline", default=PINNED_BASELINE)
     parser.add_argument("--json", action="store_true")
     parser.add_argument(

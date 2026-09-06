@@ -38,3 +38,4 @@ playwright-report/
 # Separate browser-only demo build
 dist-demo/
 /apps/web/node_modules
+/tools/contracts/orval/node_modules

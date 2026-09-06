@@ -25,6 +25,21 @@ class LLMReviewRouter:
             raise ValueError("model runtime identity must be unique")
         self._stack: AsyncExitStack | None = None
 
+    def for_platform(self, platform: PostgresReviewPlatform) -> LLMReviewRouter:
+        """Bind every configured model to one isolated workspace execution owner."""
+        return LLMReviewRouter(
+            platform,
+            tuple(runtime.for_platform(platform) for runtime in self._runtimes.values()),
+        )
+
+    @property
+    def has_pending_work(self) -> bool:
+        return any(runtime.has_pending_work for runtime in self._runtimes.values())
+
+    async def wait_idle(self) -> None:
+        for runtime in self._runtimes.values():
+            await runtime.wait_idle()
+
     async def __aenter__(self) -> LLMReviewRouter:
         async with AsyncExitStack() as stack:
             for runtime in self._runtimes.values():

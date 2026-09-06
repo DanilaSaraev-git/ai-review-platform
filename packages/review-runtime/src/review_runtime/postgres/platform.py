@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
@@ -35,6 +35,7 @@ from review_runtime.config.settings import OperatorSettings, RuntimePolicy
 from review_runtime.documents.pdf import PdfDocumentParser
 from review_runtime.documents.text import TextDocumentParser
 from review_runtime.postgres.artifact_fence import advisory_fence_key
+from review_runtime.postgres.document_cycles import PostgresDocumentCycles, admit_cycle
 from review_runtime.reports import CanonicalReportValidator
 from review_runtime.skills.registry import ResolvedSkill
 
@@ -80,6 +81,7 @@ class PostgresReviewExecutionStorage:
         report_validator: CanonicalReportValidator,
         dialogue_policy: dict[str, Any],
         terminal_committer: Callable[[psycopg.Connection[dict[str, Any]]], None] | None = None,
+        on_published: Callable[[str], None] | None = None,
     ) -> None:
         self.database_url = database_url
         self.organization_id = organization_id
@@ -88,6 +90,7 @@ class PostgresReviewExecutionStorage:
         self.report_validator = report_validator
         self.dialogue_policy = dialogue_policy
         self._terminal_committer = terminal_committer or (lambda connection: connection.commit())
+        self._on_published = on_published
 
     def connect(self) -> psycopg.Connection[dict[str, Any]]:
         return psycopg.connect(self.database_url, row_factory=dict_row)
@@ -298,6 +301,13 @@ class PostgresReviewExecutionStorage:
                     Jsonb(request.snapshot),
                     Jsonb(request.run_value),
                 ),
+            )
+            admit_cycle(
+                connection,
+                self.organization_id,
+                request.workspace_id,
+                request.run_id,
+                request.request_body["document_id"],
             )
             for source in request.sources:
                 connection.execute(
@@ -742,6 +752,8 @@ class PostgresReviewExecutionStorage:
             raise
         finally:
             connection.close()
+        if self._on_published is not None:
+            self._on_published(claim.resource_id)
         return ExecutionTerminal(claim.resource_id, "completed")
 
     def _insert_findings(
@@ -951,9 +963,7 @@ class PostgresReviewPlatform:
         ]
         if composition == "ml" and len(selected_external_profiles) != 1:
             raise ValueError("ML composition requires one selected external model profile")
-        self.selected_external_model_profile = (
-            selected_external_profiles[0] if composition == "ml" else None
-        )
+        self.selected_external_model_profile = selected_external_profiles[0] if composition == "ml" else None
         self.resolved_skill = resolved_skill
         self.runtime_policy = runtime_policy or RuntimePolicy()
         self.semantic_execution_available = semantic_execution_available
@@ -961,17 +971,13 @@ class PostgresReviewPlatform:
         self._ownership_connection: psycopg.Connection[dict[str, Any]] | None = None
         self.max_upload_bytes = self.runtime_policy.budgets.max_upload_bytes
         self.max_context_documents = self.runtime_policy.budgets.max_context_documents
-        self.max_dialogue_message_codepoints = (
-            self.runtime_policy.budgets.max_dialogue_message_codepoints
-        )
+        self.max_dialogue_message_codepoints = self.runtime_policy.budgets.max_dialogue_message_codepoints
         self.max_dialogue_turns = self.runtime_policy.budgets.max_dialogue_turns
         if self.selected_external_model_profile is None:
             self.model_profile = {
                 "id": settings.model_profile_id,
                 "version": "1.0.0",
-                "name": (
-                    "Deterministic offline" if semantic_execution_available else "Модель не подключена"
-                ),
+                "name": ("Deterministic offline" if semantic_execution_available else "Модель не подключена"),
                 "description": (
                     "Offline technical conformance profile without semantic model claims."
                     if semantic_execution_available
@@ -998,6 +1004,7 @@ class PostgresReviewPlatform:
             **dialogue_policy_payload,
         }
         self._seed_exact()
+        self.cycles = PostgresDocumentCycles(self)
         self.review_storage = PostgresReviewExecutionStorage(
             database_url=self.database_url,
             organization_id=self.organization_id,
@@ -1005,7 +1012,35 @@ class PostgresReviewPlatform:
             artifacts=self.artifacts,
             report_validator=self.report_validator,
             dialogue_policy=self.dialogue_policy,
+            on_published=self.cycles.after_publish,
         )
+
+    def for_guest(self, workspace_id: str, actor_id: str) -> PostgresReviewPlatform:
+        """Create an independent namespace facade without taking deployment ownership."""
+        guest_workspace_id, guest_actor_id = UUID(workspace_id), UUID(actor_id)
+        if str(guest_workspace_id) == self.workspace_id:
+            raise ValueError("guest workspace cannot be the configured private workspace")
+        settings = self.settings.model_copy(
+            update={
+                "workspace_id": guest_workspace_id,
+                "workspace_name": "Мои документы",
+                "actor_id": guest_actor_id,
+                "actor_display_name": "Гость",
+            }
+        )
+        return PostgresReviewPlatform(
+            self.executor,
+            settings,
+            model_profiles=tuple(self.configured_model_profiles.values()),
+            resolved_skill=self.resolved_skill,
+            runtime_policy=self.runtime_policy,
+            semantic_execution_available=self.semantic_execution_available,
+            composition=self.composition,
+        )
+
+    def reconcile_interrupted(self) -> None:
+        """Reconcile this namespace while the caller holds deployment ownership at startup."""
+        self._reconcile_interrupted()
 
     def startup(self) -> None:
         """Own one deployment process and fail interrupted work without regenerating it."""
@@ -1119,7 +1154,7 @@ class PostgresReviewPlatform:
                     for item in dialogue_value["turns"]
                 ]
                 if dialogue_value["state"] != "closed":
-                    dialogue_value.update(state="open",can_send_message=True,blocked_reason=None)
+                    dialogue_value.update(state="open", can_send_message=True, blocked_reason=None)
                 dialogue_value["revision"] = row["dialogue_revision"] + 1
                 connection.execute(
                     """UPDATE generation_attempts SET state='failed',checkpoint='failed',
@@ -1162,16 +1197,12 @@ class PostgresReviewPlatform:
             self.selected_external_model_profile.model_dump(mode="json")
             if self.selected_external_model_profile is not None
             else {
-                "adapter_kind": (
-                    "deterministic" if self.semantic_execution_available else "unconfigured"
-                ),
+                "adapter_kind": ("deterministic" if self.semantic_execution_available else "unconfigured"),
                 "capabilities": ["text_generation"],
             }
         )
         model_version = self.model_profile["version"]
-        skill_payload: dict[str, Any] = {
-            "package_sha256": self.settings.skill_package_sha256
-        }
+        skill_payload: dict[str, Any] = {"package_sha256": self.settings.skill_package_sha256}
         policy_payload = {"max_member_turns": self.max_dialogue_turns}
         external_model_payloads = {
             identity: profile.model_dump(mode="json")
@@ -1190,8 +1221,7 @@ class PostgresReviewPlatform:
                 "package_sha256": skill_digest,
                 "manifest_sha256": self.resolved_skill.manifest_digest,
                 "files": [
-                    {"path": item.path, "sha256": item.sha256}
-                    for item in self.resolved_skill.files.values()
+                    {"path": item.path, "sha256": item.sha256} for item in self.resolved_skill.files.values()
                 ],
             }
         with self._connect() as connection:
@@ -1272,10 +1302,7 @@ class PostgresReviewPlatform:
                        WHERE id=%s AND version=%s""",
                     (config_id, config_version),
                 ).fetchone()
-                if (
-                    persisted_profile is None
-                    or persisted_profile["digest"] != digest_value(payload)
-                ):
+                if persisted_profile is None or persisted_profile["digest"] != digest_value(payload):
                     raise RuntimeError("configured model profile identity drifted")
             connection.execute(
                 """INSERT INTO model_profile_availability
@@ -1289,18 +1316,24 @@ class PostgresReviewPlatform:
                     (
                         "unavailable"
                         if self.selected_external_model_profile is not None
-                        else "available" if self.semantic_execution_available else "unavailable"
+                        else "available"
+                        if self.semantic_execution_available
+                        else "unavailable"
                     ),
                     (
                         "not_observed"
                         if self.selected_external_model_profile is not None
-                        else None if self.semantic_execution_available else "not_configured"
+                        else None
+                        if self.semantic_execution_available
+                        else "not_configured"
                     ),
                     now,
                     (
                         now
                         if self.selected_external_model_profile is not None
-                        else now + timedelta(days=3650) if self.semantic_execution_available else now
+                        else now + timedelta(days=3650)
+                        if self.semantic_execution_available
+                        else now
                     ),
                 ),
             )
@@ -1412,22 +1445,45 @@ class PostgresReviewPlatform:
             except UnicodeDecodeError as error:
                 raise InvalidRequest("invalid_utf8", "Text document is not valid UTF-8.") from error
 
-    def upload(self, workspace_id: str, filename: str, media_type: str, content: bytes) -> dict[str, Any]:
+    def upload(
+        self,
+        workspace_id: str,
+        filename: str,
+        media_type: str,
+        content: bytes,
+        *,
+        family_id: str | None = None,
+        version_key: str | None = None,
+    ) -> dict[str, Any]:
         self._workspace(workspace_id)
         self._validate_upload(filename, media_type, content, self.max_upload_bytes)
         now = utc_now()
         document_id, artifact_id, extraction_id = str(uuid4()), str(uuid4()), str(uuid4())
         digest = hashlib.sha256(content).hexdigest()
-        staged = self.artifacts.stage(self.workspace_id, bytes(content), expected_sha256=digest)
         parser = PdfDocumentParser() if media_type == "application/pdf" else TextDocumentParser()
         try:
             fragments = parser.parse(content, source_id="source-main", document_id=document_id)
             extraction_state, error_code = "completed", None
         except ValueError:
             fragments, extraction_state, error_code = [], "failed", "extraction_failed"
-        store_key = f"{staged.namespace}/{staged.object_name}"
-        fence = advisory_fence_key(self.workspace_id, store_key, digest)
+        request_digest = digest_value(
+            {"family_id": family_id, "filename": filename, "media_type": media_type, "sha256": digest}
+        )
         with self._connect() as connection:
+            family, number, _, replay = self.cycles.prepare_upload(
+                connection,
+                family_id,
+                version_key,
+                request_digest,
+                document_id,
+                Path(filename).name,
+                now,
+            )
+            if replay is not None:
+                return self.document_value(self.get_document(workspace_id, replay))
+            staged = self.artifacts.stage(self.workspace_id, bytes(content), expected_sha256=digest)
+            store_key = f"{staged.namespace}/{staged.object_name}"
+            fence = advisory_fence_key(self.workspace_id, store_key, digest)
             connection.execute("SELECT pg_advisory_xact_lock(%s)", (fence,))
             promoted = self.artifacts.promote(staged)
             connection.execute(
@@ -1502,6 +1558,9 @@ class PostgresReviewPlatform:
                         now,
                     ),
                 )
+            self.cycles.finish_upload(
+                connection, document_id, family, number, digest, version_key, request_digest
+            )
         return self.document_value(self.get_document(workspace_id, document_id))
 
     def get_document(self, workspace_id: str, document_id: str) -> DocumentRecord:
@@ -1765,9 +1824,7 @@ class PostgresReviewPlatform:
                     (str(self.settings.deployment_id), profile.id, profile.version),
                 ).fetchone()
                 available = bool(
-                    observation
-                    and observation["state"] == "available"
-                    and observation["expires_at"] > now
+                    observation and observation["state"] == "available" and observation["expires_at"] > now
                 )
                 values.append(
                     {
@@ -1852,6 +1909,7 @@ class PostgresReviewPlatform:
             "state": "queued",
             "progress": {"percent": 0, "message": "Review queued"},
             "document_id": primary.id,
+            "locale": body["locale"],
             "context_document_ids": [item.id for item in contexts],
             "execution_snapshot": snapshot,
             "created_by": self.actor,
@@ -2316,7 +2374,7 @@ class PostgresReviewPlatform:
             connection.close()
 
     def report(self, workspace_id: str, run_id: str) -> tuple[bytes, str]:
-        self._workspace(workspace_id)
+        self.get_run(workspace_id, run_id)
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT r.etag,a.store_key FROM review_reports r JOIN artifacts a ON a.organization_id=r.organization_id AND a.workspace_id=r.workspace_id AND a.id=r.artifact_id WHERE r.organization_id=%s AND r.workspace_id=%s AND r.run_id=%s",
@@ -2349,9 +2407,7 @@ class PostgresReviewPlatform:
                 {
                     "finding_id": row["finding_id"],
                     "decision": row["decision"],
-                    "dialogue": self._dialogue_summary(
-                        self._project_dialogue_availability(row["dialogue"])
-                    ),
+                    "dialogue": self._dialogue_summary(self._project_dialogue_availability(row["dialogue"])),
                 }
                 for row in rows
             ]
@@ -2370,9 +2426,7 @@ class PostgresReviewPlatform:
         }
 
     def get_dialogue(self, workspace_id: str, run_id: str, finding_id: str) -> dict[str, Any]:
-        return self._project_dialogue_availability(
-            self._dialogue(workspace_id, run_id, finding_id)
-        )
+        return self._project_dialogue_availability(self._dialogue(workspace_id, run_id, finding_id))
 
     def _project_dialogue_availability(self, dialogue: dict[str, Any]) -> dict[str, Any]:
         if self.semantic_execution_available or dialogue["state"] == "closed":
@@ -2381,9 +2435,7 @@ class PostgresReviewPlatform:
         projected.update(can_send_message=False, blocked_reason="model_unavailable")
         return projected
 
-    def dialogue_model_reference(
-        self, workspace_id: str, run_id: str, finding_id: str
-    ) -> dict[str, str]:
+    def dialogue_model_reference(self, workspace_id: str, run_id: str, finding_id: str) -> dict[str, str]:
         self._dialogue(workspace_id, run_id, finding_id)
         with self._connect() as connection:
             row = connection.execute(
@@ -2414,9 +2466,7 @@ class PostgresReviewPlatform:
         require_idempotency_key(key)
         dialogue = self._dialogue(workspace_id, run_id, finding_id)
         operation = (
-            f"dialogue-retry:{dialogue['id']}"
-            if retry_turn_id is not None
-            else f"dialogue:{dialogue['id']}"
+            f"dialogue-retry:{dialogue['id']}" if retry_turn_id is not None else f"dialogue:{dialogue['id']}"
         )
         request_value = body | ({"turn_id": retry_turn_id} if retry_turn_id is not None else {})
         request_digest = digest_value(request_value)
@@ -2483,6 +2533,7 @@ class PostgresReviewPlatform:
                     "state": "generating",
                     "actor": self.actor,
                     "member_message": message,
+                    "attachment_document_ids": body.get("attachment_document_ids", []),
                     "created_at": wire_time(utc_now()),
                     "assistant_response": None,
                     "error": None,
@@ -2536,8 +2587,7 @@ class PostgresReviewPlatform:
                     (Jsonb(retry_value), self.organization_id, workspace_id, turn_id),
                 )
                 current_value["turns"] = [
-                    retry_value if item["id"] == turn_id else item
-                    for item in current_value["turns"]
+                    retry_value if item["id"] == turn_id else item for item in current_value["turns"]
                 ]
             attempt_id = str(uuid4())
             attempt_value = {
@@ -2626,9 +2676,7 @@ class PostgresReviewPlatform:
             ).fetchone()
         return row is not None
 
-    def begin_dialogue_model_attempt(
-        self, generation_attempt_id: str, request: GenerationRequest
-    ) -> str:
+    def begin_dialogue_model_attempt(self, generation_attempt_id: str, request: GenerationRequest) -> str:
         attempt_id = str(uuid4())
         with self._connect() as connection:
             owner = connection.execute(
@@ -2753,11 +2801,24 @@ class PostgresReviewPlatform:
         graph = cast(dict[str, Any], finding["graph"])
         snapshot = graph["provenance"]["execution_snapshot"]
         documents = [
-            self.get_document(workspace_id, item["document_id"])
-            for item in graph["provenance"]["sources"]
+            self.get_document(workspace_id, item["document_id"]) for item in graph["provenance"]["sources"]
         ]
         sources: list[dict[str, Any]] = []
         fragments: dict[str, Any] = {}
+        attachment_ids = list(
+            dict.fromkeys(
+                identifier
+                for item in dialogue["turns"]
+                if item["ordinal"] <= turn["ordinal"]
+                for identifier in item.get("attachment_document_ids", [])
+            )
+        )
+        existing_ids = {document.id for document in documents}
+        documents.extend(
+            self.get_document(workspace_id, identifier)
+            for identifier in attachment_ids
+            if identifier not in existing_ids
+        )
         for ordinal, document in enumerate(documents, start=1):
             source_id = "source-main" if ordinal == 1 else f"source-context-{ordinal - 1}"
             parser = PdfDocumentParser() if document.media_type == "application/pdf" else TextDocumentParser()
@@ -2770,9 +2831,7 @@ class PostgresReviewPlatform:
                     if "page" in location
                     else f"{source_id}-lines-{location['line_start']}-{location['line_end']}"
                 )
-                source_fragments.append(
-                    {"id": fragment_id, "text": fragment["text"], "location": location}
-                )
+                source_fragments.append({"id": fragment_id, "text": fragment["text"], "location": location})
                 fragments[fragment_id] = {
                     "source_id": source_id,
                     "document_id": document.id,
@@ -2835,11 +2894,7 @@ class PostgresReviewPlatform:
                    FOR UPDATE OF t,a""",
                 (self.organization_id, self.workspace_id, turn_id, attempt_id),
             ).fetchone()
-            if (
-                turn is None
-                or turn["attempt_state"] != "running"
-                or turn["lease_token"] != owner_token
-            ):
+            if turn is None or turn["attempt_state"] != "running" or turn["lease_token"] != owner_token:
                 raise Conflict("execution_owner_conflict", "Dialogue execution owner is stale.")
             finished = wire_time(utc_now())
             turn_value = cast(dict[str, Any], turn["value"]) | {
@@ -2890,11 +2945,7 @@ class PostgresReviewPlatform:
                    FOR UPDATE OF t,a""",
                 (self.organization_id, self.workspace_id, turn_id, attempt_id),
             ).fetchone()
-            if (
-                turn is None
-                or turn["attempt_state"] != "running"
-                or turn["lease_token"] != owner_token
-            ):
+            if turn is None or turn["attempt_state"] != "running" or turn["lease_token"] != owner_token:
                 raise Conflict("execution_owner_conflict", "Dialogue execution owner is stale.")
             finished = wire_time(utc_now())
             public_error = {
@@ -2980,15 +3031,14 @@ class PostgresReviewPlatform:
                 or not message.strip()
                 or len(message) > self.max_dialogue_message_codepoints
             ):
-                raise InvalidRequest(
-                    "invalid_message", "Dialogue message exceeds the configured limit."
-                )
+                raise InvalidRequest("invalid_message", "Dialogue message exceeds the configured limit.")
             turn = {
                 "id": turn_id,
                 "ordinal": len(dialogue["turns"]) + 1,
                 "state": "generating",
                 "actor": self.actor,
                 "member_message": message,
+                "attachment_document_ids": body.get("attachment_document_ids", []),
                 "created_at": wire_time(now),
                 "assistant_response": None,
                 "error": None,
@@ -3119,11 +3169,15 @@ class PostgresReviewPlatform:
                 ),
             )
             dvalue = cast(dict[str, Any], dialogue_row["value"])
+            unresolved = decision["status"] in {"unreviewed", "needs_context"}
+            generating = any(turn["state"] in {"queued", "generating"} for turn in dvalue["turns"])
             dvalue.update(
                 revision=dialogue_row["revision"] + 1,
-                state="open" if decision["status"] == "unreviewed" else "closed",
-                can_send_message=decision["status"] == "unreviewed",
-                blocked_reason=None if decision["status"] == "unreviewed" else "human_decision_recorded",
+                state=("generating" if generating else "open") if unresolved else "closed",
+                can_send_message=unresolved and not generating,
+                blocked_reason=("generation_in_progress" if generating else None)
+                if unresolved
+                else "human_decision_recorded",
             )
             connection.execute(
                 "UPDATE finding_dialogues SET revision=revision+1,value=%s WHERE organization_id=%s AND workspace_id=%s AND id=%s",

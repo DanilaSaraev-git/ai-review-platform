@@ -12,14 +12,14 @@ router = APIRouter(prefix="/v1/workspaces/{workspace_id}")
 def list_documents(
     request: Request, workspace_id: str, cursor: str | None = None, limit: int = Query(20, ge=1, le=100)
 ) -> Any:
-    return request.app.state.platform.list_documents(workspace_id, cursor, limit)
+    return request.state.platform.list_documents(workspace_id, cursor, limit)
 
 
 @router.post("/documents", status_code=201)
 async def upload_document(request: Request, workspace_id: str, file: UploadFile = File(...)):  # type: ignore[no-untyped-def]
     import anyio
 
-    limit = request.app.state.platform.max_upload_bytes
+    limit = request.state.platform.max_upload_bytes
     content = bytearray()
     while len(content) <= limit:
         chunk = await file.read(min(1024 * 1024, limit + 1 - len(content)))
@@ -28,8 +28,20 @@ async def upload_document(request: Request, workspace_id: str, file: UploadFile 
         content.extend(chunk)
     if len(content) > limit:
         raise PayloadTooLarge("Document exceeds configured byte limit.")
+    if request.app.state.guest_access:
+        from review_runtime.security.guest_storage import upload_with_guest_limits
+
+        return await anyio.to_thread.run_sync(
+            upload_with_guest_limits,
+            request.state.platform,
+            request.app.state.guest_storage_limits,
+            workspace_id,
+            file.filename or "document",
+            file.content_type or "application/octet-stream",
+            bytes(content),
+        )
     return await anyio.to_thread.run_sync(
-        request.app.state.platform.upload,
+        request.state.platform.upload,
         workspace_id,
         file.filename or "document",
         file.content_type or "application/octet-stream",
@@ -39,7 +51,7 @@ async def upload_document(request: Request, workspace_id: str, file: UploadFile 
 
 @router.get("/documents/{document_id}")
 def get_document(request: Request, workspace_id: str, document_id: str):  # type: ignore[no-untyped-def]
-    platform = request.app.state.platform
+    platform = request.state.platform
     return platform.document_value(platform.get_document(workspace_id, document_id))
 
 
@@ -47,7 +59,7 @@ def get_document(request: Request, workspace_id: str, document_id: str):  # type
 def download_document(request: Request, workspace_id: str, document_id: str):  # type: ignore[no-untyped-def]
     from urllib.parse import quote
 
-    record = request.app.state.platform.get_document(workspace_id, document_id)
+    record = request.state.platform.get_document(workspace_id, document_id)
     return Response(
         content=record.content,
         media_type="application/octet-stream",

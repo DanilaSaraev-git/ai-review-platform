@@ -337,6 +337,28 @@ class LLMReviewRuntime:
         self._dialogue_task_group: Any = None
         self._dialogue_events: dict[str, Any] = {}
 
+    def for_platform(self, platform: PostgresReviewPlatform) -> LLMReviewRuntime:
+        """Bind a separate execution owner to a namespace, borrowing model resources."""
+        return LLMReviewRuntime(
+            platform=platform,
+            model_runtime=ModelRuntime(adapter=self.model_runtime.adapter),
+            model_profile=self.model_profile,
+            skill=self.skill,
+            root=self.root,
+            model_call_semaphore=self._model_call_semaphore,
+        )
+
+    @property
+    def has_pending_work(self) -> bool:
+        return self._coordinator.has_pending_work or bool(self._dialogue_events)
+
+    async def wait_idle(self) -> None:
+        """Keep detached review/dialogue work alive after its HTTP waiter leaves."""
+        while self.has_pending_work:
+            await self._coordinator.wait_idle()
+            for event in tuple(self._dialogue_events.values()):
+                await event.wait()
+
     async def __aenter__(self) -> LLMReviewRuntime:
         await self.model_runtime.__aenter__()
         capabilities = await self.model_runtime.adapter.capabilities()
@@ -718,6 +740,7 @@ class LLMReviewRuntime:
             "state": "queued",
             "progress": {"percent": 0, "message": "Review queued"},
             "document_id": primary.id,
+            "locale": body["locale"],
             "context_document_ids": [item.id for item in contexts],
             "execution_snapshot": snapshot,
             "created_by": self.platform.actor,

@@ -74,10 +74,23 @@ const httpExamples = {
   "dialogue.generating.json": "FindingDialogue",
   "dialogue.failed.json": "FindingDialogue",
   "create-dialogue-turn.json": "CreateDialogueTurn",
+  "create-dialogue-turn.attachments.json": "CreateDialogueTurn",
+  "review-completion.json": "ReviewCompletion",
   "retry-dialogue-turn.json": "RetryDialogueTurn",
   "decision.json": "HumanDecision",
   "put-decision.json": "PutFindingDecision",
-  "problem.json": "Problem"
+  "problem.json": "Problem",
+  "document-family.json": "DocumentFamily",
+  "document-families.json": "DocumentFamilyPage",
+  "document-family-version.json": "DocumentFamilyVersion",
+  "document-family-versions.json": "DocumentFamilyVersionPage",
+  "review-cycle.first.json": "ReviewCycle",
+  "review-cycle.persisting.json": "ReviewCycle",
+  "review-cycle.partial.json": "ReviewCycle",
+  "review-cycle.unavailable.json": "ReviewCycle",
+  "compare-review-cycle.json": "CompareReviewCycle",
+  "put-review-cycle-link.json": "PutReviewCycleLink",
+  "put-issue-resolution.json": "PutIssueResolution"
 };
 for (const [exampleName, componentName] of Object.entries(httpExamples)) {
   const value = readJson(path.join(contractRoot, "examples/http", exampleName));
@@ -102,7 +115,7 @@ for (const schemaName of [
   ajv.compile(schema);
 }
 
-if (openapi.info.version !== "1.0.2") throw new Error("OpenAPI version must be 1.0.2");
+if (openapi.info.version !== "1.1.0") throw new Error("OpenAPI version must be 1.1.0");
 if (openapi.security?.length !== 0 || openapi.components?.securitySchemes) {
   throw new Error("No-auth v1 must not publish security schemes");
 }

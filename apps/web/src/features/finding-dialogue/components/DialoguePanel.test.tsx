@@ -24,11 +24,12 @@ describe('DialoguePanel', () => {
     );
     const user = userEvent.setup();
     renderWithQueryClient(
-      <DialoguePanel workspaceId={fixtures.workspaceId} runId={fixtures.runId} findingId={fixtures.findingId} />,
+      <DialoguePanel workspaceId={fixtures.workspaceId} runId={fixtures.runId} findingId={fixtures.findingId} initialQuestion="Какое расписание обновления требуется?" />,
       queryClient,
     );
 
-    const composer = screen.getByRole('textbox', { name: /Уточняющий вопрос/u });
+    expect(screen.getByText('Какое расписание обновления требуется?')).toBeInTheDocument();
+    const composer = screen.getByRole('textbox', { name: /Ответ или уточняющий вопрос/u });
     await user.type(composer, 'Черновик вопроса');
     expect(await screen.findByText('Не удалось обновить диалог')).toBeInTheDocument();
     expect(composer).toHaveValue('Черновик вопроса');

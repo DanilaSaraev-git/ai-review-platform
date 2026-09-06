@@ -1,12 +1,13 @@
+import { useRef } from 'react';
+import { idempotencyKeyFor } from '@/api/idempotency';
 import { useCreateReviewRun as useGeneratedCreateReviewRun } from '@/api/generated/endpoints';
 import type { ModelProfile, ReviewProfile, ReviewRun } from '@/api/generated/model';
 
 /**
  * Создание фонового запуска (FR-011, FR-012).
  *
- * Ключ идемпотентности вырабатывается по намерению — набору входов формы, —
- * поэтому повторное нажатие или повтор после разрыва связи возвращают исходный
- * запуск, а не создают второй (решение R-05, SC-009).
+ * Каждое открытие формы — отдельное намерение. Сетевой повтор с прежними
+ * параметрами сохраняет ключ; новая намеренная проверка получает новый ключ.
  */
 export interface CreateRunInput {
   workspaceId: string;
@@ -18,11 +19,12 @@ export interface CreateRunInput {
 }
 
 export function useCreateReviewRun() {
-  const mutation = useGeneratedCreateReviewRun();
+  const intentId = useRef(crypto.randomUUID());
+  const headers = useRef(new Headers());
+  const mutation = useGeneratedCreateReviewRun({ request: { headers: headers.current } });
 
   async function createRun(input: CreateRunInput): Promise<ReviewRun> {
-    // Ключ идемпотентности вырабатывается в mutator по телу запроса, поэтому
-    // одинаковый набор входов даёт один и тот же ключ (решение R-05).
+    headers.current.set('Idempotency-Key', idempotencyKeyFor(`${intentId.current}:${JSON.stringify(input)}`));
     return mutation.mutateAsync({
       workspaceId: input.workspaceId,
       data: {
