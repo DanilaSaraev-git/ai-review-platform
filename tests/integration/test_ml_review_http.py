@@ -61,7 +61,9 @@ def _configure_ml(
     return reference
 
 
-def _request_review(client: TestClient, workspace_id: str, reference: dict[str, str]):
+def _request_review(
+    client: TestClient, workspace_id: str, reference: dict[str, str], *, locale: str = "en-US"
+):
     document = client.post(
         f"/v1/workspaces/{workspace_id}/documents",
         files={"file": ("primary.md", (FIXTURES / "primary.md").read_bytes(), "text/markdown")},
@@ -76,7 +78,7 @@ def _request_review(client: TestClient, workspace_id: str, reference: dict[str, 
             "context_document_ids": [],
             "profile": {"id": profiles[0]["id"], "version": profiles[0]["version"]},
             "model_profile": reference,
-            "locale": "en-US",
+            "locale": locale,
         },
     )
 
@@ -152,60 +154,6 @@ def test_ml_review_failure_never_publishes_report(
         assert report.status_code == 409
     assert provider.call_count == (0 if outcome == "oversize" else 1)
 
-
-@pytest.mark.parametrize("response_shape", ["valid_json", "truncated_json"])
-def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_metadata(
-    monkeypatch: pytest.MonkeyPatch,
-    operator_settings,  # type: ignore[no-untyped-def]
-    tmp_path: Path,
-    response_shape: str,
-) -> None:
-    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
-    response_text = (FIXTURES / "review-response.json").read_text()
-    if response_shape == "truncated_json":
-        response_text = '{"summary":"PRIVATE_TRUNCATED_MODEL_OUTPUT'
-    provider = FakeModelProvider([
-        ScriptedReply(chat_completion(
-            response_text,
-            finish_reason="length",
-            usage={"prompt_tokens": 3126, "completion_tokens": 4096},
-        ))
-    ])
-    app = create_app(composition="ml", model_transport=provider.transport)
-    app.state.platform.observe_model_profile(
-        reference,
-        state="available",
-        reason_code=None,
-        expires_at=datetime.now(UTC) + timedelta(minutes=5),
-    )
-    with TestClient(app) as client:
-        workspace_id = app.state.platform.workspace_id
-        response = _request_review(client, workspace_id, reference)
-        assert response.status_code == 202, response.text
-        run = response.json()
-        assert run["state"] == "failed"
-        assert run["error"] == {
-            "code": "model_output_invalid",
-            "message": "The model response reached the output token limit before completion.",
-            "retryable": False,
-        }
-        assert "PRIVATE_TRUNCATED_MODEL_OUTPUT" not in response.text
-        assert client.get(
-            f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
-        ).status_code == 409
-    assert provider.call_count == 1
-    with psycopg.connect(app.state.platform.database_url) as connection:
-        attempt = connection.execute(
-            "SELECT state,value FROM model_attempts WHERE value#>>'{profile,id}'=%s",
-            (reference["id"],),
-        ).fetchone()
-    assert attempt is not None
-    assert attempt[0] == "succeeded"
-    assert attempt[1]["result"]["finish_reason"] == "length"
-    assert attempt[1]["result"]["usage"]["output_tokens"] == 4096
-    assert "PRIVATE_TRUNCATED_MODEL_OUTPUT" not in json.dumps(attempt[1])
-
-
 @pytest.mark.parametrize(
     ("violation", "diagnostic"),
     [
@@ -259,3 +207,55 @@ def test_semantic_failure_preserves_safe_reason_without_publishing_or_retrying(
         ).fetchone()
     assert saved == (expected_error,)
     assert provider.call_count == 1
+
+@pytest.mark.parametrize("response_shape", ["valid_json", "truncated_json"])
+def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    operator_settings,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    response_shape: str,
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    response_text = (FIXTURES / "review-response.json").read_text()
+    if response_shape == "truncated_json":
+        response_text = '{"summary":"PRIVATE_TRUNCATED_MODEL_OUTPUT'
+    provider = FakeModelProvider([
+        ScriptedReply(chat_completion(
+            response_text,
+            finish_reason="length",
+            usage={"prompt_tokens": 3126, "completion_tokens": 4096},
+        ))
+    ])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference,
+        state="available",
+        reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with TestClient(app) as client:
+        workspace_id = app.state.platform.workspace_id
+        response = _request_review(client, workspace_id, reference)
+        assert response.status_code == 202, response.text
+        run = response.json()
+        assert run["state"] == "failed"
+        assert run["error"] == {
+            "code": "model_output_invalid",
+            "message": "The model response reached the output token limit before completion.",
+            "retryable": False,
+        }
+        assert "PRIVATE_TRUNCATED_MODEL_OUTPUT" not in response.text
+        assert client.get(
+            f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
+        ).status_code == 409
+    assert provider.call_count == 1
+    with psycopg.connect(app.state.platform.database_url) as connection:
+        attempt = connection.execute(
+            "SELECT state,value FROM model_attempts WHERE value#>>'{profile,id}'=%s",
+            (reference["id"],),
+        ).fetchone()
+    assert attempt is not None
+    assert attempt[0] == "succeeded"
+    assert attempt[1]["result"]["finish_reason"] == "length"
+    assert attempt[1]["result"]["usage"]["output_tokens"] == 4096
+    assert "PRIVATE_TRUNCATED_MODEL_OUTPUT" not in json.dumps(attempt[1])
