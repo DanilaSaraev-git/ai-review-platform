@@ -4,7 +4,7 @@
 
 ## Состояние
 
-Код и контракт guest-v1 подготовлены; общий локальный gate пройден. Проверены backend, guest integration, migration/contract, gateway, backup и web. Реальная выкладка гостевого режима и браузерный smoke на опубликованном сервисе **ещё не подтверждены**.
+Код и контракт guest-v1 подготовлены; общий локальный gate пройден. После объединения с текущим production commit `398c01983814811de9c4495399e07719e2ed9067` повторно пройдены общий backend, guest ops и штатная типизация. Реальная выкладка гостевого режима и браузерный smoke на опубликованном сервисе **ещё не подтверждены**.
 
 В срезе не меняется действующий поставщик модели. Тесты используют синтетические данные и fake adapter/provider; они не подтверждают качество реального ревью.
 
@@ -25,11 +25,12 @@
 | Миграция и guest contract | 13 passed на отдельной тестовой БД |
 | Gateway | 9 passed с настоящим nginx, включая приватность демо и согласованность гостевого режима |
 | Backup и переключение режима | 12 passed; включая 4 Linux shell integration с настоящими scripts и fake Docker |
+| Guest ops после merge `398c019` | 9 passed; 4 новых opt-in promotion tests пройдены отдельно |
 | Web | 104 tests в 23 files passed; API generation, typecheck, lint и build прошли |
 | Web после merge | Дополнительно 20 RunStatePanel tests passed; typecheck, lint и build прошли |
-| Общая типизация | Mypy: 109 source files без ошибок |
+| Общая типизация после merge `398c019` | Штатный `uv run mypy`: 110 source files без ошибок |
 | Canonical contract tooling | validate, generate и TypeScript-проверка прошли |
-| Итоговый backend gate | 378 passed, 7 skipped, 4 warnings; пропущенные opt-in Docker проверки отдельно пройдены |
+| Итоговый backend gate после merge `398c019` | 397 passed, 11 skipped, 4 warnings; opt-in Docker проверки пройдены отдельно, включая 4 новых promotion tests |
 
 В первом интеграционном прогоне обнаружено: foreign run ID внутри собственного workspace возвращал `409 report_unavailable`. В `PostgresReviewPlatform.report()` добавлен `get_run()` перед чтением отчёта; повторный guest integration gate прошёл.
 
