@@ -43,6 +43,7 @@ def test_pdf_has_cyrillic_current_decision_and_escaped_input() -> None:
     result = render_review_pdf(value)
     assert result.startswith(b"%PDF-")
     with pdfplumber.open(io.BytesIO(result)) as pdf:
+        assert len(pdf.pages) == 1
         text = "\n".join(page.extract_text() or "" for page in pdf.pages)
     assert "Синтетический поток заказов" in text
     assert "Нужно уточнить время <запуска> & часовой пояс" in text

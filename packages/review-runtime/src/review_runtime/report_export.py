@@ -20,7 +20,6 @@ from reportlab.platypus import (  # type: ignore[import-untyped]
     HRFlowable,
     Paragraph,
     SimpleDocTemplate,
-    Spacer,
 )
 
 _FONT_LOCK = Lock()
@@ -269,12 +268,6 @@ def render_review_pdf(snapshot: dict[str, Any]) -> bytes:
             else:
                 field("Замечание:", old_id or entry.get("issue_id"))
                 show_cycle(entry)
-    story.append(Spacer(1, 8 * mm))
-    paragraph(
-        "Документ содержит состояние разбора на указанную дату. Окончательное решение принимает человек.",
-        muted,
-    )
-
     def page(canvas: Any, _document: Any) -> None:
         canvas.saveState()
         canvas.setFillColor(_RED)
@@ -292,6 +285,11 @@ def render_review_pdf(snapshot: dict[str, Any]) -> bytes:
         canvas.drawString(31 * mm, A4[1] - 17 * mm, "Numbat")
         canvas.setFillColor(_MUTED)
         canvas.setFont("NumbatBody", 8)
+        canvas.drawString(
+            21 * mm,
+            17 * mm,
+            "Состояние на дату выгрузки. Окончательное решение принимает человек.",
+        )
         canvas.drawRightString(A4[0] - 21 * mm, 12 * mm, f"Страница {canvas.getPageNumber()}")
         canvas.drawString(21 * mm, 12 * mm, "Отчёт проверки")
         canvas.restoreState()
