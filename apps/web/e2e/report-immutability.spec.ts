@@ -28,13 +28,13 @@ test('решения и диалог не изменяют отчёт', async ({
   // Один ход диалога и одно сохранённое решение.
   await page.getByRole('link', { name: /Не задано расписание обновления/ }).click();
   await page.getByRole('tab', { name: /Диалог/ }).click();
-  await page.getByRole('textbox', { name: /Уточняющий вопрос/ }).fill('Как проверить это требование?');
-  await page.getByRole('button', { name: 'Отправить вопрос' }).click();
+  await page.getByRole('textbox', { name: /уточняющий вопрос/i }).fill('Как проверить это требование?');
+  await page.getByRole('button', { name: 'Отправить', exact: true }).click();
   await expect(page.getByText('Предложена резолюция')).toBeVisible();
 
   await page.getByRole('tab', { name: 'Решение' }).click();
 
-  await page.getByRole('radio', { name: /Подтверждено/ }).check();
+  await page.getByRole('radio', { name: /Принято к доработке/ }).check();
   await page.getByRole('textbox', { name: 'Обоснование' }).fill('Уточнение нужно до передачи в разработку.');
   await page.getByRole('button', { name: 'Сохранить решение' }).click();
   await expect(page.getByText('Решение сохранено')).toBeVisible();

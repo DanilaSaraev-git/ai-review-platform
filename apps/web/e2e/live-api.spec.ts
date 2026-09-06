@@ -24,7 +24,7 @@ test('реальный API открывает историю, отчёт и ад
   await expect(page.locator('ol > li').first()).toBeVisible();
 
   await page.getByRole('tab', { name: 'Решение' }).click();
-  await expect(page.getByRole('radio', { name: /Подтверждено/ })).toBeChecked();
+  await expect(page.getByRole('radio', { name: /Принято к доработке/ })).toBeChecked();
   await expect(page.getByRole('button', { name: 'Сбросить решение' })).toBeVisible();
 });
 
@@ -48,18 +48,18 @@ test('реальный API проходит upload → review → dialogue → d
   await expect(firstFinding).toBeVisible();
   await firstFinding.click();
   await page.getByRole('tab', { name: /Диалог/ }).click();
-  await page.getByRole('textbox', { name: /Уточняющий вопрос/ }).fill('Clarify the retry limit.');
-  await page.getByRole('button', { name: 'Отправить вопрос' }).click();
+  await page.getByRole('textbox', { name: /уточняющий вопрос/i }).fill('Clarify the retry limit.');
+  await page.getByRole('button', { name: 'Отправить', exact: true }).click();
   await expect(page.locator('ol > li').first()).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole('tab', { name: 'Решение' }).click();
-  await page.getByRole('radio', { name: /Подтверждено/ }).check();
+  await page.getByRole('radio', { name: /Принято к доработке/ }).check();
   const reason = 'Подтверждено сквозной проверкой интерфейса и API.';
   await page.getByRole('textbox', { name: 'Обоснование' }).fill(reason);
   await page.getByRole('button', { name: 'Сохранить решение' }).click();
   await expect(page.getByText('Решение сохранено')).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole('radio', { name: /Подтверждено/ })).toBeChecked();
+  await expect(page.getByRole('radio', { name: /Принято к доработке/ })).toBeChecked();
   await expect(page.getByRole('textbox', { name: 'Обоснование' })).toHaveValue(reason);
 });

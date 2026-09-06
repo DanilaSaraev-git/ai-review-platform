@@ -8,7 +8,7 @@ test.describe('Решение по замечанию', () => {
   test('сохраняет решение и переживает обновление страницы', async ({ page }) => {
     await openFinding(page);
 
-    await page.getByRole('radio', { name: /Подтверждено/ }).check();
+    await page.getByRole('radio', { name: /Принято к доработке/ }).check();
     await page.getByRole('textbox', { name: 'Обоснование' }).fill(REASON);
     await page.getByRole('button', { name: 'Сохранить решение' }).click();
 
@@ -16,7 +16,7 @@ test.describe('Решение по замечанию', () => {
 
     await page.reload();
     await expect(page.getByText(REASON).first()).toBeVisible();
-    await expect(page.getByText('Подтверждено').first()).toBeVisible();
+    await expect(page.getByText('Принято к доработке').first()).toBeVisible();
   });
 
   test('не сохраняет решение без обоснования и объясняет причину', async ({ page }) => {
@@ -32,7 +32,7 @@ test.describe('Решение по замечанию', () => {
     await withScenario(page, 'decision-conflict');
     await openFinding(page);
 
-    await page.getByRole('radio', { name: /Подтверждено/ }).check();
+    await page.getByRole('radio', { name: /Принято к доработке/ }).check();
     await page.getByRole('textbox', { name: 'Обоснование' }).fill(REASON);
     await page.getByRole('button', { name: 'Сохранить решение' }).click();
 
@@ -47,7 +47,7 @@ test.describe('Решение по замечанию', () => {
   test('решение не изменяет отчёт', async ({ page }) => {
     await openFinding(page);
 
-    await page.getByRole('radio', { name: /Подтверждено/ }).check();
+    await page.getByRole('radio', { name: /Принято к доработке/ }).check();
     await page.getByRole('textbox', { name: 'Обоснование' }).fill(REASON);
     await page.getByRole('button', { name: 'Сохранить решение' }).click();
     await expect(page.getByText('Решение сохранено')).toBeVisible();
@@ -57,6 +57,6 @@ test.describe('Решение по замечанию', () => {
     // Содержание отчёта прежнее (FR-018, SC-006).
     await expect(page.getByText('Найдено одно уточнение по расписанию обновления.')).toBeVisible();
     await expect(page.getByRole('link', { name: /Не задано расписание обновления/ })).toBeVisible();
-    await expect(page.getByText(/Рассмотрено 1 из 1/i)).toBeVisible();
+    await expect(page.getByText('Все замечания рассмотрены', { exact: true })).toBeVisible();
   });
 });

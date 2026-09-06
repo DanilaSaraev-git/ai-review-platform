@@ -17,10 +17,7 @@ test.describe('Запуск проверки загруженного ТЗ', () 
   test('проходит путь от стартовых данных до успешного завершения', async ({ page }) => {
     await page.goto('/');
 
-    // Имя пространства видно сразу, вторичные лимиты раскрываются по запросу (FR-001).
-    await expect(page.getByText('Команда витрин', { exact: true }).first()).toBeVisible();
-    await page.getByText('Команда витрин', { exact: true }).first().click();
-    await expect(page.getByText(/файл до/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Проверки', exact: true })).toBeVisible();
 
     await page.getByRole('link', { name: 'Новая проверка' }).click();
     await uploadSyntheticDocument(page);
@@ -40,6 +37,8 @@ test.describe('Запуск проверки загруженного ТЗ', () 
     await startRun(page);
     await expect(page).toHaveURL(/\/runs\/[0-9a-f-]+$/);
 
+    const firstRun = page.url();
+
     // Новая открытая форма — новое намерение (SpecKit 009). Сетевые повторы
     // внутри одной формы сохраняют ключ; одинаковые параметры новой формы
     // больше не возвращают навсегда прежний запуск.
@@ -48,8 +47,10 @@ test.describe('Запуск проверки загруженного ТЗ', () 
     await startRun(page);
     await expect(page).toHaveURL(/\/runs\/[0-9a-f-]+$/);
 
-    await page.goto('/');
-    await expect(page.getByRole('link', { name: /Проверка от/ })).toHaveCount(2);
+    const secondRun = page.url();
+    await page.getByRole('button', { name: 'История', exact: true }).click();
+    await expect(page.getByRole('dialog').locator('a.history-run')).toHaveCount(2);
+    expect(secondRun).not.toBe(firstRun);
   });
 
   test('неудачное завершение называет причину и не предлагает отчёт', async ({ page }) => {
@@ -93,6 +94,6 @@ test.describe('Запуск проверки загруженного ТЗ', () 
     await expect(page).toHaveURL(/\/runs\/[0-9a-f-]+$/);
 
     await page.goto('/');
-    await expect(page.getByRole('link', { name: /Проверка от/ })).toBeVisible();
+    await expect(page.getByRole('rowheader').getByRole('link', { name: 'synthetic-spec.md' })).toBeVisible();
   });
 });

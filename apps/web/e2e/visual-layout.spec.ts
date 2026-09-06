@@ -79,7 +79,7 @@ test('отчёт на mobile сохраняет чтение документа 
   await expectNoPageOverflow(page);
   await expect(page.locator('details[open]')).toHaveCount(0);
   await page.getByRole('heading', { name: 'Чем выполнена проверка' }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole('status').filter({ hasText: /Рассмотрено/ })).toBeVisible();
+  await expect(page.getByText('Осталось рассмотреть: 1', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('report-mobile-390.png'), fullPage: true });
 });
 

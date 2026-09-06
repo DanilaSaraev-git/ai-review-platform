@@ -71,7 +71,7 @@ test('основной сценарий проходится только с к�
   await expect(page.getByRole('heading', { name: 'Ваше решение' })).toBeVisible();
 
   // Сохранение решения с клавиатуры.
-  const confirmed = page.getByRole('radio', { name: /Подтверждено/ });
+  const confirmed = page.getByRole('radio', { name: /Принято к доработке/ });
   await confirmed.focus();
   await page.keyboard.press('Space');
 

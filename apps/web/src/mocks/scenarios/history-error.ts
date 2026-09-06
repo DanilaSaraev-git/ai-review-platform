@@ -7,11 +7,11 @@ import { happyPath } from './happy-path';
 export function historyError(): RequestHandler[] {
   let attempts = 0;
   return [
-    http.get(`${API}/workspaces/:workspaceId/review-runs`, () => {
+    http.get(`${API}/workspaces/:workspaceId/document-families`, () => {
       attempts += 1;
       return attempts === 1
         ? problem(500, 'internal_error', 'История временно недоступна')
-        : HttpResponse.json({ items: [fixtures.runCompleted], next_cursor: null });
+        : HttpResponse.json({ items: [fixtures.documentFamily], next_cursor: null });
     }),
     ...happyPath(),
   ];

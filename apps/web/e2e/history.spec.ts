@@ -5,9 +5,9 @@ test('история загружает следующую страницу по
   await withScenario(page, 'history-pagination');
   await page.goto('/');
 
-  await expect(page.getByRole('link', { name: /Проверка от/ })).toHaveCount(20, { timeout: 15_000 });
+  await expect(page.getByRole('rowheader').getByRole('link')).toHaveCount(20, { timeout: 15_000 });
   await page.getByRole('button', { name: 'Показать ещё' }).click();
-  await expect(page.getByRole('link', { name: /Проверка от/ })).toHaveCount(21);
+  await expect(page.getByRole('rowheader').getByRole('link')).toHaveCount(21);
   await expect(page.getByRole('button', { name: 'Показать ещё' })).toHaveCount(0);
 });
 
@@ -15,7 +15,7 @@ test('ошибка истории предлагает рабочий повто
   await withScenario(page, 'history-error');
   await page.goto('/');
 
-  await expect(page.getByText('Не удалось загрузить историю')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Не удалось загрузить проверки')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Повторить' }).click();
-  await expect(page.getByRole('link', { name: /Проверка от/ })).toHaveCount(1);
+  await expect(page.getByRole('rowheader').getByRole('link')).toHaveCount(1);
 });

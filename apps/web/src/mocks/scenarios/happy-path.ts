@@ -71,6 +71,10 @@ export function happyPath(): RequestHandler[] {
       return HttpResponse.json(created, { status: 202 });
     }),
 
+    http.get(`${API}/workspaces/:workspaceId/document-families/:familyId/review-runs`, () =>
+      HttpResponse.json({ items: createdRuns.length ? createdRuns.map(run => ({ ...currentRun(), id: run.id })) : fixtures.runPage.items, next_cursor: null }),
+    ),
+
     http.get(`${API}/workspaces/:workspaceId/review-runs`, () =>
       HttpResponse.json({ items: createdRuns, next_cursor: null }, { status: 200 }),
     ),

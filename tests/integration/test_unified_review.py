@@ -1,7 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 from review_api.app import create_app
-from test_document_cycle import review, upload
+
+from tests.integration.test_document_cycle import review, upload
 
 
 @pytest.fixture(params=["fixture", "durable"])

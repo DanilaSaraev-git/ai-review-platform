@@ -8,12 +8,11 @@ test.describe('Диалог по замечанию', () => {
   test('проводит один ход и показывает ответ с предложенной резолюцией', async ({ page }) => {
     await openDialogue(page);
 
-    await page.getByRole('textbox', { name: /Уточняющий вопрос/ }).fill(QUESTION);
-    await page.getByRole('button', { name: 'Отправить вопрос' }).click();
+    await page.getByRole('textbox', { name: /уточняющий вопрос/i }).fill(QUESTION);
+    await page.getByRole('button', { name: 'Отправить', exact: true }).click();
 
     await expect(page.getByRole('paragraph').filter({ hasText: QUESTION })).toBeVisible();
     await expect(page.getByText('Предложена резолюция')).toBeVisible();
-    await expect(page.getByText('Предложенная моделью формулировка')).toBeVisible();
   });
 
   test('во время генерации хода отправка следующего недоступна с названной причиной', async ({ page }) => {
@@ -21,7 +20,7 @@ test.describe('Диалог по замечанию', () => {
     await openDialogue(page);
 
     await expect(page.getByText('Предыдущий ход ещё не завершён.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Отправить вопрос' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Отправить', exact: true })).toBeDisabled();
     await expect(page.getByText('Ответ готовится…')).toBeVisible();
   });
 
@@ -40,11 +39,11 @@ test.describe('Диалог по замечанию', () => {
     await withScenario(page, 'dialogue-conflict');
     await openDialogue(page);
 
-    await page.getByRole('textbox', { name: /Уточняющий вопрос/ }).fill(QUESTION);
-    await page.getByRole('button', { name: 'Отправить вопрос' }).click();
+    await page.getByRole('textbox', { name: /уточняющий вопрос/i }).fill(QUESTION);
+    await page.getByRole('button', { name: 'Отправить', exact: true }).click();
 
     await expect(page.getByRole('alert')).toContainText('Диалог изменился');
-    await expect(page.getByRole('textbox', { name: /Уточняющий вопрос/ })).toHaveValue(QUESTION);
+    await expect(page.getByRole('textbox', { name: /уточняющий вопрос/i })).toHaveValue(QUESTION);
     await expect(page.getByRole('button', { name: 'Повторить отправку' })).toBeEnabled();
     await page.getByRole('button', { name: 'Повторить отправку' }).click();
     await expect(page.getByText('Предложена резолюция')).toBeVisible();
@@ -53,21 +52,20 @@ test.describe('Диалог по замечанию', () => {
   test('предложенная резолюция становится решением только отдельным действием', async ({ page }) => {
     await openDialogue(page);
 
-    await page.getByRole('textbox', { name: /Уточняющий вопрос/ }).fill(QUESTION);
-    await page.getByRole('button', { name: 'Отправить вопрос' }).click();
-    await expect(page.getByText('Предложенная моделью формулировка')).toBeVisible();
+    await page.getByRole('textbox', { name: /уточняющий вопрос/i }).fill(QUESTION);
+    await page.getByRole('button', { name: 'Отправить', exact: true }).click();
+    await expect(page.getByText('Предложена резолюция')).toBeVisible();
 
     // Пока аналитик ничего не сделал, решение остаётся нерассмотренным (SC-007).
     await expect(page.getByText('Не рассмотрено').first()).toBeVisible();
     await expect(page.getByText('Решение сохранено')).toHaveCount(0);
 
-    // Первое действие: перенос текста в форму. Решение всё ещё не сохранено.
-    await page.getByRole('button', { name: 'Использовать предложение' }).click();
-    await expect(page.getByRole('textbox', { name: /Формулировка резолюции/ })).not.toHaveValue('');
+    // Ответ модели остаётся предложением; решение принимается на отдельной вкладке.
+    await page.getByRole('tab', { name: 'Решение', exact: true }).click();
     await expect(page.getByText('Решение сохранено')).toHaveCount(0);
 
     // Второе действие: сохранение решения человеком.
-    await page.getByRole('radio', { name: /Подтверждено/ }).check();
+    await page.getByRole('radio', { name: /Принято к доработке/ }).check();
     await page.getByRole('textbox', { name: 'Обоснование' }).fill('Формулировка подходит.');
     await page.getByRole('button', { name: 'Сохранить решение' }).click();
     await expect(page.getByText('Решение сохранено')).toBeVisible();
@@ -76,7 +74,7 @@ test.describe('Диалог по замечанию', () => {
   test('переключение вкладок сохраняет несохранённый черновик решения', async ({ page }) => {
     await openDialogue(page);
     await page.getByRole('tab', { name: 'Решение' }).click();
-    await page.getByRole('radio', { name: /Подтверждено/ }).check();
+    await page.getByRole('radio', { name: /Принято к доработке/ }).check();
     await page.getByRole('textbox', { name: 'Обоснование' }).fill('Несохранённый черновик');
 
     await page.getByRole('tab', { name: /Диалог/ }).click();

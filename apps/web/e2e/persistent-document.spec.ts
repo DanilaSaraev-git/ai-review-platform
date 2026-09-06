@@ -28,7 +28,7 @@ test('основной документ не размонтируется и с�
   expect(await document.evaluate((element) => element.scrollTop)).toBe(800);
 
   await page.getByRole('tab', { name: 'Решение', exact: true }).click();
-  await page.getByRole('radio', { name: /Подтверждено/ }).check();
+  await page.getByRole('radio', { name: /Принято к доработке/ }).check();
   await page.getByRole('textbox', { name: 'Обоснование' }).fill('В синтетическом ТЗ требуется точное расписание.');
   await page.getByRole('button', { name: 'Сохранить решение' }).click();
   await expect(page.getByText('Решение сохранено')).toBeVisible();
