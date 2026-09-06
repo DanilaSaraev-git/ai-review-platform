@@ -43,6 +43,16 @@ CHANGES = {
     "reappeared": "Обнаружено снова",
 }
 PRIORITIES = {"high": "Высокий", "medium": "Средний", "low": "Низкий"}
+LIMITATIONS = {
+    "review_conditions_changed": (
+        "Условия проверки изменились: прежние решения требуют повторной оценки человеком."
+    ),
+    "review_coverage_incomplete": (
+        "Проверка охватила документ не полностью: отсутствие замечания не подтверждает исправление."
+    ),
+    "comparison_failed": "Сравнение проверок не выполнено; статусы изменений недоступны.",
+    "review_report_unavailable": "Результат проверки ещё недоступен для сравнения.",
+}
 
 
 def _safe(value: Any) -> str:
@@ -240,7 +250,7 @@ def render_review_pdf(snapshot: dict[str, Any]) -> bytes:
     if cycle.get("status") != "ready":
         paragraph("Сопоставление недоступно. Исправления по отсутствию замечаний не подтверждены.")
     for limitation in [*report.get("limitations", []), *cycle.get("limitations", [])]:
-        paragraph(limitation, muted)
+        paragraph(LIMITATIONS.get(str(limitation), limitation), muted)
     paragraph("Замечания текущей проверки", heading)
     if not findings:
         paragraph(

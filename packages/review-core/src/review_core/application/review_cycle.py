@@ -94,6 +94,13 @@ def _candidate(previous: dict[str, Any], current: dict[str, Any]) -> bool:
         return False
     p_quotes = {quote for _, quote in _anchors(previous) if quote}
     c_quotes = {quote for _, quote in _anchors(current) if quote}
+    if not p_quotes and not c_quotes:
+        # A missing-information finding has no quote by definition. Preserve it
+        # for human linking when all semantic fields and its scope are identical,
+        # but do not create an automatic correspondence without evidence.
+        return bool(_text(previous.get("problem"))) and _decision_basis(
+            previous
+        ) == _decision_basis(current)
     if p_quotes & c_quotes:
         return True
     # These thresholds are a candidate-display heuristic, never confidence in a

@@ -117,3 +117,20 @@ def test_reopened_resolution_keeps_human_reason_and_missing_scope() -> None:
     assert "2026-09-06T12:00:00Z" in text
     assert "source-main-lines-1-3" in text
     assert "Точная цитата отсутствует" in text
+
+
+def test_cycle_limitations_are_explained_without_machine_codes() -> None:
+    value = snapshot()
+    value["cycle"]["limitations"] = [
+        "review_conditions_changed",
+        "review_coverage_incomplete",
+        "comparison_failed",
+    ]
+
+    with pdfplumber.open(io.BytesIO(render_review_pdf(value))) as pdf:
+        text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+
+    assert "Условия проверки изменились" in text
+    assert "Проверка охватила документ не полностью" in text
+    assert "Сравнение проверок не выполнено" in text
+    assert "review_conditions_changed" not in text

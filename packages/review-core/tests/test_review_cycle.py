@@ -109,6 +109,19 @@ def test_same_occurrence_fallback_requires_same_document() -> None:
     assert any(item.status == "persisting" for item in result)
 
 
+def test_repeated_missing_finding_remains_candidate_for_human_linking() -> None:
+    old, new = finding("old"), finding("new")
+    for item in (old, new):
+        item.update(kind="missing", anchors=[], scope=["source-main-lines-1-3"])
+
+    result = match_findings([old], [new])
+
+    assert {(item.previous_id, item.current_id, item.status) for item in result} == {
+        (None, "new", "uncertain"),
+        ("old", None, "uncertain"),
+    }
+
+
 def test_context_text_role_and_order_are_material() -> None:
     sources = [
         {"role": "document", "ordinal": 0, "text": "A"},
