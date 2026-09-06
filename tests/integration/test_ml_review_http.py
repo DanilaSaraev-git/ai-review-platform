@@ -61,7 +61,9 @@ def _configure_ml(
     return reference
 
 
-def _request_review(client: TestClient, workspace_id: str, reference: dict[str, str]):
+def _request_review(
+    client: TestClient, workspace_id: str, reference: dict[str, str], *, locale: str = "en-US"
+):
     document = client.post(
         f"/v1/workspaces/{workspace_id}/documents",
         files={"file": ("primary.md", (FIXTURES / "primary.md").read_bytes(), "text/markdown")},
@@ -76,7 +78,7 @@ def _request_review(client: TestClient, workspace_id: str, reference: dict[str, 
             "context_document_ids": [],
             "profile": {"id": profiles[0]["id"], "version": profiles[0]["version"]},
             "model_profile": reference,
-            "locale": "en-US",
+            "locale": locale,
         },
     )
 

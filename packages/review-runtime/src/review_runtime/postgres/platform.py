@@ -316,6 +316,7 @@ class PostgresReviewExecutionStorage:
                 )
             execution_value = {
                 "deadline_at": wire_time(deadline_at),
+                "locale": request.request_body["locale"],
                 "prepared_input_digest": None,
                 "started_at": None,
                 "finished_at": None,
@@ -2732,9 +2733,13 @@ class PostgresReviewPlatform:
         dialogue = self._dialogue(workspace_id, run_id, finding_id)
         with self._connect() as connection:
             finding = connection.execute(
-                """SELECT f.value,r.graph FROM findings f JOIN review_reports r
+                """SELECT f.value,r.graph,e.value->>'locale' AS locale
+                   FROM findings f JOIN review_reports r
                      ON (r.organization_id,r.workspace_id,r.id)=
                         (f.organization_id,f.workspace_id,f.report_id)
+                   LEFT JOIN review_run_executions e
+                     ON (e.organization_id,e.workspace_id,e.run_id)=
+                        (r.organization_id,r.workspace_id,r.run_id)
                    WHERE f.organization_id=%s AND f.workspace_id=%s AND f.id=%s AND r.run_id=%s""",
                 (self.organization_id, workspace_id, finding_id, run_id),
             ).fetchone()
@@ -2801,6 +2806,8 @@ class PostgresReviewPlatform:
             "turn_ordinal": turn["ordinal"],
             "attempt_id": turn["active_generation_attempt_id"],
             "finding": finding["value"],
+            # Older executions did not retain locale; this deployment defaults to Russian.
+            "locale": finding["locale"] or "ru-RU",
             "sources": sources,
             "fragments": fragments,
             "history": history,

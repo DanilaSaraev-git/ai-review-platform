@@ -589,7 +589,7 @@ class LLMReviewRuntime:
                         profile=prepared["profile"],
                         completed_history=tuple(prepared["history"]),
                         follow_up_allowed=True,
-                        locale="en-US",
+                        locale=prepared["locale"],
                         execution_snapshot=prepared["snapshot"],
                     ),
                     skill=PinnedDialogueSkill(

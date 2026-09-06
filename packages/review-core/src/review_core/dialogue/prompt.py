@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from uuid import uuid4
 
+from review_core.output_language import with_output_language
 from review_core.ports.models import (
     GenerationPurpose,
     GenerationRequest,
@@ -37,7 +38,7 @@ def build_dialogue_generation_request(
         request_id=request_id,
         purpose=GenerationPurpose.DIALOGUE,
         work_item_id=work_item_id,
-        trusted_instructions=instructions,
+        trusted_instructions=with_output_language(instructions, dialogue_input),
         untrusted_input=json.dumps(
             dialogue_input,
             ensure_ascii=False,
