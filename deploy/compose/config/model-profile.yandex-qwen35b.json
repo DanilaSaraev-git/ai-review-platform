@@ -1,0 +1,24 @@
+{
+  "schema_version": "model-profile.v1",
+  "id": "yandex-qwen3.6-35b",
+  "version": "1.0.0",
+  "adapter_kind": "openai_compatible",
+  "provider": "yandex",
+  "model": "gpt://${YANDEX_FOLDER_ID}/qwen3.6-35b-a3b/latest",
+  "checkpoint": null,
+  "chat_url": "https://ai.api.cloud.yandex.net/v1/chat/completions",
+  "secret_ref": "YANDEX_API_KEY",
+  "capabilities": ["text_generation"],
+  "context_window_tokens": 262144,
+  "max_input_utf8_bytes": 32768,
+  "max_output_tokens": 16384,
+  "structured_output": "plain_json",
+  "supported_parameters": ["max_completion_tokens"],
+  "request_options": {},
+  "probe": {
+    "mode": "models",
+    "url": "https://ai.api.cloud.yandex.net/v1/models",
+    "timeout_seconds": 5,
+    "success_ttl_seconds": 300
+  }
+}

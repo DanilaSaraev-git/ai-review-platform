@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
-from review_runtime.config.model_profiles import ModelProfile, ModelProfileSet, profile_config_digest
+from review_runtime.config.model_profiles import (
+    ModelProfile,
+    ModelProfileSet,
+    load_model_profiles,
+    profile_config_digest,
+)
 from review_runtime.models.config import EndpointPolicy
 from review_runtime.skills.executor import SkillExecutor
 from review_runtime.skills.registry import SkillRegistry
@@ -91,6 +96,49 @@ def test_profile_rejects_undeclared_options_and_duplicate_identity() -> None:
         ModelProfileSet(profiles=(_profile(), _profile(model="different")))
 
 
+def test_profile_loader_supports_existing_single_profile_and_explicit_set(tmp_path: Path) -> None:
+    path = tmp_path / "profiles.json"
+    first = _profile()
+    second = _profile(id="synthetic-other", model="synthetic-other-model")
+    path.write_text(first.model_dump_json())
+    assert load_model_profiles(path) == (first,)
+    values = [profile.model_dump(mode="json") for profile in (first, second)]
+    path.write_text(json.dumps({"profiles": values}))
+    assert load_model_profiles(path) == (first, second)
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"profiles": []},
+        {"profiles": [_profile().model_dump(mode="json")] * 2},
+        {"profiles": [_profile().model_dump(mode="json")], "secret": "CANARY_SECRET"},
+        {
+            "profiles": [
+                _profile().model_dump(mode="json"),
+                _profile(id="other", provider="different-provider").model_dump(mode="json"),
+            ]
+        },
+    ],
+)
+def test_profile_loader_rejects_ambiguous_sets_and_mixed_credentials(tmp_path: Path, invalid: object) -> None:
+    path = tmp_path / "profiles.json"
+    path.write_text(json.dumps(invalid))
+    with pytest.raises(ValueError):
+        load_model_profiles(path)
+
+
+@pytest.mark.parametrize("name", ["yandex-deepseek", "yandex-qwen35b", "yandex-gpt-oss20b"])
+def test_yandex_model_templates_follow_the_existing_profile_contract(name: str) -> None:
+    value = json.loads((ROOT / f"deploy/compose/config/model-profile.{name}.json").read_text())
+    Draft202012Validator(json.loads(PROFILE_SCHEMA.read_text())).validate(value)
+    profile = ModelProfile.model_validate(value)
+    assert profile.secret_ref == "YANDEX_API_KEY"  # noqa: S105 - this is a secret name, not a value
+    assert profile.provider == "yandex"
+    assert "${YANDEX_FOLDER_ID}" in profile.model
+    assert profile.max_output_tokens == 16384
+
+
 def test_profile_validation_performs_no_dns_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     def unexpected_dns(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("configuration validation must not resolve DNS")
@@ -147,9 +195,7 @@ def test_skill_requirements_and_trusted_instruction_inventory_are_enforced(tmp_p
     executor = SkillExecutor({}, package=resolved)
     review_instructions = executor.trusted_instructions("review")
     assert review_instructions.primary.startswith("# Synthetic review operation")
-    assert [reference.path for reference in review_instructions.references] == [
-        "references/test-boundary.md"
-    ]
+    assert [reference.path for reference in review_instructions.references] == ["references/test-boundary.md"]
 
 
 def test_skill_rejects_an_undeclared_file_even_when_declared_hashes_match(tmp_path: Path) -> None:

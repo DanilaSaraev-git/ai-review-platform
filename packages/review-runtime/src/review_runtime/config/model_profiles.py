@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -136,6 +138,22 @@ class ModelProfileSet(BaseModel):
         if len(identities) != len(set(identities)):
             raise ValueError("model profile identity must be unique")
         return self
+
+
+def load_model_profiles(path: Path) -> tuple[ModelProfile, ...]:
+    """Read one existing profile or an explicit nonempty set of profiles."""
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(value, dict) and "profiles" in value:
+        profiles = ModelProfileSet.model_validate(value).profiles
+    else:
+        profiles = (ModelProfile.model_validate(value),)
+    if not profiles:
+        raise ValueError("at least one model profile is required")
+    # The current deployment mounts one credential; distinct providers need distinct secrets.
+    credential_owners = {(profile.provider, profile.secret_ref) for profile in profiles}
+    if len(credential_owners) > 1:
+        raise ValueError("model profiles must share one provider and mounted credential reference")
+    return profiles
 
 
 def profile_config_digest(profile: ModelProfile) -> str:

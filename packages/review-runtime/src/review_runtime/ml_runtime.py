@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from types import TracebackType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from review_core.application.dialogue import (
@@ -29,6 +29,7 @@ from review_core.application.platform import DocumentRecord
 from review_core.application.profiles import ProfileVersion
 from review_core.canonical import digest_value
 from review_core.dialogue.engine import DialogueEngine
+from review_core.domain.errors import Conflict
 from review_core.ports.models import (
     FinishReason,
     GenerationRequest,
@@ -57,6 +58,9 @@ from review_runtime.postgres.platform import (
 from review_runtime.reports import ModelReviewOutputValidator
 from review_runtime.skills.executor import SkillExecutor
 from review_runtime.skills.registry import ResolvedSkill
+
+if TYPE_CHECKING:
+    import anyio
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,9 +105,7 @@ def _semantic_failure(error: _SemanticValidationFailed) -> ExecutionFailure:
     return ExecutionFailure("validation_failed", message, False)
 
 
-class _ReviewOperationStorage(
-    ExecutionStorage[ReviewOperation, dict[str, Any], dict[str, Any]]
-):
+class _ReviewOperationStorage(ExecutionStorage[ReviewOperation, dict[str, Any], dict[str, Any]]):
     def __init__(self, storage: PostgresReviewExecutionStorage) -> None:
         self._storage = storage
 
@@ -161,9 +163,7 @@ class _RecordingAdapter:
                 partial(self._storage.finish_model_attempt, attempt_id, unknown_outcome=True)
             )
             raise
-        await anyio.to_thread.run_sync(
-            partial(self._storage.finish_model_attempt, attempt_id, result=result)
-        )
+        await anyio.to_thread.run_sync(partial(self._storage.finish_model_attempt, attempt_id, result=result))
         await _record_availability(self._platform, self._profile, None)
         return result
 
@@ -279,6 +279,7 @@ class LLMReviewRuntime:
         model_profile: ModelProfile,
         skill: ResolvedSkill,
         root: Path,
+        model_call_semaphore: anyio.Semaphore | None = None,
     ) -> None:
         self.platform = platform
         self.model_runtime = model_runtime
@@ -290,8 +291,7 @@ class LLMReviewRuntime:
             {
                 "review": json.loads(
                     (
-                        root
-                        / "specs/004-llm-review-integration/contracts/model-output.review.v1.schema.json"
+                        root / "specs/004-llm-review-integration/contracts/model-output.review.v1.schema.json"
                     ).read_text()
                 ),
                 "finding_dialogue": json.loads(
@@ -309,8 +309,10 @@ class LLMReviewRuntime:
         self.dialogue_engine = DialogueEngine()
         import anyio
 
-        self._model_call_semaphore = anyio.Semaphore(
-            self.platform.runtime_policy.budgets.max_parallel_model_calls
+        self._model_call_semaphore = (
+            model_call_semaphore
+            if model_call_semaphore is not None
+            else anyio.Semaphore(self.platform.runtime_policy.budgets.max_parallel_model_calls)
         )
         self._recording_adapter = _ConcurrencyLimitedAdapter(
             _RecordingAdapter(
@@ -377,10 +379,12 @@ class LLMReviewRuntime:
             self.platform.exact_model_profile(reference)
             raise RuntimeError("runtime was not composed for the requested model profile")
         listed = self.platform.list_model_profiles(workspace_id)["items"]
-        selected = next(item for item in listed if item["id"] == self.model_profile.id)
+        selected = next(
+            item
+            for item in listed
+            if (item["id"], item["version"]) == (self.model_profile.id, self.model_profile.version)
+        )
         if selected["availability"] != "available":
-            from review_core.domain.errors import Conflict
-
             raise Conflict("model_unavailable", "The selected model profile is unavailable.")
         operation = await self._build_operation(
             workspace_id=workspace_id,
@@ -404,17 +408,8 @@ class LLMReviewRuntime:
             self.platform.dialogue_model_reference, workspace_id, run_id, finding_id
         )
         if reference != {"id": self.model_profile.id, "version": self.model_profile.version}:
-            return await anyio.to_thread.run_sync(
-                self.platform.create_dialogue_turn,
-                workspace_id,
-                run_id,
-                finding_id,
-                body,
-                idempotency_key,
-            )
-        deadline_at = datetime.now(UTC) + timedelta(
-            seconds=self.platform.settings.dialogue_deadline_seconds
-        )
+            raise Conflict("model_unavailable", "The report's model profile is unavailable.")
+        deadline_at = datetime.now(UTC) + timedelta(seconds=self.platform.settings.dialogue_deadline_seconds)
         admission = await anyio.to_thread.run_sync(
             lambda: self.platform.admit_external_dialogue(
                 workspace_id,
@@ -433,9 +428,7 @@ class LLMReviewRuntime:
             admission["attempt_id"],
             replay=admission["replay"],
         )
-        return await anyio.to_thread.run_sync(
-            self.platform.get_dialogue, workspace_id, run_id, finding_id
-        )
+        return await anyio.to_thread.run_sync(self.platform.get_dialogue, workspace_id, run_id, finding_id)
 
     async def retry_dialogue_turn(
         self,
@@ -452,18 +445,8 @@ class LLMReviewRuntime:
             self.platform.dialogue_model_reference, workspace_id, run_id, finding_id
         )
         if reference != {"id": self.model_profile.id, "version": self.model_profile.version}:
-            return await anyio.to_thread.run_sync(
-                self.platform.retry_dialogue_turn,
-                workspace_id,
-                run_id,
-                finding_id,
-                turn_id,
-                body,
-                idempotency_key,
-            )
-        deadline_at = datetime.now(UTC) + timedelta(
-            seconds=self.platform.settings.dialogue_deadline_seconds
-        )
+            raise Conflict("model_unavailable", "The report's model profile is unavailable.")
+        deadline_at = datetime.now(UTC) + timedelta(seconds=self.platform.settings.dialogue_deadline_seconds)
         admission = await anyio.to_thread.run_sync(
             lambda: self.platform.admit_external_dialogue(
                 workspace_id,
@@ -483,9 +466,7 @@ class LLMReviewRuntime:
             admission["attempt_id"],
             replay=admission["replay"],
         )
-        return await anyio.to_thread.run_sync(
-            self.platform.get_dialogue, workspace_id, run_id, finding_id
-        )
+        return await anyio.to_thread.run_sync(self.platform.get_dialogue, workspace_id, run_id, finding_id)
 
     async def _submit_dialogue(
         self,
@@ -527,9 +508,7 @@ class LLMReviewRuntime:
         event: Any,
     ) -> None:
         try:
-            await self._execute_dialogue(
-                workspace_id, run_id, finding_id, turn_id, attempt_id
-            )
+            await self._execute_dialogue(workspace_id, run_id, finding_id, turn_id, attempt_id)
         finally:
             event.set()
             self._dialogue_events.pop(attempt_id, None)
@@ -636,8 +615,7 @@ class LLMReviewRuntime:
                         self._model_call_semaphore,
                     ),
                     request_factory,
-                    deadline=time.monotonic()
-                    + self.platform.settings.dialogue_deadline_seconds,
+                    deadline=time.monotonic() + self.platform.settings.dialogue_deadline_seconds,
                     clock=time.monotonic,
                 )
                 _require_complete_model_output(result)
@@ -706,9 +684,7 @@ class LLMReviewRuntime:
         if isinstance(error, _SemanticValidationFailed):
             return _semantic_failure(error)
         if isinstance(error, (_ModelOutputInvalid, ValueError, json.JSONDecodeError)):
-            return ExecutionFailure(
-                "model_output_invalid", "The model response failed validation.", False
-            )
+            return ExecutionFailure("model_output_invalid", "The model response failed validation.", False)
         return ExecutionFailure("internal_error", "The operation could not be completed.", True)
 
     async def _build_operation(
@@ -716,18 +692,15 @@ class LLMReviewRuntime:
     ) -> ReviewOperation:
         import anyio
 
-        return await anyio.to_thread.run_sync(
-            self._build_operation_sync, workspace_id, body, idempotency_key
-        )
+        return await anyio.to_thread.run_sync(self._build_operation_sync, workspace_id, body, idempotency_key)
 
     def _build_operation_sync(
         self, workspace_id: str, body: dict[str, Any], idempotency_key: str
     ) -> ReviewOperation:
         self.platform._workspace(workspace_id)
         context_ids = body.get("context_document_ids", [])
-        if (
-            len(context_ids) > self.platform.max_context_documents
-            or len(context_ids) != len(set(context_ids))
+        if len(context_ids) > self.platform.max_context_documents or len(context_ids) != len(
+            set(context_ids)
         ):
             from review_core.domain.errors import InvalidRequest
 
@@ -865,8 +838,7 @@ class LLMReviewRuntime:
         work_item_id = self.platform.review_storage.work_item_id(operation.storage_request.run_id)
         instructions = self.skill_executor.trusted_instructions("review")
         trusted = "\n\n".join(
-            [instructions.primary]
-            + [item.content.decode("utf-8") for item in instructions.references]
+            [instructions.primary] + [item.content.decode("utf-8") for item in instructions.references]
         )
         digest = digest_value(review_input)
         return {
@@ -881,9 +853,7 @@ class LLMReviewRuntime:
             "operation": operation,
         }
 
-    async def _generate(
-        self, prepared: dict[str, Any], deadline: ExecutionDeadline
-    ) -> dict[str, Any]:
+    async def _generate(self, prepared: dict[str, Any], deadline: ExecutionDeadline) -> dict[str, Any]:
         profile = self.model_profile
         snapshot = ModelProfileSnapshot(
             id=profile.id,
@@ -954,9 +924,7 @@ class LLMReviewRuntime:
                     "status": item["status"],
                     "diagnostics": item["diagnostics"],
                 }
-                for item, document in zip(
-                    sources, (operation.primary, *operation.contexts), strict=True
-                )
+                for item, document in zip(sources, (operation.primary, *operation.contexts), strict=True)
             ],
         }
         try:
@@ -987,7 +955,5 @@ class LLMReviewRuntime:
         if isinstance(error, _SemanticValidationFailed):
             return _semantic_failure(error)
         if isinstance(error, (_ModelOutputInvalid, ValueError)):
-            return ExecutionFailure(
-                "model_output_invalid", "The model response failed validation.", False
-            )
+            return ExecutionFailure("model_output_invalid", "The model response failed validation.", False)
         return ExecutionFailure("internal_error", "The operation could not be completed.", True)

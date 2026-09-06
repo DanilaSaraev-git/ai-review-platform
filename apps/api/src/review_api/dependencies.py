@@ -1,19 +1,20 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
 
+import anyio
 import httpx
 from review_core.application.platform import ReviewPlatform
 from review_runtime.composition import compose_model_runtime
-from review_runtime.config.model_profiles import ModelProfile
+from review_runtime.config.model_profiles import load_model_profiles
 from review_runtime.config.settings import OperatorSettings
 from review_runtime.config.verify import verify
 from review_runtime.fakes.review_executor import TrustedFixtureReviewExecutor
 from review_runtime.ml_runtime import LLMReviewRuntime
 from review_runtime.models.config import FileSecretProvider
+from review_runtime.multi_model_runtime import LLMReviewRouter
 from review_runtime.postgres.platform import PostgresReviewPlatform
 from review_runtime.skills.registry import SkillRegistry
 
@@ -22,7 +23,7 @@ def build_components(
     composition: str = "fixture",
     *,
     model_transport: httpx.AsyncBaseTransport | None = None,
-) -> tuple[Any, LLMReviewRuntime | None]:
+) -> tuple[Any, LLMReviewRuntime | LLMReviewRouter | None]:
     root = Path(__file__).resolve().parents[4]
     selected = os.environ.get("REVIEW_COMPOSITION", composition)
     if selected in {"durable", "ml", "unconfigured"}:
@@ -51,41 +52,52 @@ def build_components(
             return platform, None
         if settings.model_profile_path is None or settings.skill_package_path is None:
             raise ValueError("ML composition requires model profile and skill package paths")
-        profile = ModelProfile.model_validate(
-            json.loads(settings.model_profile_path.read_text(encoding="utf-8"))
-        )
+        profiles = load_model_profiles(settings.model_profile_path)
+        if any(profile.adapter_kind != "openai_compatible" for profile in profiles):
+            raise ValueError("ML composition requires external model profiles")
+        if (
+            any(profile.secret_ref is not None for profile in profiles)
+            and settings.model_credential_path is None
+        ):
+            raise ValueError("ML composition requires a mounted credential file")
         skill = SkillRegistry(
             root / "contracts/review-platform/v1/schemas/skill-manifest.schema.json",
             engine_version="0.1.0",
-            model_capabilities=frozenset(profile.capabilities),
+            model_capabilities=frozenset.intersection(
+                *(frozenset(profile.capabilities) for profile in profiles)
+            ),
         ).resolve(settings.skill_package_path)
         platform = PostgresReviewPlatform(
             None,
             settings,
-            model_profiles=(profile,),
+            model_profiles=profiles,
             resolved_skill=skill,
             runtime_policy=policy,
             composition="ml",
         )
-        secrets = None
-        if profile.secret_ref is not None:
-            if settings.model_credential_path is None:
-                raise ValueError("ML composition requires a mounted credential file")
-            secrets = FileSecretProvider(profile.secret_ref, settings.model_credential_path)
-        model_runtime = compose_model_runtime(
-            profile=profile,
-            secrets=secrets,
-            max_response_bytes=settings.model_max_response_bytes,
-            transport=model_transport,
-        )
-        runtime = LLMReviewRuntime(
-            platform=platform,
-            model_runtime=model_runtime,
-            model_profile=profile,
-            skill=skill,
-            root=root,
-        )
-        return platform, runtime
+        semaphore = anyio.Semaphore(policy.budgets.max_parallel_model_calls)
+        runtimes = []
+        for profile in profiles:
+            secrets = None
+            if profile.secret_ref is not None and settings.model_credential_path is not None:
+                secrets = FileSecretProvider(profile.secret_ref, settings.model_credential_path)
+            model_runtime = compose_model_runtime(
+                profile=profile,
+                secrets=secrets,
+                max_response_bytes=settings.model_max_response_bytes,
+                transport=model_transport,
+            )
+            runtimes.append(
+                LLMReviewRuntime(
+                    platform=platform,
+                    model_runtime=model_runtime,
+                    model_profile=profile,
+                    skill=skill,
+                    root=root,
+                    model_call_semaphore=semaphore,
+                )
+            )
+        return platform, runtimes[0] if len(runtimes) == 1 else LLMReviewRouter(platform, tuple(runtimes))
     if selected in {"fixture", "real"}:
         executor = TrustedFixtureReviewExecutor(root)
         return ReviewPlatform(executor), None
