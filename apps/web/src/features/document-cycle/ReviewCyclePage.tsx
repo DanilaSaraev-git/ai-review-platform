@@ -22,7 +22,7 @@ export function ReviewCyclePage() {
   return <ReviewCyclePanel key={run.id} workspaceId={workspaceId} runId={run.id} />;
 }
 
-export function ReviewCyclePanel({ workspaceId, runId }: { workspaceId: string; runId: string }) {
+export function ReviewCyclePanel({ workspaceId, runId, embedded = false, readOnly = false }: { workspaceId: string; runId: string; embedded?: boolean; readOnly?: boolean }) {
   const query = useGetReviewCycle(workspaceId, runId);
   const compare = useCompareReviewCycle();
   const cache = useQueryClient();
@@ -38,21 +38,22 @@ export function ReviewCyclePanel({ workspaceId, runId }: { workspaceId: string; 
   if (query.isPending) return <div className="p-5"><Spinner label="Загружаем сравнение…" /></div>;
   if (query.isError) return <div className="p-5"><Callout tone="danger" title="Не удалось загрузить сравнение"><Button onClick={() => void query.refetch()}>Повторить загрузку</Button></Callout><Link to={`/runs/${runId}/report`} className="mt-3 inline-block text-sm text-accent">К замечаниям</Link></div>;
   const cycle = query.data;
-  return <div className="numbat-panel-scroll p-5">
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-medium">Изменения замечаний</h2><Link className="text-xs text-accent" to={`/runs/${runId}/report`}>К замечаниям</Link></div>
+  if (embedded && cycle.status === 'ready' && !cycle.limitations.length && !cycle.entries.some(e => !e.current_finding_id || e.status === 'uncertain')) return null;
+  return <div className={embedded ? "p-5" : "numbat-panel-scroll p-5"}>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-medium">{embedded ? 'Проверить исправления' : 'Изменения замечаний'}</h2><Link className="text-xs text-accent" to={`/runs/${runId}/report`}>К замечаниям</Link></div>
     {cycle.baseline_run_id ? <Link className="text-xs text-accent" to={`/runs/${cycle.baseline_run_id}/report`}>Базовая проверка для сравнения</Link> : <p className="text-xs text-ink-muted">Первая проверка документа: базы для сравнения нет.</p>}
     {cycle.compared_at ? <p className="my-2 text-xs text-ink-muted">Сравнение от {formatDateTime(cycle.compared_at)}</p> : null}
     {cycle.status === 'unavailable' ? <div className="my-3"><Callout tone="warn" title="Сравнение не завершено">Основной отчёт доступен. Отсутствие замечания не подтверждает исправление.</Callout></div> : null}
     {cycle.limitations.length ? <ul aria-label="Ограничения сравнения" className="my-3 list-disc space-y-1 pl-5 text-xs text-ink-muted">{cycle.limitations.map((item, index) => <li key={index}>{comparisonText(item)}</li>)}</ul> : null}
     {error ? <div className="my-3"><Callout tone="warn" title={error}><Button onClick={() => { setError(undefined); void query.refetch(); }}>Обновить состояние</Button></Callout></div> : null}
-    <Button className="my-3" disabled={compare.isPending} onClick={() => void retryComparison()}>{compare.isPending ? 'Сравниваем…' : 'Повторить сравнение'}</Button>
+    <Button className="my-3" disabled={compare.isPending || readOnly} onClick={() => void retryComparison()}>{compare.isPending ? 'Сравниваем…' : 'Повторить сравнение'}</Button>
     <p className="mb-4 text-xs text-ink-muted">«Больше не обнаружено» не означает «Исправлено». Исправление подтверждает аналитик.</p>
-    <div className="space-y-4">{cycle.entries.map((entry) => <CycleEntryCard key={entry.issue_id} workspaceId={workspaceId} runId={runId} cycle={cycle} entry={entry} />)}</div>
+    <div className="space-y-4">{cycle.entries.filter(entry => !embedded || !entry.current_finding_id || entry.status === 'uncertain').map((entry) => <CycleEntryCard key={entry.issue_id} workspaceId={workspaceId} runId={runId} cycle={cycle} entry={entry} readOnly={readOnly} />)}</div>
     {cycle.entries.length === 0 ? <p className="text-sm text-ink-muted">Замечаний в истории пока нет.</p> : null}
   </div>;
 }
 
-function CycleEntryCard({ workspaceId, runId, cycle, entry }: { workspaceId: string; runId: string; cycle: ReviewCycle; entry: CycleEntry }) {
+export function CycleEntryCard({ workspaceId, runId, cycle, entry, readOnly = false }: { workspaceId: string; runId: string; cycle: ReviewCycle; entry: CycleEntry; readOnly?: boolean }) {
   const cache = useQueryClient();
   const resolution = usePutIssueResolution();
   const link = usePutReviewCycleLink();
@@ -68,7 +69,7 @@ function CycleEntryCard({ workspaceId, runId, cycle, entry }: { workspaceId: str
   const priorFinding = priorReport.data?.findings.find((finding) => finding.id === previousFindingId);
   const options = cycle.entries.filter((candidate) => candidate.issue_id !== entry.issue_id && !candidate.current_finding_id);
   const hasPrevious = entry.origin_run_id !== runId;
-  const pending = resolution.isPending || link.isPending;
+  const pending = readOnly || resolution.isPending || link.isPending;
   async function save(action: 'resolution' | 'link' | 'unlink') {
     setError(undefined);
     setConflict(false);

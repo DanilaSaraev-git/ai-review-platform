@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useQueries } from '@tanstack/react-query';
 import { getGetDocumentQueryOptions, useGetDocument, useGetReviewRun, useListModelProfiles, useListReviewProfiles } from '@/api/generated/endpoints';
 import type { Document, ModelProfile, ReviewProfile } from '@/api/generated/model';
@@ -21,10 +21,7 @@ import { runReadiness } from './lib/run-readiness';
  * Основной документ остаётся рядом с параметрами и контекстом запуска.
  */
 export function NewReviewPage() {
-  const [params] = useSearchParams();
-  const repeatRunId = params.get('repeat') ?? '';
-  const savedDocumentId = params.get('document') ?? '';
-  return <ReviewSetup key={`${repeatRunId}:${savedDocumentId}`} repeatRunId={repeatRunId} savedDocumentId={savedDocumentId} />;
+  return <ReviewSetup repeatRunId="" savedDocumentId="" />;
 }
 
 function ReviewSetup({ repeatRunId, savedDocumentId }: { repeatRunId: string; savedDocumentId: string }) {

@@ -14,11 +14,15 @@ export function DialoguePanel({
   runId,
   findingId,
   onUseResolution,
+  initialQuestion,
+  readOnly = false,
 }: {
   workspaceId: string;
   runId: string;
   findingId: string;
   onUseResolution?: (text: string) => void;
+  initialQuestion?: string;
+  readOnly?: boolean;
 }) {
   const { dialogue, isLoading, error, retry: retryDialogue } = useFindingDialogue(workspaceId, runId, findingId);
   const { retry, isPending: isRetrying } = useRetryTurn(workspaceId, runId, findingId);
@@ -51,8 +55,10 @@ export function DialoguePanel({
       ) : null}
 
       <div className="min-h-0 min-w-0 lg:flex-1 lg:overflow-y-auto">
+        {initialQuestion ? <div className="mb-7"><p className="text-xs"><strong className="font-medium">Numbat</strong><span className="ml-2 text-ink-subtle">Вопрос для уточнения</span></p><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{initialQuestion}</p></div> : null}
         <TurnList
           turns={dialogue.turns}
+          workspaceId={workspaceId}
           onRetry={(turnId) => {
             retry(turnId, dialogue.revision).catch(() => {
               // Причина повторной неудачи показывается в карточке хода.
@@ -63,9 +69,9 @@ export function DialoguePanel({
         />
       </div>
 
-      <div className="mt-auto shrink-0 border-t border-line bg-surface pt-4">
+      {!readOnly ? <div className="mt-auto shrink-0 border-t border-line bg-surface pt-4">
         <TurnComposer workspaceId={workspaceId} runId={runId} findingId={findingId} dialogue={dialogue} />
-      </div>
+      </div> : <p className="text-xs text-ink-muted">Диалог сохранён в истории этого результата.</p>}
     </section>
   );
 }

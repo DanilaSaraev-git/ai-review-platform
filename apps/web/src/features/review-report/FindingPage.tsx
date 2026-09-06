@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { Button, Callout, Spinner } from '@/components/ui';
 import { NotFoundPage } from '@/app/NotFoundPage';
+import { DecisionSummary } from '@/features/finding-decision/components/DecisionSummary';
 import { DecisionForm } from '@/features/finding-decision/components/DecisionForm';
 import { DialoguePanel } from '@/features/finding-dialogue/components/DialoguePanel';
 import { useFindingStates } from './api/use-finding-states';
@@ -14,13 +14,11 @@ export function FindingPage() {
   const { runId = '', findingId = '' } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { workspaceId } = useWorkspaceRun();
+  const { workspaceId, historical } = useWorkspaceRun();
   const { report, isLoading, isUnavailable, isNotFound, error, retry } = useReviewReport(workspaceId, runId);
   const { byFindingId, rawByFindingId, carriedByFindingId, error: statesError, retry: retryStates } = useFindingStates(workspaceId, runId);
-  const [prefilledResolution, setPrefilledResolution] = useState<string | null>(null);
   const isDialogue = location.pathname.endsWith('/dialogue');
 
-  useEffect(() => { setPrefilledResolution(null); }, [findingId]);
 
   if (isNotFound) return <NotFoundPage detail="Такой проверки нет. Возможно, ссылка устарела или идентификатор указан неверно." />;
   if (isUnavailable) return <div className="p-5"><Callout tone="warn" title="Отчёта пока нет">Проверка не завершилась успешно, поэтому замечаний нет.</Callout></div>;
@@ -48,7 +46,7 @@ export function FindingPage() {
         <Button className="mt-2" onClick={() => void retryStates()}>Повторить</Button>
       </Callout></div> : null}
       <FindingCard finding={finding} state={state} runId={runId} isSelected />
-      {carriedByFindingId.has(finding.id) ? <p className="px-5 py-3 text-xs text-ink-muted">Оценка перенесена из предыдущей проверки с исходным автором и датой. <Link to={`/runs/${runId}/report/changes`} className="text-accent">Посмотреть происхождение</Link></p> : null}
+      {carriedByFindingId.has(finding.id) ? <p className="px-5 py-3 text-xs text-ink-muted">Оценка перенесена из предыдущей проверки с исходным автором и датой. <Link to={`/runs/${runId}/report`} className="text-accent">Посмотреть происхождение</Link></p> : null}
       <div className="numbat-finding-tabs" role="tablist" aria-label="Работа с замечанием" aria-orientation="horizontal"
         onKeyDown={(event) => {
           const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
@@ -67,16 +65,11 @@ export function FindingPage() {
       </div>
       <div id={`dialogue-panel-${finding.id}`} role="tabpanel" aria-labelledby={`dialogue-tab-${finding.id}`} tabIndex={0} hidden={!isDialogue}>
         <DialoguePanel key={`dialogue-${finding.id}`} workspaceId={workspaceId} runId={runId} findingId={finding.id}
-          onUseResolution={(text) => {
-            // Both tabs stay mounted. Keep the transfer local so a reload cannot
-            // replay it from browser history over the saved human decision.
-            setPrefilledResolution(text);
-            void navigate(`/runs/${runId}/report/findings/${finding.id}`);
-          }} />
+          initialQuestion={finding.question} readOnly={historical} />
       </div>
       <div id={`decision-panel-${finding.id}`} role="tabpanel" aria-labelledby={`decision-tab-${finding.id}`} tabIndex={0} hidden={isDialogue}>
-        <DecisionForm key={`decision-${finding.id}`} workspaceId={workspaceId} runId={runId} findingId={finding.id}
-          decision={state?.decision} expectedRevision={rawByFindingId.get(finding.id)?.decision.revision ?? 0} prefilledResolution={prefilledResolution} />
+        {historical ? <div className="p-5"><DecisionSummary decision={state?.decision} /></div> : <DecisionForm key={`decision-${finding.id}`} workspaceId={workspaceId} runId={runId} findingId={finding.id}
+          decision={state?.decision} expectedRevision={rawByFindingId.get(finding.id)?.decision.revision ?? 0} nextHref={next ? `/runs/${runId}/report/findings/${next.id}` : `/runs/${runId}/report`} nextLabel={next ? 'Следующее замечание' : 'К итогам проверки'} /> }
       </div>
     </div>
   );

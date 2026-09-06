@@ -26,9 +26,22 @@ async def create_turn(
     if idempotency_key is None:
         raise InvalidRequest("missing_idempotency_key", "Idempotency-Key is required.")
     try:
-        body = CreateDialogueTurnDTO.model_validate(await request.json()).model_dump(mode="json")
+        body = CreateDialogueTurnDTO.model_validate(await request.json()).model_dump(
+            mode="json", exclude_defaults=True
+        )
     except (ValidationError, ValueError) as error:
         raise InvalidRequest("invalid_dialogue_turn", "Dialogue turn body is invalid.") from error
+    attachments = body.get("attachment_document_ids", [])
+    if len(set(attachments)) != len(attachments):
+        raise InvalidRequest("duplicate_attachments", "Attachment IDs must be unique.")
+    for document_id in attachments:
+        import anyio
+
+        document = await anyio.to_thread.run_sync(
+            request.state.platform.get_document, workspace_id, document_id
+        )
+        if document.extraction_state not in {"completed", "partial"}:
+            raise InvalidRequest("attachment_not_ready", "Wait for attachment extraction before sending.")
     runtime = request.state.ml_runtime
     if runtime is None:
         import anyio
@@ -42,9 +55,7 @@ async def create_turn(
             idempotency_key,
         )
     else:
-        value = await runtime.create_dialogue_turn(
-            workspace_id, run_id, finding_id, body, idempotency_key
-        )
+        value = await runtime.create_dialogue_turn(workspace_id, run_id, finding_id, body, idempotency_key)
     response.headers["Location"] = (
         f"/v1/workspaces/{workspace_id}/review-runs/{run_id}/findings/{finding_id}/dialogue"
     )
@@ -79,9 +90,7 @@ async def retry_turn(
             body,
             idempotency_key,
         )
-    return await runtime.retry_dialogue_turn(
-        workspace_id, run_id, finding_id, turn_id, body, idempotency_key
-    )
+    return await runtime.retry_dialogue_turn(workspace_id, run_id, finding_id, turn_id, body, idempotency_key)
 
 
 @router.put("/decision")

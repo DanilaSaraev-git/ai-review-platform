@@ -26,6 +26,7 @@ def empty_cycle(run_id: str, version: dict[str, Any], baseline_run_id: str | Non
         "status": "unavailable",
         "revision": 0,
         "compared_at": None,
+        "completion": None,
         "entries": [],
         "limitations": ["review_report_unavailable"],
     }

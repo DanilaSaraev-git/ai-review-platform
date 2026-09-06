@@ -3,8 +3,8 @@ import { AppLayout } from './layout/AppLayout';
 import { NotFoundPage } from './NotFoundPage';
 import { DocumentsPage } from '@/features/document-cycle/DocumentsPage';
 import { DocumentFamilyPage } from '@/features/document-cycle/DocumentFamilyPage';
-import { ReviewCyclePage } from '@/features/document-cycle/ReviewCyclePage';
 import { HomePage } from '@/features/review-run/HomePage';
+import { isDemoMode } from './demo-mode';
 import { RunPage } from '@/features/review-run/RunPage';
 import { NewReviewPage } from '@/features/new-review/NewReviewPage';
 import { ReportPage } from '@/features/review-report/ReportPage';
@@ -25,7 +25,7 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     errorElement: <NotFoundPage />,
     children: [
-      { index: true, element: <HomePage /> },
+      { index: true, element: isDemoMode ? <HomePage /> : <DocumentsPage /> },
       { path: 'new', element: <NewReviewPage /> },
       { path: 'documents', element: <DocumentsPage /> },
       { path: 'documents/:familyId', element: <DocumentFamilyPage /> },
@@ -35,7 +35,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <RunPage /> },
           { path: 'report', element: <ReportPage /> },
-          { path: 'report/changes', element: <ReviewCyclePage /> },
+          { path: 'report/changes', element: <ReportPage /> },
           { path: 'report/findings/:findingId', element: <FindingPage /> },
           { path: 'report/findings/:findingId/dialogue', element: <FindingPage /> },
         ],

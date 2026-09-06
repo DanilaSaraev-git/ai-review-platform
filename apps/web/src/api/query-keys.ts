@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import {
+  getGetReviewCycleQueryKey,
   getGetFindingDialogueQueryKey,
   getGetReviewReportQueryKey,
   getGetReviewRunQueryKey,
@@ -40,6 +41,7 @@ export async function invalidateAfterDecision(
   findingId: string,
 ): Promise<void> {
   await Promise.all([
+    queryClient.invalidateQueries({ queryKey: getGetReviewCycleQueryKey(workspaceId, runId) }),
     queryClient.invalidateQueries({ queryKey: findingStatesKey(workspaceId, runId) }),
     queryClient.invalidateQueries({ queryKey: dialogueKey(workspaceId, runId, findingId) }),
   ]);

@@ -29,7 +29,7 @@ _INK = colors.HexColor("#24272C")
 _MUTED = colors.HexColor("#657080")
 DECISIONS = {
     "unreviewed": "Не рассмотрено",
-    "confirmed": "Подтверждено",
+    "confirmed": "Принято к доработке",
     "rejected": "Отклонено",
     "needs_context": "Нужен контекст",
 }
@@ -232,6 +232,9 @@ def render_review_pdf(snapshot: dict[str, Any]) -> bytes:
     field("Проверка:", run.get("id"), muted)
     field("Результат опубликован:", report.get("created_at"), muted)
     field("Состояние на:", snapshot.get("exported_at"), muted)
+    if cycle.get("completion"):
+        field("Проверка завершена:", cycle["completion"]["completed_at"])
+        field("Завершил:", cycle["completion"]["actor"]["display_name"])
     if cycle.get("baseline_run_id"):
         field("Сравнение с проверкой:", cycle["baseline_run_id"], muted)
     paragraph("Сводка", heading)

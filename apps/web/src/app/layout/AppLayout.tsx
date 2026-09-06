@@ -7,19 +7,18 @@ export function AppLayout() {
   const { pathname } = useLocation();
   const isNew = pathname === '/new';
   const isDocuments = pathname.startsWith('/documents');
-  const currentPage = isNew ? 'Новая проверка' : isDocuments ? 'Документы' : pathname === '/' ? 'История' : 'Разбор ТЗ';
+  const currentPage = isNew ? 'Новая проверка' : isDocuments ? 'Проверки' : pathname === '/' ? 'Проверки' : 'Разбор ТЗ';
   return (
     <div className="numbat-app">
       <aside className="numbat-sidebar">
-        <Link to="/" className="numbat-brand" aria-label="Numbat — история проверок">
+        <Link to="/" className="numbat-brand" aria-label="Numbat — проверки">
           <span className="numbat-brand-mark"><img src={`${appBaseUrl}numbat-icon.png`} alt="" width="35" height="35" /></span>
           <span>Numbat</span>
         </Link>
         <nav className="numbat-navigation" aria-label="Основные разделы">
           <NavLink to="/new" aria-label="Создать проверку" className="numbat-nav-link"><Icon name="plus" />Новая проверка</NavLink>
-          {!isDemoMode ? <NavLink to="/documents" className="numbat-nav-link"><Icon name="file-text" />Документы</NavLink> : null}
-          <Link to="/" className={`numbat-nav-link${!isNew && !isDocuments ? ' active' : ''}`} aria-current={!isNew && !isDocuments ? 'page' : undefined}>
-            <Icon name="history" /><span className="sm:hidden">История</span><span className="hidden sm:inline">История проверок</span>
+          <Link to="/" className={`numbat-nav-link${!isNew ? ' active' : ''}`} aria-current={!isNew && !isDocuments ? 'page' : undefined}>
+            <Icon name="history" /><span>Проверки</span>
           </Link>
         </nav>
         <div className="numbat-workspace-label"><Icon name="layers" />Рабочее пространство</div>

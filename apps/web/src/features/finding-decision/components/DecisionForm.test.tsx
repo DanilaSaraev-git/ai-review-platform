@@ -39,7 +39,7 @@ describe('DecisionForm (FR-025, FR-027, SC-005)', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.click(screen.getByRole('radio', { name: /Подтверждено/u }));
+    await user.click(screen.getByRole('radio', { name: /Принято к доработке/u }));
     await user.click(screen.getByRole('button', { name: /Сохранить решение/u }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Укажите обоснование/u);
@@ -49,7 +49,7 @@ describe('DecisionForm (FR-025, FR-027, SC-005)', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.click(screen.getByRole('radio', { name: /Подтверждено/u }));
+    await user.click(screen.getByRole('radio', { name: /Принято к доработке/u }));
     await user.type(screen.getByLabelText(/Обоснование/u), REASON);
     await user.click(screen.getByRole('button', { name: /Сохранить решение/u }));
 
@@ -63,7 +63,7 @@ describe('DecisionForm (FR-025, FR-027, SC-005)', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.click(screen.getByRole('radio', { name: /Подтверждено/u }));
+    await user.click(screen.getByRole('radio', { name: /Принято к доработке/u }));
     await user.type(screen.getByLabelText(/Обоснование/u), REASON);
     await user.click(screen.getByRole('button', { name: /Сохранить решение/u }));
 
@@ -103,6 +103,6 @@ describe('DecisionForm (FR-025, FR-027, SC-005)', () => {
     renderWithQueryClient(<DeferredDecision />);
 
     await user.click(screen.getByRole('button', { name: 'Загрузить состояние' }));
-    expect(screen.getByRole('radio', { name: /Подтверждено/u })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Принято к доработке/u })).toBeChecked();
   });
 });

@@ -17,6 +17,7 @@ from review_core.application.cycle_state import (
 )
 from review_core.application.document_cycle_memory import now, page
 from review_core.application.idempotency import require_idempotency_key
+from review_core.application.review_completion import complete, project_completion
 from review_core.application.review_cycle import same_review_conditions, same_source_texts
 from review_core.domain.errors import Conflict, NotFound
 
@@ -454,13 +455,46 @@ class PostgresDocumentCycles:
                 row = self._row(connection, run_id)
                 if "comparison_failed" in row["value"]["limitations"]:
                     return dict(row["value"])
-                return deepcopy(self._compare(connection, run_id)["value"])
+                return self._project(connection, self._compare(connection, run_id))
         except (ValueError, RuntimeError, KeyError, TypeError):
             with self.platform._connect() as connection:
                 row = self._row(connection, run_id)
                 row["value"]["limitations"] = ["comparison_failed"]
                 self._save(connection, row)
                 return dict(row["value"])
+
+    def _decisions(self, connection: Any, run_id: str) -> dict[str, Any]:
+        rows = connection.execute(
+            """SELECT s.finding_id,s.value FROM finding_states s JOIN findings f ON
+            (s.organization_id,s.workspace_id,s.finding_id)=(f.organization_id,f.workspace_id,f.id)
+            JOIN review_reports r ON (f.organization_id,f.workspace_id,f.report_id)=
+            (r.organization_id,r.workspace_id,r.id)
+            WHERE r.organization_id=%s AND r.workspace_id=%s AND r.run_id=%s FOR SHARE OF s""",
+            (*self.scope, run_id),
+        ).fetchall()
+        return {row["finding_id"]: row["value"] for row in rows}
+
+    def _project(self, connection: Any, row: dict[str, Any]) -> dict[str, Any]:
+        return project_completion(
+            deepcopy(row["value"]),
+            self._report(connection, row["run_id"]),
+            self._decisions(connection, row["run_id"]),
+        )
+
+    def complete(self, workspace_id: str, run_id: str, expected_revision: int) -> dict[str, Any]:
+        self._scope(workspace_id)
+        with self.platform._connect() as connection:
+            row = self._compare(connection, run_id)
+            complete(
+                row["value"],
+                self._report(connection, run_id),
+                self._decisions(connection, run_id),
+                expected_revision,
+                self.platform.actor,
+                now(),
+            )
+            self._save(connection, row)
+            return deepcopy(row["value"])
 
     def after_publish(self, run_id: str) -> None:
         try:
@@ -556,7 +590,9 @@ class PostgresDocumentCycles:
                 "run": run["value"],
                 "report": report,
                 "finding_states": {"items": states},
-                "cycle": row["value"],
+                "cycle": project_completion(
+                    row["value"], report, {s["finding_id"]: s["decision"] for s in states}
+                ),
                 "previous_findings": {
                     item["finding"]["id"]: item["finding"] for item in row["previous"].values()
                 },

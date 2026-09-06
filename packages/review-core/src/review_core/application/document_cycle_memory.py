@@ -17,6 +17,7 @@ from review_core.application.cycle_state import (
     verified_evidence_keys,
 )
 from review_core.application.idempotency import require_idempotency_key
+from review_core.application.review_completion import complete, project_completion
 from review_core.application.review_cycle import same_review_conditions
 from review_core.canonical import digest_value
 from review_core.domain.errors import Conflict, InvalidRequest, NotFound
@@ -209,7 +210,15 @@ class MemoryDocumentCycles:
             if "comparison_failed" in self.records[run_id]["value"]["limitations"]:
                 return deepcopy(self.records[run_id]["value"])
             try:
-                return self._get(workspace_id, run_id)
+                cycle = self._get(workspace_id, run_id)
+                run = self.platform.get_run(workspace_id, run_id)
+                report = json.loads(run.report_bytes) if run.report_bytes else None
+                decisions = {
+                    fid: state["decision"]
+                    for (rid, fid), state in self.platform.finding_states.items()
+                    if rid == run_id
+                }
+                return project_completion(cycle, report, decisions)
             except (ValueError, RuntimeError, KeyError, TypeError):
                 self.records[run_id]["value"]["limitations"] = ["comparison_failed"]
                 return deepcopy(self.records[run_id]["value"])
@@ -296,6 +305,20 @@ class MemoryDocumentCycles:
                     "at": now(),
                 }
             )
+            return deepcopy(record["value"])
+
+    def complete(self, workspace_id: str, run_id: str, expected_revision: int) -> dict[str, Any]:
+        with self.lock, self.platform._dialogue_lock:
+            self.get(workspace_id, run_id)
+            record = self.records[run_id]
+            run = self.platform.get_run(workspace_id, run_id)
+            report = json.loads(run.report_bytes) if run.report_bytes else None
+            decisions = {
+                fid: state["decision"]
+                for (rid, fid), state in self.platform.finding_states.items()
+                if rid == run_id
+            }
+            complete(record["value"], report, decisions, expected_revision, self.platform.actor, now())
             return deepcopy(record["value"])
 
     def export_snapshot(self, workspace_id: str, run_id: str) -> dict[str, Any]:

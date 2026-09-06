@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import type { HumanDecision } from '@/api/generated/model';
 import { isProblem, isRevisionConflict } from '@/api/errors';
@@ -29,6 +30,8 @@ export function DecisionForm({
   decision,
   expectedRevision,
   prefilledResolution,
+  nextHref,
+  nextLabel = 'Следующее замечание',
 }: {
   workspaceId: string;
   runId: string;
@@ -36,6 +39,8 @@ export function DecisionForm({
   decision: HumanDecision | undefined;
   expectedRevision?: number;
   prefilledResolution?: string | null;
+  nextHref?: string;
+  nextLabel?: string;
 }) {
   const [values, setValues] = useState<DecisionFormValues>(() => toFormValues(decision));
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
@@ -128,21 +133,7 @@ export function DecisionForm({
             )}
           </Field>
 
-          <Field label="Формулировка резолюции" hint="Необязательно.">
-            {(id, describedBy) => (
-              <TextArea
-                id={id}
-                aria-describedby={describedBy}
-                rows={3}
-                value={values.resolution}
-                onChange={(event) => {
-                  setHasLocalEdits(true);
-                  setSavedAt(null);
-                  setValues((current) => ({ ...current, resolution: event.target.value }));
-                }}
-              />
-            )}
-          </Field>
+
         </>
       ) : null}
 
@@ -159,7 +150,7 @@ export function DecisionForm({
         </Callout>
       ) : null}
 
-      {savedAt && !conflict.isConflict ? <p role="status" className="text-xs font-medium text-ok">✓ Решение сохранено</p> : null}
+      {savedAt && !conflict.isConflict ? <div className="flex flex-wrap items-center gap-3"><p role="status" className="text-xs font-medium text-ok">✓ Решение сохранено</p>{nextHref ? <Link className="review-primary-link" to={nextHref}>{nextLabel} →</Link> : null}</div> : null}
 
       <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-line bg-surface pt-4 pb-1">
         {values.status !== 'unreviewed' ? (

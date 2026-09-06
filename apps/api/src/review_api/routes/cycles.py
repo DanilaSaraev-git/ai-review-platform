@@ -134,6 +134,14 @@ def get_cycle(request: Request, workspace_id: str, run_id: str) -> Any:
     return request.state.platform.cycles.get(workspace_id, run_id)
 
 
+@router.post("/review-runs/{run_id}/review-cycle/complete")
+async def complete_cycle(request: Request, workspace_id: str, run_id: str) -> Any:
+    body = await parsed(request, CompareDTO)
+    return await anyio.to_thread.run_sync(
+        request.state.platform.cycles.complete, workspace_id, run_id, body["expected_revision"]
+    )
+
+
 @router.post("/review-runs/{run_id}/review-cycle/compare")
 async def compare_cycle(request: Request, workspace_id: str, run_id: str) -> Any:
     body = await parsed(request, CompareDTO)

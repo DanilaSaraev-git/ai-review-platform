@@ -1,7 +1,6 @@
 import type { DialogueTurn } from '@/api/generated/model';
 import { Button, Callout } from '@/components/ui';
 import { ASSISTANT_ACTION_TEXT, DIALOGUE_ERROR_TEXT } from '@/lib/error-messages';
-import { ProposedResolutionCard } from './ProposedResolutionCard';
 
 /**
  * Ответ на ход: текст, вид ответа, привязки и предложенная резолюция (FR-034).
@@ -12,7 +11,6 @@ export function AssistantResponseCard({
   turn,
   onRetry,
   isRetrying,
-  onUseResolution,
 }: {
   turn: DialogueTurn;
   onRetry: (turnId: string) => void;
@@ -69,11 +67,7 @@ export function AssistantResponseCard({
         </ul>
       ) : null}
 
-      {response.proposed_resolution ? (
-        <div className="mt-4">
-          <ProposedResolutionCard proposal={response.proposed_resolution} onUse={onUseResolution} />
-        </div>
-      ) : null}
+
     </div>
   );
 }

@@ -1,0 +1,21 @@
+.review-next-step{margin:20px;padding:20px;border:1px solid #ead1d6;background:#fdf8f9;border-radius:8px}
+.review-next-step h2{font-size:18px;font-weight:500}.review-next-step p{font-size:13px;line-height:1.65;margin:8px 0 16px;color:var(--color-ink-muted)}
+.review-primary-link{display:inline-block;background:var(--color-accent);color:white;border-radius:6px;padding:10px 14px;font-size:13px}
+.review-modal-overlay{position:fixed;inset:0;background:#17172266;z-index:50}
+.review-version-modal,.review-history{position:fixed;background:var(--color-surface);z-index:51;overflow:auto;box-shadow:0 20px 80px #0002;padding:24px}
+.review-version-modal{width:min(580px,calc(100vw - 24px));max-height:90vh;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:12px}
+.review-version-modal header,.review-history header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;font-size:20px;font-weight:500}
+.review-version-modal footer{display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--color-line);padding-top:18px;margin-top:20px}
+.review-version-modal details{margin-top:18px;font-size:13px}.review-version-modal details label{display:block;margin:12px 0 6px}
+.review-version-modal select{width:100%;padding:10px;border:1px solid var(--color-line);border-radius:6px}
+.review-file-drop{border:1px dashed #c8abb1;border-radius:8px;background:#fffafb;text-align:center;padding:24px;margin:20px 0}
+.review-file-drop p{margin-bottom:12px;overflow-wrap:anywhere;font-size:13px}
+.review-note{display:block;width:100%;border:1px solid var(--color-line);border-radius:6px;padding:10px;margin-top:8px}
+.review-version-modal .entry-context{padding:6px 0 12px}.review-version-modal .entry-context>div:first-child{display:none}
+.review-history{right:0;top:0;bottom:0;width:min(440px,100vw)}
+.history-version{padding:22px 0;border-bottom:1px solid var(--color-line)}
+.history-version h3{font-size:14px;font-weight:500;margin-bottom:6px}
+.history-run{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--color-line);border-radius:6px;margin-top:12px;font-size:12px}
+.history-run.selected{border-color:var(--color-accent);background:var(--color-accent-tint)}
+.review-archive{flex-basis:100%;background:#fff7e8;color:#88632c;padding:10px 14px;font-size:12px}
+.review-archive a{margin-left:12px;text-decoration:underline}

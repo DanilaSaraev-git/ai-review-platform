@@ -503,6 +503,7 @@ class ReviewPlatform:
             "state": "generating",
             "actor": self.actor,
             "member_message": message,
+            "attachment_document_ids": body.get("attachment_document_ids", []),
             "created_at": utc_now(),
             "assistant_response": None,
             "error": None,
@@ -575,8 +576,13 @@ class ReviewPlatform:
                 raise Conflict("revision_conflict", str(error)) from error
             raise InvalidRequest("invalid_decision", str(error)) from error
         state["decision"] = decision
-        if decision["status"] == "unreviewed":
-            dialogue.update(state="open", can_send_message=True, blocked_reason=None)
+        if decision["status"] in {"unreviewed", "needs_context"}:
+            generating = any(turn["state"] in {"queued", "generating"} for turn in dialogue["turns"])
+            dialogue.update(
+                state="generating" if generating else "open",
+                can_send_message=not generating,
+                blocked_reason="generation_in_progress" if generating else None,
+            )
         else:
             dialogue.update(state="closed", can_send_message=False, blocked_reason="human_decision_recorded")
         dialogue["revision"] += 1
