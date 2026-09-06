@@ -3,6 +3,7 @@ import { documentCycle } from './document-cycle';
 import { happyPath } from './happy-path';
 import { runFailed } from './run-failed';
 import { runStalled } from './run-stalled';
+import { runCancellable } from './run-cancellable';
 import { documentExtractionFailed } from './document-extraction-failed';
 import { reportPartial } from './report-partial';
 import { contextPartial } from './context-partial';
@@ -32,6 +33,7 @@ export const scenarios = {
   'document-cycle': documentCycle,
   'run-failed': runFailed,
   'run-stalled': runStalled,
+  'run-cancellable': runCancellable,
   'document-extraction-failed': documentExtractionFailed,
   'report-partial': reportPartial,
   'context-partial': contextPartial,
