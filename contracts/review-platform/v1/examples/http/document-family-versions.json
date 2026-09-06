@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "family_id": "90000000-0000-4000-8000-000000000001",
+      "version_number": 1,
+      "document": {
+        "id": "40000000-0000-4000-8000-000000000001",
+        "workspace_id": "20000000-0000-4000-8000-000000000001",
+        "filename": "synthetic-spec.md",
+        "media_type": "text/markdown",
+        "size_bytes": 1482,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "extraction_state": "completed",
+        "created_by": {
+          "id": "10000000-0000-4000-8000-000000000001",
+          "display_name": "Тестовый аналитик"
+        },
+        "created_at": "2026-09-04T09:00:00Z"
+      },
+      "unchanged_from_previous": false
+    }
+  ],
+  "next_cursor": null
+}

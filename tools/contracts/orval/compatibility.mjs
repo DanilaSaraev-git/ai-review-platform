@@ -31,12 +31,10 @@ const allowedResponses = new Map([
 ]);
 
 export function assertCompatible(baseline, candidate) {
-  if (candidate.info?.version !== "1.0.2") throw new Error("candidate info.version is not 1.0.2");
-  if (JSON.stringify(Object.keys(candidate.paths).sort()) !== JSON.stringify(Object.keys(baseline.paths).sort())) {
-    throw new Error("path set changed");
-  }
+  if (candidate.info?.version !== "1.1.0") throw new Error("candidate info.version is not 1.1.0");
   for (const [route, baselinePath] of Object.entries(baseline.paths)) {
     const candidatePath = candidate.paths[route];
+    if (!candidatePath) throw new Error(`${route}: original path removed`);
     if (!equal(baselinePath.parameters, candidatePath.parameters)) throw new Error(`${route}: path parameters changed`);
     const baselineMethods = Object.keys(baselinePath).filter((key) => methods.has(key)).sort();
     const candidateMethods = Object.keys(candidatePath).filter((key) => methods.has(key)).sort();
@@ -60,8 +58,22 @@ export function assertCompatible(baseline, candidate) {
     }
   }
   for (const section of ["schemas", "parameters", "responses"]) {
-    if (!equal(baseline.components?.[section], candidate.components?.[section])) {
-      throw new Error(`components.${section} has a breaking shape change`);
+    for (const [name, original] of Object.entries(baseline.components?.[section] ?? {})) {
+      const current = structuredClone(candidate.components?.[section]?.[name]);
+      if (!current) throw new Error(`components.${section}.${name} removed`);
+      // The only extension to an existing DTO is an optional original locale.
+      // In particular, document IDs, report bytes, required fields and existing
+      // status enums must keep their original meaning and shape.
+      if (section === "schemas" && name === "ReviewRun" && current.properties?.locale) {
+        if (current.required?.includes("locale")) throw new Error("ReviewRun.locale must remain optional");
+        if (!equal(current.properties.locale, { type: "string", pattern: "^[a-z]{2}(?:-[A-Z]{2})?$" })) {
+          throw new Error("ReviewRun.locale has an unexpected shape");
+        }
+        delete current.properties.locale;
+      }
+      if (!equal(original, current)) {
+        throw new Error(`components.${section}.${name} has a breaking shape change`);
+      }
     }
   }
 }
@@ -73,5 +85,5 @@ if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
     : execFileSync("git", ["show", "review-platform-contract-v1.0.1:contracts/review-platform/v1/openapi.yaml"], { cwd: root, encoding: "utf8" });
   const candidatePath = process.argv[3] ?? path.join(root, "contracts/review-platform/v1/openapi.yaml");
   assertCompatible(parseUnique(baselineSource, "baseline"), parseUnique(fs.readFileSync(candidatePath, "utf8"), "candidate"));
-  console.log("v1.0.2 is an exact additive OpenAPI delta: ok");
+  console.log("v1.1.0 preserves the original HTTP contract and adds the document cycle: ok");
 }

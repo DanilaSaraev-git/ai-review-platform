@@ -1,4 +1,4 @@
-# Review Platform Guest API 1.0.0
+# Review Platform Guest API 1.1.0
 
 Опциональная поставка с постоянной браузерной сессией. [openapi.yaml](openapi.yaml) задаёт границу guest-v1; [CHANGELOG.md](CHANGELOG.md) ведёт её изменения. Основание: [ADR-0002](../../../docs/adr/0002-optional-guest-workspaces.md), [срез 008](../../../specs/008-guest-access/spec.md).
 
@@ -6,7 +6,7 @@
 
 Guest-v1 включается оператором через `REVIEW_GUEST_ACCESS=true`. Пути `/v1/...`, предметные DTO и skill JSON сохраняются из [trusted v1](../v1/README.md). Новая семантика bootstrap, cookie и ошибок доступа описана отдельной версией; canonical no-auth `v1/openapi.yaml` остаётся неизменённым. При выключенном гостевом режиме действует trusted deployment.
 
-Файл OpenAPI создаёт [build_guest_contract.py](../../../tools/contracts/build_guest_contract.py) из trusted-v1 baseline. Изменения схемы вносятся в генератор и проверяются регенерацией; ручная правка generated OpenAPI не является источником истины. HTTP-примеры предметных данных остаются в [v1/examples/http](../v1/examples/http/).
+Файл OpenAPI создаёт [build_guest_contract.py](../../../tools/contracts/build_guest_contract.py) из trusted-v1 baseline. Изменения гостевой границы вносятся в генератор, предметные дополнения — в trusted-v1; результат проверяется регенерацией. Ручная правка generated OpenAPI не является источником истины. HTTP-примеры предметных данных остаются в [v1/examples/http](../v1/examples/http/).
 
 ## Браузерная сессия
 
@@ -30,6 +30,8 @@ Guest-v1 включается оператором через `REVIEW_GUEST_ACCE
 | Резерв свободного диска | 3 GiB | Перед загрузкой дополнительно учитывается тройной размер входа |
 
 Гостевые квоты сериализуют конкурентные загрузки до завершения сохранения. Они ограничивают исходные загруженные байты и число документов; размеры PostgreSQL, извлечённых фрагментов, отчётов и журналов не входят в лимит 1 GiB. Чтение уже сохранённых данных остаётся доступным при отказе новой загрузки. Настройка оператора: [deployment](../../../docs/operations/deployment.md).
+
+Каждая новая версия в `document-families/{familyId}/versions` учитывается как исходная загрузка в тех же квотах. Повтор запроса с прежним `Idempotency-Key` возвращает сохранённую версию без повторного начисления. Семейство, версия, сравнение, ссылки на прежние замечания и PDF доступны только своей гостевой сессии.
 
 ## Ошибки и совместимость
 

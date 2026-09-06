@@ -14,7 +14,7 @@ def guest_contract() -> dict:
     schema = yaml.safe_load((ROOT / "contracts/review-platform/v1/openapi.yaml").read_text())
     schema["info"].update(
         title="Review Platform Guest API",
-        version="1.0.0",
+        version="1.1.0",
         description=(
             "Guest deployment of the trusted-v1 payload contract. GET /v1/bootstrap creates or "
             "restores an isolated browser workspace using an opaque HttpOnly Secure SameSite=Lax "
@@ -54,20 +54,24 @@ def guest_contract() -> dict:
                 "description": "Browser cross-origin request rejected (cross_origin_forbidden).",
                 **deepcopy(problem),
             }
-    upload = schema["paths"]["/v1/workspaces/{workspaceId}/documents"]["post"]["responses"]
-    upload["413"] = {
-        "description": (
-            "File limit or guest storage quota exceeded (payload_too_large / guest_storage_limit)."
-        ),
-        **deepcopy(problem),
-    }
-    upload["503"] = {
-        "description": (
-            "Total guest upload budget or disk reserve reached (storage_unavailable). "
-            "Existing files remain readable."
-        ),
-        **deepcopy(problem),
-    }
+    for upload_path in (
+        "/v1/workspaces/{workspaceId}/documents",
+        "/v1/workspaces/{workspaceId}/document-families/{familyId}/versions",
+    ):
+        upload = schema["paths"][upload_path]["post"]["responses"]
+        upload["413"] = {
+            "description": (
+                "File limit or guest storage quota exceeded (payload_too_large / guest_storage_limit)."
+            ),
+            **deepcopy(problem),
+        }
+        upload["503"] = {
+            "description": (
+                "Total guest upload budget or disk reserve reached (storage_unavailable). "
+                "Existing files remain readable."
+            ),
+            **deepcopy(problem),
+        }
     return schema
 
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Review Platform API
-  version: 1.0.2
+  version: 1.1.0
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -456,8 +456,311 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /v1/workspaces/{workspaceId}/document-families:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    get:
+      tags:
+      - Document review cycle
+      operationId: listDocumentFamilies
+      summary: List logical documents by creation time, newest first
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentFamilyPage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageLimit'
+  /v1/workspaces/{workspaceId}/document-families/{familyId}:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/FamilyId'
+    get:
+      tags:
+      - Document review cycle
+      operationId: getDocumentFamily
+      summary: Read one logical document
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentFamily'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/workspaces/{workspaceId}/document-families/{familyId}/versions:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/FamilyId'
+    get:
+      tags:
+      - Document review cycle
+      operationId: listDocumentFamilyVersions
+      summary: List immutable versions in descending version-number order
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentFamilyVersionPage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageLimit'
+    post:
+      tags:
+      - Document review cycle
+      operationId: uploadDocumentVersion
+      summary: Append an immutable version; a review starts only on a separate explicit
+        request
+      description: The required idempotency key identifies one upload. Replaying the
+        same family, filename, media type and file bytes returns the original version
+        without consuming quota again. A changed upload with that key conflicts. Intentional
+        uploads of unchanged bytes with a new key create a version marked unchanged_from_previous.
+        Version allocation is serialized within the family.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Version stored or replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentFamilyVersion'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '503':
+          description: Storage capacity is unavailable; existing versions remain readable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/workspaces/{workspaceId}/document-families/{familyId}/review-runs:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/FamilyId'
+    get:
+      tags:
+      - Document review cycle
+      operationId: listDocumentFamilyRuns
+      summary: List all runs of this logical document, newest first
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewRunPage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/PageLimit'
+  /v1/workspaces/{workspaceId}/documents/{documentId}/family:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags:
+      - Document review cycle
+      operationId: getDocumentVersionFamily
+      summary: Resolve an existing immutable document ID to its family and version
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentFamilyVersion'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/review-cycle:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/RunId'
+    get:
+      tags:
+      - Document review cycle
+      operationId: getReviewCycle
+      summary: Read the separate mutable comparison and issue lifecycle for a run
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewCycle'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/review-cycle/compare:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/RunId'
+    post:
+      tags:
+      - Document review cycle
+      operationId: compareReviewCycle
+      summary: Retry deterministic comparison without changing the fixed baseline or
+        human work
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompareReviewCycle'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewCycle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/review-cycle/links/{findingId}:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/RunId'
+    - $ref: '#/components/parameters/FindingId'
+    put:
+      tags:
+      - Document review cycle
+      operationId: putReviewCycleLink
+      summary: Set or remove the one-to-one predecessor issue of a current finding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutReviewCycleLink'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewCycle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/review-cycle/issues/{issueId}/resolution:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/RunId'
+    - $ref: '#/components/parameters/IssueId'
+    put:
+      tags:
+      - Document review cycle
+      operationId: putIssueResolution
+      summary: Record or reconsider human confirmation of a fix for this run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutIssueResolution'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewCycle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/report.pdf:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/RunId'
+    get:
+      tags:
+      - Document review cycle
+      operationId: downloadReviewPdf
+      summary: Download every finding and current saved status of this run as a coherent
+        PDF snapshot
+      description: Reads the report, human decisions, cycle and resolution state at
+        one database snapshot. Includes export time, document version, provenance, coverage
+        and comparison limitations; ignores UI filters. Unsaved drafts and full dialogues
+        are excluded. Does not call a model or alter the original immutable report or
+        its ETag.
+      responses:
+        '200':
+          description: PDF of the current saved review state
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Attachment with a safe PDF filename
+            Cache-Control:
+              schema:
+                type: string
+              description: 'no-store: a later download may reflect later decisions'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ReportUnavailable'
+
 components:
   parameters:
+    FamilyId:
+      name: familyId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IssueId:
+      name: issueId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     WorkspaceId:
       name: workspaceId
       in: path
@@ -803,6 +1106,10 @@ components:
         - report_available
         - error
       properties:
+        locale:
+          type: string
+          pattern: "^[a-z]{2}(?:-[A-Z]{2})?$"
+          description: Original requested locale when recorded; omitted on legacy runs. Web repeats legacy runs using ru-RU.
         id: {type: string, format: uuid}
         workspace_id: {type: string, format: uuid}
         state: {enum: [queued, preparing, reviewing, validating, completed, failed, cancelled]}
@@ -1288,3 +1595,255 @@ components:
             properties:
               field: {type: string, minLength: 1, maxLength: 255}
               message: {type: string, minLength: 1, maxLength: 1000}
+
+    DocumentFamily:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - workspace_id
+      - name
+      - created_at
+      - created_by
+      - latest_version_number
+      - latest_document_id
+      properties:
+        id: &id001
+          type: string
+          format: uuid
+        workspace_id: *id001
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          $ref: '#/components/schemas/Actor'
+        latest_version_number: &id002
+          type: integer
+          minimum: 1
+        latest_document_id: *id001
+      description: Logical document identity. Original uploadDocument creates a family
+        with version 1; historical uploads are separate families even when filenames coincide.
+        Existing document_id always identifies immutable version bytes.
+    DocumentFamilyPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentFamily'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    DocumentFamilyVersion:
+      type: object
+      additionalProperties: false
+      required:
+      - family_id
+      - version_number
+      - document
+      - unchanged_from_previous
+      properties:
+        family_id: *id001
+        version_number: *id002
+        document:
+          $ref: '#/components/schemas/Document'
+        unchanged_from_previous:
+          type: boolean
+      description: Version membership is separate from immutable original metadata. unchanged_from_previous
+        compares exact source bytes and is false for version 1.
+    DocumentFamilyVersionPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentFamilyVersion'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    IssueResolution:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - revision
+      - actor
+      - reason
+      - decided_at
+      properties:
+        status:
+          enum:
+          - open
+          - resolved
+        revision: &id004
+          type: integer
+          minimum: 0
+        actor:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Actor'
+        reason:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 4000
+        decided_at: &id005
+          type:
+          - string
+          - 'null'
+          format: date-time
+      description: Human fix confirmation for one issue at a checked version/run, independent
+        of the validity decision. Initial open state has revision zero and null attribution;
+        recorded open or resolved states retain author, reason and time. Reappearance
+        always needs a new validity decision.
+    CycleEntry:
+      type: object
+      additionalProperties: false
+      required:
+      - issue_id
+      - origin_run_id
+      - origin_finding_id
+      - previous_run_id
+      - previous_finding_id
+      - current_finding_id
+      - status
+      - match_basis
+      - decision_carried
+      - previous_decision
+      - resolution
+      properties:
+        issue_id: *id001
+        origin_run_id: *id001
+        origin_finding_id: *id001
+        previous_run_id: &id003
+          type:
+          - string
+          - 'null'
+          format: uuid
+        previous_finding_id: *id003
+        current_finding_id: *id003
+        status:
+          enum:
+          - new
+          - persisting
+          - not_detected
+          - uncertain
+          - not_checked
+          - reappeared
+        match_basis:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        decision_carried:
+          type: boolean
+        previous_decision:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/HumanDecision'
+        resolution:
+          $ref: '#/components/schemas/IssueResolution'
+      description: One row per stable issue in this run; at most one current finding belongs
+        to an issue. Absent issues remain in later cycles. Previous references identify
+        the last actual appearance, which can predate baseline_run_id. Previous decision
+        is snapshotted at first successful comparison; a carried decision keeps original
+        attribution. Matching never confirms a fix. Source IDs, location, finding IDs
+        and ordinal alone are not stable identity.
+    ReviewCycle:
+      type: object
+      additionalProperties: false
+      required:
+      - run_id
+      - family_id
+      - document_id
+      - version_number
+      - baseline_run_id
+      - status
+      - revision
+      - compared_at
+      - entries
+      - limitations
+      properties:
+        run_id: *id001
+        family_id: *id001
+        document_id: *id001
+        version_number: *id002
+        baseline_run_id: *id003
+        status:
+          enum:
+          - ready
+          - unavailable
+        revision: *id004
+        compared_at: *id005
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CycleEntry'
+        limitations:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 2000
+      description: Separate mutable projection, never part of ReviewReport. Baseline is
+        the latest published run of the family at current-run admission, or null. First
+        successful comparison freezes prior decisions. Retries cannot overwrite human
+        decisions, manual links or fix confirmations. Unavailable comparison does not
+        make a completed report unavailable. Incomplete or changed conditions cannot establish
+        disappearance; not_detected never means resolved.
+    CompareReviewCycle:
+      type: object
+      additionalProperties: false
+      required:
+      - expected_revision
+      properties:
+        expected_revision: *id004
+      description: Compare against the baseline fixed at run admission; stale cycle revision
+        returns 409. No model call.
+    PutReviewCycleLink:
+      type: object
+      additionalProperties: false
+      required:
+      - previous_issue_id
+      - expected_revision
+      properties:
+        previous_issue_id: *id003
+        expected_revision: *id004
+      description: The findingId in the path belongs to the current report. previous_issue_id
+        selects an issue retained in the fixed baseline cycle; null unlinks. Only one-to-one
+        links are allowed; a used issue or stale cycle revision returns 409. Manual matching
+        does not automatically carry a decision or confirm a fix.
+    PutIssueResolution:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - reason
+      - expected_revision
+      properties:
+        status:
+          enum:
+          - open
+          - resolved
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        expected_revision: *id004
+      description: expected_revision refers to this issue resolution, not the cycle. Both
+        confirming a fix and reopening require a reason and retain actor/time; stale revision
+        returns 409.
