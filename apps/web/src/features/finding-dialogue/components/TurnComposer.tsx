@@ -5,6 +5,7 @@ import { Button, Callout, Field, TextArea } from '@/components/ui';
 import { blockedReasonText } from '@/lib/error-messages';
 import { dialogueConflictState } from '../lib/conflict';
 import { useCreateTurn } from '../api/use-create-turn';
+import { DEMO_REPLY_NOTICE, isDemoMode } from '@/app/demo-mode';
 
 /**
  * Отправка одного хода (FR-031, FR-032, FR-036).
@@ -48,12 +49,14 @@ export function TurnComposer({
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <Field label="Уточняющий вопрос по замечанию" hint="Один вопрос за раз: следующий станет доступен после ответа.">
+    <div className="flex flex-col gap-3">
+      <Field label="Уточняющий вопрос по замечанию" hint={isDemoMode ? DEMO_REPLY_NOTICE : undefined}>
         {(id, describedBy) => (
           <TextArea
             id={id}
             aria-describedby={describedBy}
+            rows={3}
+            placeholder="Введите вопрос…"
             value={message}
             disabled={!dialogue.can_send_message}
             onChange={(event) => setMessage(event.target.value)}
@@ -81,7 +84,7 @@ export function TurnComposer({
         </Callout>
       ) : null}
 
-      <div>
+      <div className="flex justify-end">
         <Button variant="primary" disabled={!canSend} onClick={() => void submit()}>
           {isPending ? 'Отправляем…' : 'Отправить вопрос'}
         </Button>

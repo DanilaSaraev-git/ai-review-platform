@@ -6,6 +6,7 @@ import { RunPage } from '@/features/review-run/RunPage';
 import { NewReviewPage } from '@/features/new-review/NewReviewPage';
 import { ReportPage } from '@/features/review-report/ReportPage';
 import { FindingPage } from '@/features/review-report/FindingPage';
+import { ReviewWorkspaceLayout } from '@/features/review-report/components/ReviewWorkspaceLayout';
 
 /**
  * Маршруты приложения (contracts/routes.md).
@@ -23,11 +24,17 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'new', element: <NewReviewPage /> },
-      { path: 'runs/:runId', element: <RunPage /> },
-      { path: 'runs/:runId/report', element: <ReportPage /> },
-      { path: 'runs/:runId/report/findings/:findingId', element: <FindingPage /> },
-      { path: 'runs/:runId/report/findings/:findingId/dialogue', element: <FindingPage /> },
+      {
+        path: 'runs/:runId',
+        element: <ReviewWorkspaceLayout />,
+        children: [
+          { index: true, element: <RunPage /> },
+          { path: 'report', element: <ReportPage /> },
+          { path: 'report/findings/:findingId', element: <FindingPage /> },
+          { path: 'report/findings/:findingId/dialogue', element: <FindingPage /> },
+        ],
+      },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
-]);
+], { basename: import.meta.env.BASE_URL });

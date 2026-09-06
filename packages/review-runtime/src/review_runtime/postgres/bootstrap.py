@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from review_runtime.config.settings import OperatorSettings
+from review_runtime.config.verify import verify
 from review_runtime.postgres.models import (
     Actor,
     Deployment,
@@ -27,6 +28,7 @@ CODEC = "jcs-rfc8785-0.1.4"
 
 async def seed_runtime(session: AsyncSession, settings: OperatorSettings) -> dict[str, str]:
     """Insert the complete immutable release seed, or validate the existing exact seed."""
+    runtime_policy = verify(settings.runtime_config_path)
     now = datetime.now(UTC)
     values: list[Any] = [
         Deployment(id=str(settings.deployment_id), release_version="0.1.0", created_at=now),
@@ -95,7 +97,7 @@ async def seed_runtime(session: AsyncSession, settings: OperatorSettings) -> dic
         (
             DialoguePolicyVersion,
             settings.dialogue_policy_id,
-            {"max_member_turns": None},
+            {"max_member_turns": runtime_policy.budgets.max_dialogue_turns},
         ),
     )
     for model, config_id, payload in configs:

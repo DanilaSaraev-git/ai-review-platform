@@ -31,7 +31,7 @@ export function FindingList({
   const ordered = [...findings].sort((left, right) => left.ordinal - right.ordinal);
 
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="numbat-finding-list">
       {ordered.map((finding) => (
         <li key={finding.id}>
           <FindingCard

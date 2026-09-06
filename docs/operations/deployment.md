@@ -7,18 +7,24 @@ Gateway даёт общий допуск, но не разделяет поль�
 ## Текущее состояние сервера
 
 На 6 сентября 2026 года `135.106.195.62` работает на Ubuntu 24.04, Docker 29.1.3 и
-Compose 2.40.3. В нём 2 GiB RAM, 2 GiB swap и 40 GiB диска. Текущая ссылка
-`/opt/ai-review-platform-current` указывает на release
-`9aad090e1d007c16e55d79dbfcd166ce4ca7a8c5`. Сервис доступен по
+Compose 2.40.3. В нём 2 GiB RAM, 2 GiB swap и 40 GiB диска. До добавления отдельного деморежима рабочим release был
+`5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`. Актуальный release определяется ссылкой
+`/opt/ai-review-platform-current` (`readlink -f /opt/ai-review-platform-current`). Сервис доступен по
 [HTTPS](https://135.106.195.62) с общим gateway-допуском; PostgreSQL и artifacts постоянны,
 внутренний proxy доступен только на `127.0.0.1:8080`. Проверенный legacy rollback target —
 `2a613542056dd7b132a077a7c5b0619ff2bb733a`. Полный цикл new→legacy→new и restart прошли
 без потери данных. SSH password нельзя отключать, пока отдельный вход
 непривилегированного оператора по ключу не проверен в новой сессии.
 
-Новые release не используют synthetic review в production. Без подключённой модели health
-готов, каталог показывает `model-not-configured` как `unavailable`, а запуск review возвращает
-`model_unavailable`. Это ожидаемое состояние до выбора поставщика.
+Включена Kimi K2 через Hugging Face Router/Novita: профиль `kimi-k2-hf-novita` 1.0.1,
+модель `moonshotai/Kimi-K2-Instruct:novita`, навык `review-data-spec` 1.0.1. Реальный
+синтетический HTTP smoke прошёл review и dialogue; результаты предметной оценки качества
+из этого не следуют. Предыдущий production release — `c61434de2ecba31e4bcd6d24aa045cd624bc64bd`;
+порядок отключения модели перед откатом описан ниже.
+
+При отключении модели health остаётся готов, каталог показывает `model-not-configured`
+как `unavailable`, а запуск review возвращает `model_unavailable`. Synthetic review
+в production не подставляется.
 
 ## Собрать и установить неизменяемый release
 
@@ -145,9 +151,18 @@ backup set нужно скопировать с VPS в приватный кат
 понижает schema и не восстанавливает данные; восстановление данных — отдельное осознанное
 действие после разбора причины.
 
+Для отката Kimi-выпуска на `c61434de2ecba31e4bcd6d24aa045cd624bc64bd` сначала успешно
+выполните `model-disable.sh`, затем `rollback-release.sh` с этим полным SHA. Эта предыдущая
+версия работает в unconfigured режиме, но ещё содержит конфликт legacy/canonical identity
+навыка 1.0.0. Перед повторным включением Kimi верните исправленный release с навыком 1.0.1.
+Исторические версии навыка и результаты проверок при таком откате сохраняются.
+
 ## Подключить модель
 
-Создайте профиль из `deploy/compose/config/model-profile.external.example.json`, заменив
+Для выбранной Kimi K2 используется готовый
+[`model-profile.huggingface-kimi-k2.json`](../../deploy/compose/config/model-profile.huggingface-kimi-k2.json)
+с Hugging Face Router и Novita. Для другого endpoint создайте профиль из
+`deploy/compose/config/model-profile.external.example.json`, заменив
 synthetic ID/provider/model, оба точных HTTPS URL, limits и capabilities. Профиль проходит
 canonical `ModelProfile` validation внутри version-tagged app image. Скрипт не вызывает
 поставщика и проверяет, что непривилегированный runtime читает root-owned файлы:
@@ -178,3 +193,34 @@ current=/opt/ai-review-platform-current
 раз в минуту, раньше его пятиминутного TTL. Без marker timer завершается без сетевого запроса.
 Model files и marker находятся вне release, поэтому последующие promotion и rollback сохраняют
 выбранный режим. Реальный API key остаётся Docker secret file и не попадает в JSON profile.
+
+## Отдельный демонстрационный разбор
+
+Путь `/demo/new` открывает автономный браузерный сценарий с заранее подготовленным
+разбором. Основное приложение и настройки внешней модели продолжают работать в своём
+режиме. Демонстрация не вызывает модель и не отправляет выбранный файл в API: выбор
+любого поддерживаемого файла открывает один и тот же явно обозначенный пример.
+Диалог воспроизводит подготовленный ответ по выбранному замечанию; решения хранятся
+только в текущей вкладке браузера и не попадают в рабочие отчёты.
+
+Код деморежима входит в web image, а содержимое кейса подключается отдельно, только
+при запуске. Каталог `REVIEW_DEMO_DATA_DIR` (по умолчанию `/opt/ai-review-state/demo`)
+содержит `demo.json` и исходный `document.pdf`. Он подключён read-only и доступен через
+тот же защищённый gateway по `/demo/data/`. Не добавляйте материалы заказчика в Git,
+Docker image, synthetic fixtures или архив release. Если пакет отсутствует или не
+подходит по формату, деморежим показывает ошибку вместо случайного тестового отчёта.
+
+`demo.json` использует `schemaVersion: 1`, канонические DTO `document`, `report`,
+необязательный `bootstrap` и словарь `dialogues` с ключами из `report.findings[].id`.
+Первый ход каждого диалога содержит подготовленный ответ. Для синтетических текстовых
+примеров вместо PDF допускается поле `documentText`. Привязки отчёта должны ссылаться
+на исходный документ и точные страницы/цитаты. В provenance указывается подготовленное
+демо, расход модельных токенов не выдумывается; ограничения сохраняют статус экспертной
+проверки и отличают гипотезу замечания от подтверждённой ошибки.
+
+Проверки выпуска: `/demo/new` и прямая ссылка на замечание открываются после обновления;
+загрузка произвольного документа приводит к подготовленному отчёту; PDF открывается на
+странице привязки; тестовый диалог и решение работают; `/demo/api/v1/bootstrap` без
+активного browser worker возвращает 503. В Network не должно быть вызовов основного
+`/api/` или модельного endpoint. HTTPS без gateway credentials по-прежнему возвращает
+401, в том числе для `/demo/data/demo.json` и `/demo/data/document.pdf`.

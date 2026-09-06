@@ -152,10 +152,20 @@ class OpenAICompatibleModelAdapter:
             if "max_completion_tokens" in self.profile.supported_parameters
             else "max_tokens"
         )
+        trusted_instructions = request.trusted_instructions
+        if self.profile.structured_output == "plain_json":
+            schema = json.dumps(
+                request.response_schema, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+            )
+            trusted_instructions += (
+                "\n\nReturn exactly one JSON object matching the response schema below. "
+                "Do not add Markdown fences, commentary, or fields not allowed by the schema."
+                "\nResponse JSON Schema:\n" + schema
+            )
         payload: dict[str, JsonValue] = {
             "model": self.profile.model,
             "messages": [
-                {"role": "system", "content": request.trusted_instructions},
+                {"role": "system", "content": trusted_instructions},
                 {"role": "user", "content": request.untrusted_input},
             ],
             output_parameter: request.max_output_tokens,

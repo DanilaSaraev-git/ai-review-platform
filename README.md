@@ -22,6 +22,12 @@
 
 Доменная терминология: [docs/domain-glossary.md](docs/domain-glossary.md). Архитектурный baseline: [docs/architecture/target-product.md](docs/architecture/target-product.md). Публичный контракт: [contracts/review-platform/v1/README.md](contracts/review-platform/v1/README.md). Настройка model runtime: [docs/operations/configuration.md](docs/operations/configuration.md).
 
+## Локальная разработка
+
+Из корня технического checkout выполните `./dev start`, затем откройте [http://localhost:5173](http://localhost:5173). Web работает с Vite HMR, API — с `uvicorn --reload`, PostgreSQL хранит данные в отдельном локальном volume. `./dev stop` останавливает этот стенд и сохраняет документы и отчёты; `./dev status` и `./dev logs` показывают состояние и журналы.
+
+Зависимости, credential Kimi K2, хранение данных и особенности reload: [руководство локальной разработки](docs/operations/local-development.md). Объём работ: [SpecKit 007](specs/007-local-dev-loop/spec.md), [план](specs/007-local-dev-loop/plan.md) и [задачи](specs/007-local-dev-loop/tasks.md) и [результаты проверок](specs/007-local-dev-loop/evidence.md).
+
 ## Ветки реализации
 
 - `main` — общий архитектурный и контрактный baseline;
@@ -30,13 +36,15 @@
 - `codex/005-web-review-ui` — web v1;
 - `codex/mvp-launch-20260905` — упрощённый интерфейс и выпуск MVP.
 
-Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Реальная модель и endpoint не выбраны и не проверялись; chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
+Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Для реального подключения выбран Kimi K2 через Hugging Face/Novita; [конфигурация](docs/operations/configuration.md#профиль-kimi-k2) и [серверные результаты](specs/006-mvp-launch/evidence.md) отделены от предметной оценки. Chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
 
 ## Подготовка MVP
 
-Срез [006 MVP launch](specs/006-mvp-launch/spec.md) реализован и развёрнут: упрощён веб-интерфейс, завершены диалоги по замечаниям и подготовлен защищённый сервис для одной доверенной группы. Работа выполнена по [плану](specs/006-mvp-launch/plan.md) и [задачам SpecKit](specs/006-mvp-launch/tasks.md), отдельными коммитами. Фактически пройденные проверки и ограничения собраны в [evidence](specs/006-mvp-launch/evidence.md). Подключение реального endpoint и предметная оценка модели выполняются отдельно.
+Срез [006 MVP launch](specs/006-mvp-launch/spec.md) реализован и развёрнут: упрощён веб-интерфейс, завершены диалоги по замечаниям и подготовлен защищённый сервис для одной доверенной группы. Работа выполнена по [плану](specs/006-mvp-launch/plan.md) и [задачам SpecKit](specs/006-mvp-launch/tasks.md), отдельными коммитами. Kimi K2 подключена; реальный серверный smoke прошёл review и dialogue. Фактически пройденные проверки и ограничения собраны в [evidence](specs/006-mvp-launch/evidence.md). Предметная оценка модели выполняется отдельно.
 
 Сборка, установка, доступ, резервные копии, восстановление, откат и подключение модели описаны в [руководстве оператора](docs/operations/deployment.md).
+
+Отдельный `/demo/new` показывает заранее подготовленный разбор документа без вызовов модели. Материалы примера подключаются приватным runtime-пакетом; в код и образ входят только универсальный сценарий и синтетические проверки. Порядок подключения описан в [разделе деморежима](docs/operations/deployment.md#отдельный-демонстрационный-разбор).
 
 ## Лицензирование
 

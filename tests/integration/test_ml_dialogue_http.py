@@ -70,3 +70,65 @@ def test_external_dialogue_failure_retries_same_turn_and_preserves_report(
         after = client.get(report_url)
         assert after.content == before.content
         assert after.headers["etag"] == before.headers["etag"]
+
+
+@pytest.mark.parametrize("response_shape", ["valid_json", "truncated_json"])
+@pytest.mark.parametrize(("finish_reason", "expected_code", "expected_message"), [
+    (
+        "length", "model_output_invalid",
+        "The model response reached the output token limit before completion.",
+    ),
+    (
+        "content_filter", "content_blocked",
+        "The model response did not finish with a complete result.",
+    ),
+])
+def test_external_dialogue_reports_incomplete_output_before_parsing_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    operator_settings,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    response_shape: str,
+    finish_reason: str,
+    expected_code: str,
+    expected_message: str,
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    dialogue_output = json.loads((FIXTURES / "dialogue-response.json").read_text())
+    dialogue_output["anchors"] = dialogue_output["anchors"][:1]
+    response_text = json.dumps(dialogue_output)
+    if response_shape == "truncated_json":
+        response_text = '{"content":"PRIVATE_TRUNCATED_MODEL_OUTPUT'
+    provider = FakeModelProvider([
+        ScriptedReply(chat_completion((FIXTURES / "review-response.json").read_text())),
+        ScriptedReply(chat_completion(response_text, finish_reason=finish_reason)),
+    ])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference,
+        state="available",
+        reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with TestClient(app) as client:
+        workspace_id = app.state.platform.workspace_id
+        run = _request_review(client, workspace_id, reference).json()
+        report_url = f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
+        before = client.get(report_url)
+        finding_id = before.json()["findings"][0]["id"]
+        response = client.post(
+            f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/findings/{finding_id}/dialogue/turns",
+            headers={"Idempotency-Key": "dialogue-output-limit"},
+            json={"message": "Clarify the schedule.", "expected_revision": 0},
+        )
+        assert response.status_code == 202, response.text
+        turn = response.json()["turns"][0]
+        assert turn["state"] == "failed"
+        assert turn["assistant_response"] is None
+        assert turn["error"] == {
+            "code": expected_code,
+            "message": expected_message,
+            "retryable": False,
+        }
+        assert "PRIVATE_TRUNCATED_MODEL_OUTPUT" not in response.text
+        assert client.get(report_url).content == before.content
+    assert provider.call_count == 2

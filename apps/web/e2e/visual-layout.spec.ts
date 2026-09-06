@@ -40,10 +40,12 @@ test('длинная панель отчёта скроллится внутри
   await openReport(page);
 
   const panel = page.getByRole('complementary', { name: 'Панель разбора' });
-  const scrollArea = panel.locator(':scope > div');
-  expect(await scrollArea.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  // The workspace is already mounted while the report request is still loading.
+  const scrollArea = panel.locator('.numbat-panel-scroll');
+  await expect(scrollArea).toBeVisible();
+  await expect.poll(() => scrollArea.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   await page.getByRole('heading', { name: 'Чем выполнена проверка' }).scrollIntoViewIfNeeded();
-  expect(await scrollArea.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => scrollArea.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
 
 test('разбор замечания сохраняет документ рядом с действиями', async ({ page }, testInfo) => {
@@ -62,6 +64,11 @@ test('mobile 390 px не создаёт горизонтальную прокр�
   await uploadSyntheticDocument(page);
 
   await expectNoPageOverflow(page);
+  const uploadedName = page.locator('.entry-upload-title', { hasText: 'synthetic-spec.md' });
+  await expect(uploadedName).toBeVisible();
+  // Keep the filename readable instead of squeezing it between the icon and action.
+  await expect.poll(() => uploadedName.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(160);
+  await expect.poll(() => uploadedName.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(50);
   await page.screenshot({ path: testInfo.outputPath('new-review-mobile-390.png'), fullPage: true });
 });
 
@@ -72,7 +79,7 @@ test('отчёт на mobile сохраняет чтение документа 
   await expectNoPageOverflow(page);
   await expect(page.locator('details[open]')).toHaveCount(0);
   await page.getByRole('heading', { name: 'Чем выполнена проверка' }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole('status').filter({ hasText: /Есть замечания/ })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: /Рассмотрено/ })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('report-mobile-390.png'), fullPage: true });
 });
 

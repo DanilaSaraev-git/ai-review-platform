@@ -26,7 +26,7 @@ export function FindingCard({
   return (
     <article
       aria-current={isSelected ? 'true' : undefined}
-      className={`rounded-[6px] border bg-surface p-3.5 transition-[border-color,box-shadow] duration-100 ${isSelected ? 'border-accent shadow-[inset_3px_0_0_var(--color-accent)]' : 'border-line hover:border-line-strong'}`}
+      className="numbat-finding-card"
     >
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge tone={PRIORITY_TONE[finding.priority.level]}>
@@ -50,8 +50,16 @@ export function FindingCard({
           <dt className="sr-only">Проблема</dt>
           <dd className="text-ink-muted">{finding.problem}</dd>
         </div>
-        <div className="rounded-[5px] bg-surface-muted px-3 py-2">
-          <dt className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-subtle">Вопрос для уточнения</dt>
+        {isSelected && finding.anchors.length > 0 ? <div className="mt-2 border-l-2 border-accent pl-3">
+          <dt className="text-[11px] text-ink-subtle">{finding.anchors[0]?.source_name} · {finding.anchors[0]?.location.kind === 'pdf' ? `Страница ${finding.anchors[0].location.page}` : `Строка ${finding.anchors[0]?.location.line_start}`}</dt>
+          <dd className="mt-1 text-ink-muted">«{finding.anchors[0]?.quote}»</dd>
+        </div> : null}
+        {isSelected ? <div className="mt-2">
+          <dt className="text-[11px] text-ink-subtle">Почему это важно</dt>
+          <dd className="mt-1 text-ink-muted">{finding.reason}</dd>
+        </div> : null}
+        <div className="numbat-finding-question">
+          <dt>Вопрос для уточнения</dt>
           <dd className="mt-0.5 text-ink">{finding.question}</dd>
         </div>
       </dl>

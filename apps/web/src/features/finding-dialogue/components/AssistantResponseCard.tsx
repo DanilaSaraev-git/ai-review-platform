@@ -1,5 +1,5 @@
 import type { DialogueTurn } from '@/api/generated/model';
-import { Button, Callout, StatusBadge } from '@/components/ui';
+import { Button, Callout } from '@/components/ui';
 import { ASSISTANT_ACTION_TEXT, DIALOGUE_ERROR_TEXT } from '@/lib/error-messages';
 import { ProposedResolutionCard } from './ProposedResolutionCard';
 
@@ -51,23 +51,26 @@ export function AssistantResponseCard({
   }
 
   return (
-    <div className="mr-5 rounded-[6px] border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(23,32,51,0.04)]">
-      <StatusBadge>{ASSISTANT_ACTION_TEXT[response.action]}</StatusBadge>
-      <p className="mt-2 text-sm text-ink">{response.content}</p>
+    <div className="min-w-0 py-1">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
+        <span className="font-medium text-ink">Numbat</span>
+        <span className="text-ink-subtle">{ASSISTANT_ACTION_TEXT[response.action]}</span>
+      </div>
+      <p className="mt-2 max-w-[72ch] whitespace-pre-wrap break-words text-sm leading-6 text-ink">{response.content}</p>
 
       {response.anchors.length > 0 ? (
-        <ul className="mt-2 flex flex-col gap-1">
+        <ul className="mt-3 flex flex-col gap-3 border-l-2 border-line pl-3">
           {response.anchors.map((anchor) => (
-            <li key={`${anchor.fragment_id}-${anchor.quote_start}`} className="text-xs text-ink-muted">
-              <span className="font-medium text-ink">{anchor.source_name}: </span>
-              «{anchor.quote}»
+            <li key={`${anchor.fragment_id}-${anchor.quote_start}`} className="break-words text-xs leading-6 text-ink-muted">
+              <span className="block font-medium text-ink">{anchor.source_name}</span>
+              <blockquote className="whitespace-pre-wrap">«{anchor.quote}»</blockquote>
             </li>
           ))}
         </ul>
       ) : null}
 
       {response.proposed_resolution ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <ProposedResolutionCard proposal={response.proposed_resolution} onUse={onUseResolution} />
         </div>
       ) : null}

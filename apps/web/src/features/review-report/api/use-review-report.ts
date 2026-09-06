@@ -21,10 +21,10 @@ export interface ReviewReportState {
   retry: () => Promise<void>;
 }
 
-export function useReviewReport(workspaceId: string, runId: string): ReviewReportState {
+export function useReviewReport(workspaceId: string, runId: string, enabled = true): ReviewReportState {
   const query = useGetReviewReport(workspaceId, runId, {
     query: {
-      enabled: Boolean(workspaceId && runId),
+      enabled: Boolean(workspaceId && runId && enabled),
       ...IMMUTABLE_REPORT_OPTIONS,
     },
   });

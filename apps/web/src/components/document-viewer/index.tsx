@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { downloadDocument } from '@/api/generated/endpoints';
 import type { Document, Finding } from '@/api/generated/model';
 import { Button, Callout, Spinner } from '@/components/ui';
@@ -6,12 +6,13 @@ import { PdfViewer } from './PdfViewer';
 import { TextViewer } from './TextViewer';
 import { toDocumentLines } from './sanitize';
 import { matchAnchor, type AnchorMatch } from './use-anchor-highlight';
+import '@/styles/review-workspace.css';
 
 /**
  * Просмотрщик исходного документа с переходом к процитированному фрагменту.
  *
- * Представление выбирается по location.kind привязки, а не по расширению
- * файла (решение R-09). Представление только для чтения: интерфейс не
+ * Представление выбирается по media_type неизменяемого основного документа.
+ * Привязка к источнику контекста не подменяет основной документ. Интерфейс не
  * редактирует исходный документ и не создаёт его новую версию (FR-007).
  */
 export function DocumentViewer({
@@ -29,9 +30,10 @@ export function DocumentViewer({
   const [reloadKey, setReloadKey] = useState(0);
 
   const isPdf = document?.media_type === 'application/pdf';
+  const documentId = document?.id;
 
   useEffect(() => {
-    if (!workspaceId || !document) {
+    if (!workspaceId || !documentId) {
       return;
     }
     let cancelled = false;
@@ -39,7 +41,7 @@ export function DocumentViewer({
     async function load(): Promise<void> {
       setError(null);
       try {
-        const payload = (await downloadDocument(workspaceId, document!.id)) as unknown;
+        const payload = (await downloadDocument(workspaceId, documentId!)) as unknown;
         if (cancelled) {
           return;
         }
@@ -49,8 +51,11 @@ export function DocumentViewer({
           if (isPdf) {
             setBlob(payload);
           } else {
-            setContent(await payload.text());
+            const text = await payload.text();
+            if (!cancelled) setContent(text);
           }
+        } else {
+          throw new Error('Unsupported document response');
         }
       } catch {
         if (!cancelled) {
@@ -63,14 +68,26 @@ export function DocumentViewer({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, document, isPdf, reloadKey]);
+  }, [workspaceId, documentId, isPdf, reloadKey]);
 
-  const lines = content ? toDocumentLines(content) : [];
-  const match: AnchorMatch | null = finding ? matchAnchor(finding, lines) : null;
+  const lines = useMemo(() => content ? toDocumentLines(content) : [], [content]);
+  const primaryAnchors = finding?.anchors.filter((anchor) => anchor.document_id === documentId);
+  const isContextAnchor = Boolean(finding?.anchors.length && !primaryAnchors?.length);
+  const match: AnchorMatch | null = useMemo(() => {
+    if (!finding || isContextAnchor || (!isPdf && content === null)) return null;
+    return matchAnchor({ ...finding, anchors: finding.anchors.filter((anchor) => anchor.document_id === documentId) }, lines);
+  }, [finding, documentId, isContextAnchor, lines, isPdf, content]);
 
   return (
-    <section aria-labelledby="document-viewer-title" className="mx-auto flex h-full w-full max-w-4xl flex-col gap-2.5">
-      <h2 id="document-viewer-title" className="text-[13px] font-semibold text-ink">Исходный документ</h2>
+    <section aria-labelledby="document-viewer-title" className="numbat-document-viewer">
+      <div className="numbat-document-header">
+        <h2 id="document-viewer-title">Исходный документ</h2>
+        <span>{isPdf ? 'PDF' : document?.media_type === 'text/markdown' ? 'Markdown' : 'Текст'}</span>
+      </div>
+
+      {isContextAnchor ? <Callout tone="neutral" title="Цитата из источника контекста">
+        Основной документ остаётся открыт. Цитата показана в замечании.
+      </Callout> : null}
 
       {/* Несопоставленный фрагмент называется прямо: произвольное место
           документа не подсвечивается (SC-003). */}

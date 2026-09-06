@@ -1,8 +1,9 @@
 # Настройка исполнения LLM
 
 Инженерный слой поддерживает три явно разделённых режима: production-запуск без модели,
-локальный synthetic fixture и opt-in подключение OpenAI-compatible endpoint. Конкретная модель,
-провайдер и коммерческий режим не выбраны. Production-конфигурация поэтому использует
+локальный synthetic fixture и opt-in подключение OpenAI-compatible endpoint. Для первого
+реального подключения 2026-09-06 выбран Kimi K2 через Hugging Face/Novita.
+До явного model-enable production-конфигурация использует
 `REVIEW_COMPOSITION=unconfigured`: инфраструктурная readiness остаётся доступной, каталог
 моделей показывает `unavailable` с причиной `not_configured`, а создание review завершается
 канонической ошибкой `model_unavailable` до записи запуска. Fixture не подменяет этот ответ.
@@ -131,7 +132,7 @@ API. Обязательные тесты используют только fake 
 Реальный `model-smoke` запускается оператором отдельно после выбора endpoint. В evidence нужно
 зафиксировать profile digest, model/version, skill digest, engine/backend commit, suite version,
 результат и время. Реальные credentials и клиентские документы в репозиторий не сохраняются.
-Текущий статус реального endpoint: **не выбран и не проверялся**.
+Статус фактической серверной проверки хранится в [evidence выпуска](../../specs/006-mvp-launch/evidence.md).
 
 Явная команда после выбора endpoint (она выполняет по одному review и dialogue запросу):
 
@@ -147,3 +148,29 @@ uv run --frozen review-cli model-smoke \
 Команда не запускается ни readiness, ни обязательным release gate. Evidence содержит только
 идентичности, digests, безопасную фактическую provenance, usage/latency и статус; prompt,
 ответ модели и значение credential в него не входят.
+
+## Профиль Kimi K2
+
+Готовый [профиль](../../deploy/compose/config/model-profile.huggingface-kimi-k2.json)
+выбирает `moonshotai/Kimi-K2-Instruct:novita` через
+`https://router.huggingface.co/v1/chat/completions`. Значение токена хранится только в private
+credential file; `HF_TOKEN` в JSON — ссылка на секрет. Установка и включение выполняются
+штатными [model-configure/model-enable](deployment.md#подключить-модель).
+
+Профиль 1.0.1 задаёт temperature=0.6, максимум 8192 выходных токенов и 32768 UTF-8
+байт на полный запрос с инструкциями и схемой. Байтовый бюджет — консервативная настройка
+этого профиля, а не максимальное окно модели. Превышение отклоняется без скрытой обрезки.
+Точный checkpoint сервера неизвестен. Профиль использует plain JSON с серверной проверкой
+схемы, цитат и coverage; native structured output не заявлен для выбранного endpoint.
+
+Версия 1.0.0 ограничивала ответ 4096 токенами. Серверный запуск достиг этого лимита и
+завершился с `finish_reason=length`; обрезанный ответ не стал отчётом. Бюджет увеличен новой
+версией профиля, чтобы сохранить неизменность истории. Это верхняя граница ответа,
+а не гарантия завершения любого документа; автоматического продолжения или repair нет.
+
+Health probe обращается к каталогу HF и подтверждает доступность router. Доступ к самой
+модели и совместимость выходов подтверждает только отдельный реальный smoke. Production
+таймер доступности и ограничения числа model calls сохраняются.
+Основания конфигурации: [HF Novita API](https://huggingface.co/docs/inference-providers/providers/novita),
+[карточка Kimi K2](https://huggingface.co/moonshotai/Kimi-K2-Instruct),
+[каталог Router](https://router.huggingface.co/v1/models), проверены 2026-09-06.

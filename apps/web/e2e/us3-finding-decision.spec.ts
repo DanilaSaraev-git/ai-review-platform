@@ -57,6 +57,6 @@ test.describe('Решение по замечанию', () => {
     // Содержание отчёта прежнее (FR-018, SC-006).
     await expect(page.getByText('Найдено одно уточнение по расписанию обновления.')).toBeVisible();
     await expect(page.getByRole('link', { name: /Не задано расписание обновления/ })).toBeVisible();
-    await expect(page.getByText(/Разбор завершён · 1 из 1/i)).toBeVisible();
+    await expect(page.getByText(/Рассмотрено 1 из 1/i)).toBeVisible();
   });
 });

@@ -1,5 +1,6 @@
 import type { ReviewProfile } from '@/api/generated/model';
-import { RadioCards } from '@/components/ui';
+import { useId } from 'react';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Выбор профиля проверки с назначением и версией (FR-009).
@@ -15,22 +16,24 @@ export function ReviewProfileSelect({
   selectedId: string | undefined;
   onSelect: (profile: ReviewProfile) => void;
 }) {
+  const id = useId();
   return (
-    <RadioCards
-      legend="Профиль проверки"
-      name="review-profile"
-      value={selectedId}
-      onValueChange={(value) => {
-        const found = profiles.find((profile) => profile.id === value);
-        if (found) {
-          onSelect(found);
-        }
-      }}
-      options={profiles.map((profile) => ({
-        value: profile.id,
-        label: `${profile.name} · версия ${profile.version}`,
-        description: profile.goal,
-      }))}
-    />
+    <div className="entry-setting-group">
+      <div className="entry-setting">
+        <label htmlFor={id} className="entry-setting-label"><Icon name="layers" />Профиль проверки</label>
+        <select
+          id={id}
+          name="review-profile"
+          value={selectedId ?? ''}
+          onChange={(event) => {
+            const found = profiles.find((profile) => profile.id === event.target.value);
+            if (found) onSelect(found);
+          }}
+        >
+          {!selectedId ? <option value="" disabled>Выберите профиль</option> : null}
+          {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · версия {profile.version}</option>)}
+        </select>
+      </div>
+    </div>
   );
 }

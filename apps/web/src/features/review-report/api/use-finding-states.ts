@@ -16,9 +16,9 @@ export interface FindingStatesState {
   retry: () => Promise<void>;
 }
 
-export function useFindingStates(workspaceId: string, runId: string): FindingStatesState {
+export function useFindingStates(workspaceId: string, runId: string, enabled = true): FindingStatesState {
   const query = useListFindingStates(workspaceId, runId, {
-    query: { enabled: Boolean(workspaceId && runId) },
+    query: { enabled: Boolean(workspaceId && runId && enabled) },
   });
 
   const items = query.data?.items ?? [];

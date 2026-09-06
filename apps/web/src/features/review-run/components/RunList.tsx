@@ -1,10 +1,11 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { listReviewRuns } from '@/api/generated/endpoints';
+import { listReviewRuns, useGetDocument } from '@/api/generated/endpoints';
 import type { ReviewRun } from '@/api/generated/model';
 import { Button, Callout, Spinner, StatusBadge } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { RUN_STATE_TEXT } from '@/lib/error-messages';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, formatMediaType } from '@/lib/format';
 
 /**
  * Список запусков рабочего пространства в обратном хронологическом порядке
@@ -46,32 +47,64 @@ export function RunList({ workspaceId }: { workspaceId: string }) {
 
   if (runs.length === 0) {
     return (
-      <Callout title="Проверок пока нет">
-        Загрузите готовое ТЗ и запустите первую проверку, чтобы увидеть замечания до передачи в разработку.
-      </Callout>
+      <div className="history-empty">
+        <span className="entry-file-icon"><Icon name="history" /></span>
+        <h3>Проверок пока нет</h3>
+        <Link to="/new" className="text-sm text-accent hover:underline">Создать проверку</Link>
+      </div>
     );
   }
 
   return (
     <div>
-      <ul className="overflow-hidden rounded-[6px] border border-line bg-surface">
-        {runs.map((run) => (
-          <li key={run.id} className="border-b border-line p-3.5 last:border-b-0 hover:bg-surface-muted">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Link className="text-[13px] font-semibold text-ink hover:text-accent" to={`/runs/${run.id}`}>
-              Проверка от {formatDateTime(run.created_at)}
-            </Link>
-              <StatusBadge tone={TONE[run.state]}>{RUN_STATE_TEXT[run.state].label}</StatusBadge>
-            </div>
-            <p className="mt-1 text-xs leading-5 text-ink-muted">{run.created_by.display_name}</p>
-          </li>
-        ))}
-      </ul>
+      <div className="history-table-wrap">
+        <table className="history-table">
+          <thead>
+            <tr>
+              <th scope="col">Техническое задание</th>
+              <th scope="col">Состояние</th>
+              <th scope="col" className="history-date">Дата проверки</th>
+              <th scope="col" className="history-author">Создал</th>
+            </tr>
+          </thead>
+          <tbody>{runs.map((run) => <RunRow key={run.id} run={run} workspaceId={workspaceId} />)}</tbody>
+        </table>
+      </div>
       {query.hasNextPage ? (
         <Button className="mt-3" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>
           {query.isFetchingNextPage ? 'Загружаем…' : 'Показать ещё'}
         </Button>
       ) : null}
     </div>
+  );
+}
+
+function RunRow({ run, workspaceId }: { run: ReviewRun; workspaceId: string }) {
+  const documentQuery = useGetDocument(workspaceId, run.document_id, {
+    query: { staleTime: 5 * 60 * 1000 },
+  });
+  const document = documentQuery.data;
+  const date = formatDateTime(run.created_at);
+
+  return (
+    <tr>
+      <th scope="row">
+        <div className="history-document-cell">
+          <span className="entry-file-icon"><Icon name="file-text" /></span>
+          <div className="min-w-0">
+            <Link to={`/runs/${run.id}`} aria-label={`Проверка от ${date}${document ? ` — ${document.filename}` : ''}`}>
+              {document?.filename ?? `Проверка от ${date}`}
+            </Link>
+            <p className="history-document-meta">
+              {document ? formatMediaType(document.media_type) : documentQuery.isError ? 'Название документа недоступно' : 'Загружаем документ…'}
+              <span className="history-mobile-date"> · {date}</span>
+            </p>
+          </div>
+        </div>
+      </th>
+      <td><StatusBadge tone={TONE[run.state]}>{run.state === 'completed' ? 'Готово к разбору' : RUN_STATE_TEXT[run.state].label}</StatusBadge></td>
+      <td className="history-date"><time dateTime={run.created_at}>{date}</time></td>
+      <td className="history-author">{run.created_by.display_name}</td>
+    </tr>
   );
 }

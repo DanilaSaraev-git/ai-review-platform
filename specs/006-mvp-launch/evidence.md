@@ -1,7 +1,7 @@
 # Evidence: 006 MVP launch
 
 Статус: MVP реализован и развёрнут. Дата: 2026-09-05/06. Baseline: `2a61354`.
-Рабочий release: `9aad090e1d007c16e55d79dbfcd166ce4ca7a8c5`.
+Рабочий release: `5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`.
 Адрес: [https://135.106.195.62](https://135.106.195.62). Доступ защищён общим gateway;
 credentials переданы владельцу через приватный локальный файл вне репозитория.
 
@@ -16,8 +16,9 @@ credentials переданы владельцу через приватный л
 ## Границы готовности
 
 Web, runtime, protected gateway, restore, фактический rollback, restart и timers проверены.
-Реальная модель не подключена: осталось задать совместимый профиль поставщика и ключ,
-включить модель и пройти отдельный compatibility smoke по [руководству оператора](../../docs/operations/deployment.md).
+Kimi K2 подключена через Hugging Face/Novita; реальный синтетический review→dialogue smoke
+на публичном серверном API прошёл. Профиль и порядок эксплуатации описаны в
+[руководстве оператора](../../docs/operations/deployment.md).
 Предметное качество LLM и оценка дизайна пользователем не проверялись. MVP рассчитан на одну
 доверенную группу с общим workspace/actor. Постоянное автоматическое внешнее хранилище
 копий ещё не выбрано; проверенная копия с VPS сохранена у владельца. На текущем Mac выявлен
@@ -214,3 +215,167 @@ passed. Web source после ранее успешного full web CI не м�
 - Отдельные commits сохранены в `codex/mvp-launch-20260905`; merge в main не выполнялся.
   Постоянное внешнее хранение копий и вход отдельного SSH-оператора по ключу остаются
   явными эксплуатационными продолжениями. На текущем Mac нужен исправный маршрут к IP вне VPN.
+
+## Kimi K2 — подготовка серверного выпуска 2026-09-06
+
+Пользователь поручил подключить выбранную Kimi K2 и выпустить обновление на существующий
+сервер. Код переносится поверх 2fb8785; текущий server release перед обновлением — 9aad090.
+Перенесены только plain JSON schema transport, семантическая проверка CLI smoke и профиль
+`kimi-k2-hf-novita` 1.0.0. Production model-probe/timer, limits, gateway и UI сохранены.
+Токен передаётся отдельным private file; в release archive секрета нет.
+
+Targeted adapter/CLI gate: 34 passed. `release-check-local`: 81 contract, 125 unit/CLI,
+12 security passed; Ruff и mypy (104 файла) passed; canonical schemas/client/protected paths passed.
+Compose web/API build, synthetic smoke и restart на отдельном loopback стенде прошли.
+
+Полный PostgreSQL gate выявил существовавший до Kimi рассинхрон: bootstrap сохранял
+`max_member_turns=null`, основной runtime после `4531968` ожидал runtime budget. Исправлен
+bootstrap с использованием того же validated config; regression с лимитом 7 прошёл red→green.
+Guard неизменяемых версий не ослаблен, существующие записи не перезаписываются. На заново
+созданной одноразовой test schema migration 8 + integration 52 passed.
+Synthetic Compose fixture также актуализирован: явно задан внешний model profile ID и
+используется выбранный app image. Это изменения тестовой конфигурации, не production defaults.
+
+Ранее зелёный CI выполнял `release-check-local` без PostgreSQL suites; историческое полное
+свидетельство 004 относится к более раннему baseline. Неуспешный новый прогон не скрывается
+этими прежними результатами. Статус серверной установки фиксируется отдельно ниже после
+promotion, enable и реального smoke.
+
+После исправлений полный последовательный backend gate: 81 contract + 125 unit/CLI +
+12 security + 8 migration + 52 integration + 9 E2E = **287 passed, 1 optional skip**.
+Optional skip относится к отсутствующему local-model endpoint; HF будет проверяться отдельно
+на сервере. Synthetic external-model Compose прошёл на настоящей сети Docker с fake provider.
+Image web/API собран; synthetic report сохранил SHA-256 и ETag после restart.
+Перед packaging проверены отсутствие credential и локальных путей, ссылки и symlink инструкций.
+
+Серверный release `c61434de2ecba31e4bcd6d24aa045cd624bc64bd` успешно установлен после
+predeploy backup `20260906T074046Z`; gateway/TLS/origin/private services passed.
+Отдельный model preflight до включения обнаружил несовместимость старой записи навыка:
+`review-data-spec` 1.0.0 хранит legacy digest (только файлы), а ML registry проверяет canonical
+digest (manifest и файлы). CLI вернул `invalid_configuration`; рабочий сервис остался в
+unconfigured режиме. Историческая запись не менялась. Исправление и повторная установка
+отслеживаются в T037; это отдельный обнаруженный стык, не ошибка токена или Kimi.
+
+Навык выпущен как 1.0.1 без изменения текста инструкций и legacy digest. Regression
+реального пакета прошёл red→green и проверил unconfigured→ML→probe→review→unconfigured,
+новую версию в execution snapshot и полную неизменность прежней SQL-записи 1.0.0.
+Повторные проверки: 53 integration на чистой PostgreSQL, 52 registry/CLI/ML contract passed;
+Ruff, diff check и стандартный protected-path gate без исключений passed. Ранее пройденные
+web, migration и E2E gates не повторялись: UI, schema и runtime code этим исправлением не менялись.
+
+## Kimi K2 — фактический серверный выпуск 2026-09-06
+
+Установлен `5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`; previous указывает на
+`c61434de2ecba31e4bcd6d24aa045cd624bc64bd`. Штатный promotion создал predeploy backup
+`20260906T075020Z`. Набор скопирован в приватное хранилище владельца вне VPS и Git;
+локальные SHA-256 dump/archive и permissions 0700/0600 проверены. Новый restore drill
+для этого набора не проводился; предыдущий успешный drill сохранён выше.
+
+`model-configure` установил профиль и credential отдельно от release; runtime читает
+смонтированный secret. `model-enable` завершился успешно, declared GET probe сохранил
+`available`; gateway/TLS/origin/private ports passed. Таймеры backup, certificate renewal
+и model probe активны. Server app/web images закреплены на полном SHA нового release.
+
+Реальный smoke через `https://135.106.195.62/api/v1` с системной проверкой TLS и gateway
+credentials использовал только явно синтетический `synthetic-kimi-smoke.md` из двух строк.
+
+| Проверка | Результат |
+| --- | --- |
+| Review run | `542b68e9-2c69-425e-a525-81a37f9e8718`, completed, 47.579 s, 6 findings |
+| Model provenance | `huggingface-novita`, `moonshotai/kimi-k2-instruct`; model version unknown |
+| Review usage | 1 244 input / 1 873 output tokens |
+| Skill snapshot | `review-data-spec` 1.0.1, canonical digest `93f89a407f19fb3035bee58b8aa355aaf2587bfab7f1bcf4663baad9fbdc71f7` |
+| Dialogue turn | `88891ba4-640d-45e8-a999-976dc04c8d7f`, completed, 4.272 s, revision 2 |
+| Immutable report | SHA-256 `ace7735968631e56034d2a017fede73240d71e2a9d2d29a5bb85c527faf34a33`; bytes unchanged after dialogue |
+
+Это один успешный compatibility smoke, без повторов генерации. Он не измеряет качество на
+пользовательских документах, надёжность провайдера или SLA. Прежние локальные неуспешные
+прогоны не опровергаются этим результатом. Сохраняются лимиты профиля: 32 768 UTF-8 bytes
+на полный вход с инструкциями и schema, 4 096 output tokens; chunking и auto-repair не добавлены.
+
+Откат на previous требует успешного `model-disable.sh`, затем `rollback-release.sh` с полным SHA
+`c61434de2ecba31e4bcd6d24aa045cd624bc64bd`: эта версия пригодна для unconfigured работы,
+но не для повторного включения Kimi до возврата исправленного release.
+DB/volumes и immutable версии сохраняются.
+
+После завершения генераций выполнен restart API. Проверка непосредственно в окне запуска
+получила 502; после перехода контейнера в healthy полный deployment probe прошёл.
+Отдельное чтение подтвердило прежний SHA-256 отчёта, completed dialogue с revision 2 и
+доступную модель. Model-probe service завершает обновления с exit 0. Локальные одноразовые
+Compose-стенды проверки удалены вместе с их тестовыми volumes; production volumes сохранены.
+
+T032–T037 выполнены. Документационный commit после установленного release не меняет код
+на сервере. Ключи, документы и журналы не входят в коммиты; постоянное автоматическое
+offsite-хранилище и предметная оценка остаются отдельными продолжениями.
+
+## Инцидент: ограничение длины ответа и последующий billing block
+
+2026-09-06 пользователь сообщил `model_output_invalid`. Безопасные model-attempt metadata
+подтвердили `finish_reason=length`, ровно 4096 output tokens, latency 103402 ms. Это обрыв
+по настройке выходного бюджета, а не ошибка подключения или ключа. Исходный ответ модели
+не сохранялся, поэтому его содержимое не восстанавливалось и в репозиторий не переносилось.
+
+Выпущен model profile `kimi-k2-hf-novita` 1.0.1 с max output 8192; config digest
+`d1815b847c992809e4d121418c5ef3ca7c167ff8014d1f877fc58cc9cae6b579`.
+Изменение применено на сервере через model-disable/configure/enable без замены application
+release `5a3dae8`. Старые профиль и run не изменены. Проверка gateway/TLS/model mode passed.
+
+Повтор исходного сценария сначала получил временный provider unavailable и штатный retry,
+затем полный ответ: `finish_reason=stop`, 4464 output tokens, latency 110766 ms.
+Обрезка устранена, но новый run завершился отдельным `validation_failed`; успешный отчёт
+не опубликован. Конкретная причина семантической проверки пока не установлена: runtime
+сохраняет общий код без исходного ответа. Временная диагностика с allow-list безопасных
+причин выполнялась в отдельном процессе, без изменения работающего API, но следующий
+вызов был отклонён до генерации.
+
+Минимальный синтетический provider probe подтвердил HTTP 402 и сообщение о кредитах.
+Дополнительная генерация прекращена; платежи, смена ключа и поставщика не выполнялись.
+GET health probe к каталогу HF не подтверждает доступную платёжную квоту. По
+[документации HF](https://huggingface.co/docs/inference-providers/pricing) бесплатный план
+предоставляет $0.10 ежемесячных credits; для расхода сверх них нужна покупка credits.
+Фактический баланс и план аккаунта в этой диагностике не читались.
+
+Код runtime теперь проверяет non-stop finish reason до JSON/schema в review и dialogue,
+включая запрет публикации валидного JSON при `length`. Public `model_output_invalid` и
+`retryable=false` сохранены; для усечения добавлена безопасная точная server message.
+CLI различает review/dialogue completion. Проверки: 8 regression red→green, затем
+54 теста затронутого контура passed, Ruff и mypy 104 passed. Одноразовая test DB удалена.
+Эти code changes доступны локальной разработке; на VPS пока обновлён только профиль.
+UI продолжает выбирать общее сообщение по public code, поэтому точная server message
+не является отдельным пользовательским экраном. Дальнейший compatibility gate — T040.
+## Отдельный подготовленный деморежим, 2026-09-06
+
+По новому поручению пользователя добавлен `/demo/new`: автономная web-сборка с приватным
+runtime-пакетом документа, отчёта и ответов по замечаниям. Выбранный файл не анализируется;
+исходник готового примера явно назван, вызовов модели нет. Приложение сохраняет решения
+и диалоги отдельно для каждого замечания в текущей вкладке браузера. Основное приложение
+и настройки внешней модели сохраняются.
+
+Локально проверены: typecheck, lint, 100 unit tests и 2 E2E на production-сборке демо.
+E2E покрывают произвольную загрузку, PDF и страницу привязки, подготовленный ответ,
+решение, обновление, независимость замечаний, неизменность отчёта и блокировку
+случайного выхода в рабочий API. Отдельно проверен отказ до API при недоступном пакете.
+`nginx -t`, production Compose и его объединение с external-model overlay прошли
+проверку; redirect `/demo` возвращает относительный путь. Материалы клиента в Git и
+Docker image не добавлялись. Эти проверки относятся к механике демо, а не качеству LLM.
+
+При проверке опубликованной сборки обнаружена существовавшая проблема PDF.js:
+nginx 1.29.4 отдавал module worker `.mjs` как `application/octet-stream`, браузер
+отклонял загрузку и не рисовал PDF. Причина подтверждена browser console и отдельным
+контейнером с фактическим worker asset. Добавлена явная MIME-карта
+`application/javascript mjs`; `nginx -t` и проверка Content-Type проходят.
+
+## Принятый Numbat и деморежим: protected-path baseline, 2026-09-06
+
+По прямому поручению пользователя влить реквест и обновить сервер с новым дизайном
+во всех сценариях принятый UI и действующий деморежим объединены в commit
+`004c8b63020612f8aff70ecade8f9789476e5939`. Он закреплён как новый baseline
+стандартного protected-path gate без `allow-path`. Сравнение с предыдущим baseline
+`52d3b3c6eac4078e1922688d477ec343266860e0` подтвердило неизменность защищённых
+каталогов `client`, `implementation/poc`, `specs/001-review-data-spec-poc` и
+`specs/002-target-review-platform`. Перед фиксацией прошли 2 E2E production-сборки
+демо, 13 E2E решения/диалога/постоянного документа, 25 unit затронутого контура,
+TypeScript и ESLint. Обновлённый gate вернул `status=ok` и пустой список изменений;
+`tests/contract/test_protected_paths.py` прошёл без исключений. Эта запись
+подтверждает локальную интеграцию и проверки;
+результат обновления сервера фиксируется отдельно после развёртывания.

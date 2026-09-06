@@ -308,10 +308,15 @@ def test_review_history_is_chronological_and_paginated(
         assert malformed.json()["code"] == "invalid_cursor"
 
 
+@pytest.mark.parametrize(
+    "skill_package",
+    ["tests/fixtures/ml-integration/skill", "skills/review-data-spec"],
+)
 def test_unconfigured_deployment_can_select_probe_and_run_one_external_model(
     monkeypatch: pytest.MonkeyPatch,
     operator_settings,  # type: ignore[no-untyped-def]
     tmp_path: Path,
+    skill_package: str,
 ) -> None:
     _configure(
         monkeypatch,
@@ -326,6 +331,12 @@ def test_unconfigured_deployment_can_select_probe_and_run_one_external_model(
         initial = client.get(f"/v1/workspaces/{workspace_id}/model-profiles").json()["items"]
         assert len(initial) == 1
         assert initial[0]["availability"] == "unavailable"
+    with psycopg.connect(unconfigured.state.platform.database_url) as connection:
+        legacy_skill = connection.execute(
+            "SELECT * FROM skill_versions WHERE id=%s AND version='1.0.0'",
+            (operator_settings.skill_id,),
+        ).fetchone()
+    assert legacy_skill is not None
 
     external_id = f"production-test-{uuid4().hex}"
     profile = json.loads(
@@ -351,7 +362,7 @@ def test_unconfigured_deployment_can_select_probe_and_run_one_external_model(
     monkeypatch.setenv("REVIEW_MODEL_PROFILE_ID", external_id)
     monkeypatch.setenv("REVIEW_MODEL_PROFILE_PATH", str(profile_path))
     monkeypatch.setenv("REVIEW_MODEL_CREDENTIAL_PATH", str(credential_path))
-    monkeypatch.setenv("REVIEW_SKILL_PACKAGE_PATH", str(ROOT / "tests/fixtures/ml-integration/skill"))
+    monkeypatch.setenv("REVIEW_SKILL_PACKAGE_PATH", str(ROOT / skill_package))
 
     generation = FakeModelProvider(
         [
@@ -415,6 +426,11 @@ def test_unconfigured_deployment_can_select_probe_and_run_one_external_model(
         assert run.status_code == 202
         assert run.json()["state"] == "completed"
         assert generation.call_count == 1
+        if skill_package == "skills/review-data-spec":
+            skill_snapshot = run.json()["execution_snapshot"]["skill"]
+            assert skill_snapshot["id"] == operator_settings.skill_id
+            assert skill_snapshot["version"] == "1.0.1"
+            assert skill_snapshot["package_sha256"] != operator_settings.skill_package_sha256
 
         failed = anyio.run(
             partial(
@@ -428,3 +444,18 @@ def test_unconfigured_deployment_can_select_probe_and_run_one_external_model(
         assert [(item["id"], item["availability"]) for item in listed] == [
             (external_id, "unavailable")
         ]
+
+    with psycopg.connect(app.state.platform.database_url) as connection:
+        assert connection.execute(
+            "SELECT * FROM skill_versions WHERE id=%s AND version='1.0.0'",
+            (operator_settings.skill_id,),
+        ).fetchone() == legacy_skill
+
+    monkeypatch.setenv("REVIEW_COMPOSITION", "unconfigured")
+    monkeypatch.setenv("REVIEW_MODEL_PROFILE_ID", initial[0]["id"])
+    rollback = create_app(composition="unconfigured")
+    with TestClient(rollback) as client:
+        assert client.get("/health/ready").status_code == 200
+        assert client.get(
+            f"/v1/workspaces/{workspace_id}/model-profiles"
+        ).json()["items"] == initial
