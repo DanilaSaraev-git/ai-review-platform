@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useUploadDocument } from '@/api/generated/endpoints';
 import type { Document, PublicLimits } from '@/api/generated/model';
 import { isPayloadTooLarge, isProblem } from '@/api/errors';
-import { Button, Callout, Field, StatusBadge } from '@/components/ui';
+import { Button, StatusBadge } from '@/components/ui';
+import { Icon } from '@/components/ui/Icon';
 import { EXTRACTION_STATE_TEXT } from '@/lib/error-messages';
 import { formatBytes, formatMediaType } from '@/lib/format';
-import { SUPPORTED_EXTENSIONS, SUPPORTED_FORMATS_TEXT, validateUpload } from '../lib/validate-upload';
+import { SUPPORTED_EXTENSIONS, validateUpload } from '../lib/validate-upload';
 
 /**
  * Загрузка одного основного документа на проверку (FR-005).
@@ -28,6 +29,7 @@ export function DocumentUpload({
   hint?: string;
 }) {
   const [localError, setLocalError] = useState<string | null>(null);
+  const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useUploadDocument();
 
@@ -55,51 +57,35 @@ export function DocumentUpload({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <Field label={label} hint={hint} error={localError ?? serverError}>
-        {(id, describedBy) => (
-          <div>
-            <input
-              id={id}
-              ref={inputRef}
-              aria-describedby={describedBy}
-              type="file"
-              accept={SUPPORTED_EXTENSIONS.join(',')}
-              className="sr-only"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  void handleFile(file);
-                }
-              }}
-            />
-            {!document ? (
-              <label
-                htmlFor={id}
-                className="inline-flex min-h-9 cursor-pointer items-center rounded-[5px] border border-line-strong bg-surface px-3 py-1.5 text-[13px] font-semibold text-ink shadow-sm transition-[background-color,border-color,transform] duration-100 hover:border-ink-subtle hover:bg-surface-muted active:scale-[0.96]"
-              >
-                Выбрать документ
-              </label>
-            ) : null}
-          </div>
-        )}
-      </Field>
-
-      {hint !== 'PDF, Markdown или TXT.' ? (
-        <p className="text-xs text-ink-muted">Поддерживаются {SUPPORTED_FORMATS_TEXT}.</p>
-      ) : null}
-
-      {upload.isPending ? <Callout title="Загружаем документ…" tone="progress" /> : null}
-
-      {document ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-[5px] border border-line bg-surface-muted p-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold text-ink" title={document.filename}>{document.filename}</p>
-            <p className="mt-0.5 text-xs text-ink-muted">
-              {formatMediaType(document.media_type)} · {formatBytes(document.size_bytes)}
-            </p>
-          </div>
-          <div>
+    <div className="entry-upload-field">
+      <div className="entry-upload" aria-busy={upload.isPending}>
+        <input
+          id={id}
+          ref={inputRef}
+          aria-label={label}
+          aria-describedby={`${id}-hint${localError || serverError ? ` ${id}-error` : ''}`}
+          type="file"
+          accept={SUPPORTED_EXTENSIONS.join(',')}
+          className="sr-only"
+          disabled={upload.isPending}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+              void handleFile(file);
+              event.target.value = '';
+            }
+          }}
+        />
+        <span className="entry-file-icon"><Icon name="file-text" /></span>
+        <div className="entry-upload-copy">
+          <p className="entry-upload-title" title={document?.filename}>
+            {document?.filename ?? (label === 'Файл документа' ? 'Техническое задание' : 'Контекстный материал')}
+          </p>
+          <p id={`${id}-hint`} className="entry-upload-hint">
+            {document ? `${formatMediaType(document.media_type)} · ${formatBytes(document.size_bytes)}` : hint}
+          </p>
+          {upload.isPending ? <p role="status" className="entry-upload-hint">Загружаем документ…</p> : null}
+          {document ? (
             <StatusBadge
               tone={
                 document.extraction_state === 'completed'
@@ -111,16 +97,16 @@ export function DocumentUpload({
             >
               {EXTRACTION_STATE_TEXT[document.extraction_state]}
             </StatusBadge>
-          </div>
-          <Button
-            className="min-h-8"
-            onClick={() => {
-              inputRef.current?.click();
-            }}
-          >
-            Заменить документ
-          </Button>
+          ) : null}
         </div>
+        <Button disabled={upload.isPending} onClick={() => inputRef.current?.click()}>
+          {document ? 'Заменить документ' : 'Выбрать документ'}
+        </Button>
+      </div>
+      {localError ?? serverError ? (
+        <p id={`${id}-error`} role="alert" className="mt-2 text-xs text-accent">
+          {localError ?? serverError}
+        </p>
       ) : null}
     </div>
   );

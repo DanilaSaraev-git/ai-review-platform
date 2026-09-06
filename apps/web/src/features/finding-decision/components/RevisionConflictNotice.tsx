@@ -31,7 +31,7 @@ export function RevisionConflictNotice({
       <Callout tone="warn" title={conflict.title}>
         <p>{conflict.hint}</p>
         {current ? (
-          <dl className="mt-2 text-xs">
+          <dl className="mt-3 space-y-2 break-words text-xs leading-5">
             <div>
               <dt className="inline font-medium text-ink">Актуальный статус: </dt>
               <dd className="inline text-ink-muted">{DECISION_STATUS_TEXT[current.status]}</dd>

@@ -48,12 +48,14 @@ export function TurnComposer({
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <Field label="Уточняющий вопрос по замечанию" hint="Один вопрос за раз: следующий станет доступен после ответа.">
+    <div className="flex flex-col gap-3">
+      <Field label="Уточняющий вопрос по замечанию">
         {(id, describedBy) => (
           <TextArea
             id={id}
             aria-describedby={describedBy}
+            rows={3}
+            placeholder="Введите вопрос…"
             value={message}
             disabled={!dialogue.can_send_message}
             onChange={(event) => setMessage(event.target.value)}
@@ -81,7 +83,7 @@ export function TurnComposer({
         </Callout>
       ) : null}
 
-      <div>
+      <div className="flex justify-end">
         <Button variant="primary" disabled={!canSend} onClick={() => void submit()}>
           {isPending ? 'Отправляем…' : 'Отправить вопрос'}
         </Button>

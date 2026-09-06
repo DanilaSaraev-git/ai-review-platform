@@ -16,6 +16,8 @@ import { historyError } from './history-error';
 import { reportErrorRetry } from './report-error-retry';
 import { modelUnconfigured } from './model-unconfigured';
 import { reportLong } from './report-long';
+import { persistentDocument } from './persistent-document';
+import { pdfDocument } from './pdf-document';
 
 /**
  * Реестр именованных сценариев моков (contracts/msw-scenarios.md).
@@ -40,6 +42,8 @@ export const scenarios = {
   'report-error-retry': reportErrorRetry,
   'model-unconfigured': modelUnconfigured,
   'report-long': reportLong,
+  'persistent-document': persistentDocument,
+  'pdf-document': pdfDocument,
 } as const;
 
 export type ScenarioName = keyof typeof scenarios;

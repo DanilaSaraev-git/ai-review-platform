@@ -1,21 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
-import { isNotFound } from '@/api/errors';
 import { Button, Callout, Spinner } from '@/components/ui';
-import { NotFoundPage } from '@/app/NotFoundPage';
-import { useBootstrap } from '@/features/new-review/api/use-bootstrap';
-import { useReviewRun } from './api/use-review-run';
+import { useWorkspaceRun } from '@/features/review-report/components/ReviewWorkspaceLayout';
 import { RunStatePanel } from './components/RunStatePanel';
 
-/** Наблюдение за одним запуском (US1). */
+/** Run state occupies the right panel while the full document remains readable. */
 export function RunPage() {
-  const { runId = '' } = useParams();
-  const { workspaceId, error: bootstrapError, retry: retryBootstrap } = useBootstrap();
-  const { run, progress, isLoading, error, retry } = useReviewRun(workspaceId, runId);
+  const { runState: { run, progress, isLoading, error, retry } } = useWorkspaceRun();
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-
-  // Разрыв связи объясняется явно, а опрос возобновляется автоматически:
-  // контекст экрана при этом не теряется (краевой случай спецификации).
   useEffect(() => {
     const online = () => setIsOffline(false);
     const offline = () => setIsOffline(true);
@@ -27,49 +18,23 @@ export function RunPage() {
     };
   }, []);
 
-  if (bootstrapError && !workspaceId) {
-    return (
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
-        <Callout tone="danger" title="Не удалось загрузить рабочее пространство">
-          <Button className="mt-2" onClick={() => void retryBootstrap()}>Повторить</Button>
-        </Callout>
-      </main>
-    );
-  }
+  if (error && !run) return <div className="p-5"><Callout tone="danger" title="Не удалось загрузить состояние проверки">
+    <Button className="mt-2" onClick={() => void retry()}>Повторить</Button>
+  </Callout></div>;
+  if (isLoading || !run) return <div className="p-5"><Spinner label="Загружаем состояние проверки…" /></div>;
 
-  if (isNotFound(error)) {
-    return <NotFoundPage detail="Такой проверки нет. Возможно, ссылка устарела или идентификатор указан неверно." />;
-  }
-
-  if (error && !run) {
-    return (
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        <Callout tone="danger" title="Не удалось загрузить состояние проверки">
-          <Button className="mt-2" onClick={() => void retry()}>Повторить</Button>
-        </Callout>
-      </main>
-    );
-  }
-
-  if (isLoading || !run) {
-    return (
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        <Spinner label="Загружаем состояние проверки…" />
-      </main>
-    );
-  }
-
-  return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-      <nav aria-label="Навигация">
-        <Link className="text-xs font-medium text-ink-muted hover:text-accent" to="/">
-          ← Проверки
-        </Link>
-      </nav>
-      <h1 className="text-2xl font-semibold tracking-[-0.025em] text-ink">Проверка документа</h1>
-      <RunStatePanel run={run} progress={progress} isOffline={isOffline} />
-    </main>
-  );
+  const stages = ['Подготовка', 'Анализ документа', 'Проверка результата'];
+  const stage = ['queued', 'preparing'].includes(run.state) ? 0 : run.state === 'reviewing' ? 1 : 2;
+  return <div className="numbat-panel-scroll">
+    <div className="numbat-panel-heading"><h2>Проверка документа</h2></div>
+    {!['failed', 'cancelled'].includes(run.state) ? <ol className="mx-5 mb-5 flex flex-col gap-4 border-b border-line pb-5 text-[13px]" aria-label="Этапы проверки">
+      {stages.map((label, index) => <li key={label} className="flex items-center gap-3" aria-current={index === stage && run.state !== 'completed' ? 'step' : undefined}>
+        <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] ${index < stage || run.state === 'completed' ? 'border-line bg-surface-muted text-ink-muted' : index === stage ? 'border-accent bg-accent-tint text-accent' : 'border-line text-ink-subtle'}`} aria-hidden="true">{index < stage || run.state === 'completed' ? '✓' : index + 1}</span>
+        <span className={index === stage ? 'font-medium text-ink' : 'text-ink-muted'}>{label}</span>
+      </li>)}
+    </ol> : null}
+    <div className="px-5 pb-5"><RunStatePanel run={run} progress={progress} isOffline={isOffline} /></div>
+  </div>;
 }
 
 export default RunPage;

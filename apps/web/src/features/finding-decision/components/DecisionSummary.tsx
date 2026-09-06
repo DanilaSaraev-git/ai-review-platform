@@ -17,29 +17,29 @@ export function DecisionSummary({ decision }: { decision: HumanDecision | undefi
   }
 
   return (
-    <dl className="text-xs">
-      <div className="mb-1">
+    <dl className="space-y-3 text-xs leading-5">
+      <div>
         <dt className="sr-only">Статус</dt>
         <dd>
-          <StatusBadge tone="ok">{DECISION_STATUS_TEXT[decision.status]}</StatusBadge>
+          <StatusBadge tone={decision.status === 'needs_context' ? 'warn' : 'neutral'}>{DECISION_STATUS_TEXT[decision.status]}</StatusBadge>
         </dd>
       </div>
       {decision.reason ? (
         <div>
           <dt className="font-medium text-ink">Обоснование</dt>
-          <dd className="text-ink-muted">{decision.reason}</dd>
+          <dd className="mt-1 whitespace-pre-wrap break-words text-ink-muted">{decision.reason}</dd>
         </div>
       ) : null}
       {decision.resolution ? (
-        <div className="mt-1">
+        <div>
           <dt className="font-medium text-ink">Резолюция</dt>
-          <dd className="text-ink-muted">{decision.resolution}</dd>
+          <dd className="mt-1 whitespace-pre-wrap break-words text-ink-muted">{decision.resolution}</dd>
         </div>
       ) : null}
       {decision.actor ? (
-        <div className="mt-1">
+        <div>
           <dt className="font-medium text-ink">Сохранил</dt>
-          <dd className="text-ink-muted">
+          <dd className="mt-1 break-words text-ink-muted">
             {decision.actor.display_name}, {formatDateTime(decision.decided_at)}
           </dd>
         </div>

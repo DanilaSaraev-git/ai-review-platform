@@ -83,8 +83,8 @@ export function DecisionForm({
   const otherError = error && !isRevisionConflict(error) ? error : null;
 
   return (
-    <section aria-labelledby="decision-title" className="flex flex-col gap-3 border-b border-line bg-surface p-4">
-      <h2 id="decision-title" className="text-[15px] font-semibold text-ink">
+    <section aria-labelledby="decision-title" className="flex min-w-0 flex-col gap-4 border-b border-line bg-surface p-5">
+      <h2 id="decision-title" className="text-sm font-medium text-ink">
         Ваше решение
       </h2>
 
@@ -115,6 +115,7 @@ export function DecisionForm({
               <TextArea
                 id={id}
                 aria-describedby={describedBy}
+                rows={3}
                 value={values.reason}
                 onChange={(event) => {
                   setHasLocalEdits(true);
@@ -130,6 +131,7 @@ export function DecisionForm({
               <TextArea
                 id={id}
                 aria-describedby={describedBy}
+                rows={3}
                 value={values.resolution}
                 onChange={(event) => {
                   setHasLocalEdits(true);
@@ -155,9 +157,9 @@ export function DecisionForm({
         </Callout>
       ) : null}
 
-      {savedAt && !conflict.isConflict ? <p role="status" className="text-xs font-semibold text-ok">✓ Решение сохранено</p> : null}
+      {savedAt && !conflict.isConflict ? <p role="status" className="text-xs font-medium text-ok">✓ Решение сохранено</p> : null}
 
-      <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-line bg-surface py-3">
+      <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-line bg-surface pt-4 pb-1">
         {values.status !== 'unreviewed' ? (
           <Button variant="primary" disabled={isPending} onClick={() => void submit()}>
             {isPending ? 'Сохраняем…' : 'Сохранить решение'}
@@ -179,7 +181,7 @@ export function DecisionForm({
           </Button>
         ) : null}
         {decision?.actor ? (
-          <span className="text-xs text-ink-subtle">{decision.actor.display_name} · {formatDateTime(decision.decided_at)}</span>
+          <span className="basis-full break-words text-xs leading-5 text-ink-subtle">{decision.actor.display_name} · {formatDateTime(decision.decided_at)}</span>
         ) : null}
       </div>
     </section>

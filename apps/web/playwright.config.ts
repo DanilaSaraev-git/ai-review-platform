@@ -4,6 +4,8 @@ import { defineConfig, devices } from '@playwright/test';
 // Тот же набор спецификаций выполняется против реального backend,
 // если VITE_MSW_SCENARIO пуст, а VITE_API_BASE_URL указывает на API.
 const scenario = process.env.VITE_MSW_SCENARIO ?? 'happy-path';
+const port = Number(process.env.VITE_E2E_PORT ?? '5175');
+const baseURL = `http://localhost:${port}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -12,7 +14,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL,
     trace: 'on-first-retry',
   },
   projects: [
@@ -22,9 +24,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --port 5173 --strictPort',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    command: `npm run dev -- --port ${port} --strictPort`,
+    url: baseURL,
+    // Never reuse the real local backend frontend for MSW checks.
+    reuseExistingServer: false,
     env: {
       VITE_MSW_SCENARIO: scenario,
     },

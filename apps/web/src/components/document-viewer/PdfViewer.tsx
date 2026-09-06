@@ -1,92 +1,117 @@
 import { useEffect, useRef, useState } from 'react';
-import { Callout, Spinner } from '@/components/ui';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { Button, Callout, Spinner } from '@/components/ui';
 import type { AnchorMatch } from './use-anchor-highlight';
 
-/**
- * Просмотр PDF на PDF.js с переходом к странице замечания и подсветкой
- * по нормализованным координатам rects (решение R-09, FR-021).
- *
- * Координаты приходят в долях [0..1] от размера страницы, поэтому пересчёт
- * не зависит от масштаба отрисовки.
- */
-export function PdfViewer({ source, match }: { source: Blob | undefined; match: AnchorMatch | null }) {
+type PdfMatch = Extract<AnchorMatch, { kind: 'pdf' }>;
+
+function PdfPage({ document, pageNumber, match }: { document: PDFDocumentProxy; pageNumber: number; match: PdfMatch | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isRendering, setIsRendering] = useState(false);
-  const page = match && match.kind === 'pdf' ? match.page : 1;
+  const [error, setError] = useState(false);
+  const [isRendering, setIsRendering] = useState(true);
 
   useEffect(() => {
-    if (!source) {
-      return;
-    }
     let cancelled = false;
-
-    async function render(): Promise<void> {
+    let cancelRender: (() => void) | undefined;
+    async function render() {
       setIsRendering(true);
-      setError(null);
+      setError(false);
       try {
-        const pdfjs = await import('pdfjs-dist');
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-          'pdfjs-dist/build/pdf.worker.min.mjs',
-          import.meta.url,
-        ).toString();
-
-        const buffer = await source!.arrayBuffer();
-        const document = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
-        const pdfPage = await document.getPage(Math.min(page, document.numPages));
-        const viewport = pdfPage.getViewport({ scale: 1.4 });
+        const page = await document.getPage(pageNumber);
         const canvas = canvasRef.current;
         const context = canvas?.getContext('2d');
-        if (cancelled || !canvas || !context) {
-          return;
-        }
+        if (cancelled || !canvas || !context) return;
+        const viewport = page.getViewport({ scale: 1.4 });
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        await pdfPage.render({ canvas, canvasContext: context, viewport }).promise;
-
-        if (match?.kind === 'pdf') {
-          context.save();
-          context.fillStyle = 'rgba(251, 191, 36, 0.35)';
-          for (const rect of match.rects) {
-            const [x0 = 0, y0 = 0, x1 = 0, y1 = 0] = rect;
-            context.fillRect(
-              x0 * viewport.width,
-              y0 * viewport.height,
-              (x1 - x0) * viewport.width,
-              (y1 - y0) * viewport.height,
-            );
-          }
-          context.restore();
-        }
+        const task = page.render({ canvas, canvasContext: context, viewport });
+        cancelRender = () => task.cancel();
+        await task.promise;
       } catch {
-        if (!cancelled) {
-          setError('Не удалось отобразить PDF. Замечание показано без подсветки фрагмента.');
-        }
+        if (!cancelled) setError(true);
       } finally {
-        if (!cancelled) {
-          setIsRendering(false);
-        }
+        if (!cancelled) setIsRendering(false);
       }
     }
-
     void render();
-    return () => {
-      cancelled = true;
-    };
-  }, [source, page, match]);
+    return () => { cancelled = true; cancelRender?.(); };
+  }, [document, pageNumber]);
 
-  if (!source) {
-    return <Spinner label="Загружаем документ…" />;
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {isRendering ? <Spinner label={`Отрисовываем страницу ${page}…`} /> : null}
-      {error ? <Callout tone="warn" title={error} /> : null}
-      <p className="text-xs font-medium text-ink-muted">Страница {page}</p>
-      <div className="min-h-[28rem] flex-1 overflow-auto rounded-[6px] border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(23,32,51,0.05),0_12px_32px_rgba(23,32,51,0.06)] lg:min-h-full">
-        <canvas ref={canvasRef} className="mx-auto block" />
-      </div>
+  return <figure className="numbat-pdf-page" data-pdf-page={pageNumber}>
+    <figcaption>Страница {pageNumber}</figcaption>
+    {isRendering ? <Spinner label={`Отрисовываем страницу ${pageNumber}…`} /> : null}
+    {error ? <Callout tone="warn" title={`Не удалось отобразить страницу ${pageNumber}`} /> : null}
+    <div className="numbat-pdf-canvas">
+      <canvas ref={canvasRef} aria-label={`Страница ${pageNumber} исходного документа`} />
+      {match?.rects.map(([x0 = 0, y0 = 0, x1 = 0, y1 = 0], index) => <span key={index} className="numbat-pdf-highlight"
+        style={{ left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` }} />)}
     </div>
-  );
+  </figure>;
+}
+
+/** All PDF pages remain mounted; an anchor changes only the highlight and local scroll. */
+export function PdfViewer({ source, match }: { source: Blob | undefined; match: AnchorMatch | null }) {
+  const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
+  const [error, setError] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const pdfMatch = match?.kind === 'pdf' ? match : null;
+  const page = pdfMatch?.page;
+  const firstRect = pdfMatch?.rects[0];
+  const anchorTop = firstRect?.[1] ?? 0;
+
+  useEffect(() => {
+    if (!source) return;
+    let cancelled = false;
+    let destroy: (() => void) | undefined;
+    async function load() {
+      setError(false);
+      try {
+        const pdfjs = await import('pdfjs-dist');
+        if (cancelled) return;
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+        const buffer = await source!.arrayBuffer();
+        if (cancelled) return;
+        const task = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+        destroy = () => { void task.destroy(); };
+        const result = await task.promise;
+        if (!cancelled) setDocument(result);
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    }
+    void load();
+    return () => { cancelled = true; destroy?.(); };
+  }, [source, reloadKey]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    const target = container?.querySelector<HTMLElement>(`[data-pdf-page="${page}"]`);
+    if (!container || !target || !page) return;
+    // Page canvas dimensions settle asynchronously. Observe them only for a new selection.
+    const scrollToAnchor = () => {
+      const pageOffset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      container.scrollTop += pageOffset + target.clientHeight * anchorTop - container.clientHeight / 3;
+    };
+    scrollToAnchor();
+    const observer = new ResizeObserver(scrollToAnchor);
+    container.querySelectorAll('[data-pdf-page]').forEach((element) => observer.observe(element));
+    const stopTracking = () => observer.disconnect();
+    container.addEventListener('wheel', stopTracking, { once: true });
+    container.addEventListener('touchstart', stopTracking, { once: true });
+    container.addEventListener('keydown', stopTracking, { once: true });
+    return () => {
+      observer.disconnect();
+      container.removeEventListener('wheel', stopTracking);
+      container.removeEventListener('touchstart', stopTracking);
+      container.removeEventListener('keydown', stopTracking);
+    };
+  }, [document, page, anchorTop]);
+
+  if (error) return <Callout tone="warn" title="Не удалось отобразить PDF"><Button className="mt-2" onClick={() => setReloadKey((value) => value + 1)}>Повторить</Button></Callout>;
+  if (!document) return <Spinner label="Загружаем документ…" />;
+
+  return <div ref={scrollRef} className="numbat-document-scroll" data-testid="document-scroll" tabIndex={0} aria-label="Страницы исходного документа">
+    {Array.from({ length: document.numPages }, (_, index) => <PdfPage key={index + 1} document={document} pageNumber={index + 1} match={page === index + 1 ? pdfMatch : null} />)}
+  </div>;
 }

@@ -16,13 +16,13 @@ export function ProposedResolutionCard({
   onUse?: (text: string) => void;
 }) {
   return (
-    <div className="rounded border border-line bg-surface-muted p-3">
-      <h4 className="text-xs font-semibold text-ink">Предложенная моделью формулировка</h4>
-      <p className="mt-1 text-sm text-ink">{proposal.text}</p>
-      <p className="mt-1 text-xs text-ink-muted">{proposal.rationale}</p>
-      <p className="mt-2 text-xs text-ink-muted">{TRANSFER_HINT}</p>
+    <div className="rounded-lg bg-surface-muted p-4">
+      <h4 className="text-xs font-medium text-ink">Предложенная моделью формулировка</h4>
+      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-ink">{proposal.text}</p>
+      <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-ink-muted">{proposal.rationale}</p>
+      <p className="mt-3 text-xs leading-5 text-ink-muted">{TRANSFER_HINT}</p>
       {onUse ? (
-        <Button className="mt-2" onClick={() => onUse(proposal.text)}>
+        <Button className="mt-3" onClick={() => onUse(proposal.text)}>
           {TRANSFER_LABEL}
         </Button>
       ) : null}
