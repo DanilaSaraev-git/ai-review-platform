@@ -80,6 +80,35 @@ def test_identical_quotes_in_different_fragments_require_review() -> None:
     assert not can_carry_decision(old, new, same_sources=True, same_conditions=True)
 
 
+def test_reused_fragment_ids_across_documents_do_not_establish_lineage() -> None:
+    old, new = finding("same"), finding("same-new")
+    new["anchors"][0]["fragment_id"] = old["anchors"][0]["fragment_id"]
+    old["anchors"][0].update({"quote_start": 0, "quote_end": 9})
+    new["anchors"][0].update({"quote_start": 0, "quote_end": 9})
+    old["document_id"], new["document_id"] = "document-v1", "document-v2"
+
+    result = match_findings(
+        [old],
+        [new],
+        previous_evidence_keys={"same": ("source|fragment-v1|0:9",)},
+        current_evidence_keys={"same-new": ("source|fragment-v2|0:9",)},
+    )
+
+    assert not any(item.status == "persisting" for item in result)
+
+
+def test_same_occurrence_fallback_requires_same_document() -> None:
+    old, new = finding("same"), finding("same-new")
+    new["anchors"][0]["fragment_id"] = old["anchors"][0]["fragment_id"]
+    old["anchors"][0].update({"quote_start": 0, "quote_end": 9})
+    new["anchors"][0].update({"quote_start": 0, "quote_end": 9})
+    old["document_id"] = new["document_id"] = "stored-document"
+
+    result = match_findings([old], [new])
+
+    assert any(item.status == "persisting" for item in result)
+
+
 def test_context_text_role_and_order_are_material() -> None:
     sources = [
         {"role": "document", "ordinal": 0, "text": "A"},

@@ -48,6 +48,11 @@ def _canonical(value: Any) -> str:
 
 
 def _same_occurrence(previous: dict[str, Any], current: dict[str, Any]) -> bool:
+    previous_document_id = _text(previous.get("document_id"))
+    current_document_id = _text(current.get("document_id"))
+    if not previous_document_id or previous_document_id != current_document_id:
+        return False
+
     def locations(finding: dict[str, Any]) -> tuple[Any, ...]:
         return tuple(
             sorted(
@@ -131,9 +136,14 @@ def match_findings(
         if len(p_ids) == len(c_ids) == 1 and any(q for _, q in identity[-1]):
             previous_key = (previous_evidence_keys or {}).get(p_ids[0])
             current_key = (current_evidence_keys or {}).get(c_ids[0])
-            if (previous_key and previous_key == current_key) or _same_occurrence(
+            verified_maps_supplied = (
+                previous_evidence_keys is not None and current_evidence_keys is not None
+            )
+            verified = bool(previous_key and previous_key == current_key)
+            same_stored_occurrence = not verified_maps_supplied and _same_occurrence(
                 p_by_id[p_ids[0]], c_by_id[c_ids[0]]
-            ):
+            )
+            if verified or same_stored_occurrence:
                 matches[c_ids[0]] = p_ids[0]
     used = set(matches.values())
     suggested: set[str] = set()
@@ -181,7 +191,7 @@ def can_carry_decision(
         same_sources
         and same_conditions
         and bool(_anchors(previous_finding))
-        and (evidence_unchanged or _same_occurrence(previous_finding, current_finding))
+        and evidence_unchanged
         and _decision_basis(previous_finding) == _decision_basis(current_finding)
     )
 
