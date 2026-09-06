@@ -13,6 +13,12 @@
 Штатные профиль/секрет и model-enable применяются после сборки. Проверки ограничены offline
 transport, GET каталога и инфраструктурой; model smoke и прогоны документов не выполняются.
 
+Диагностика после пользовательского запуска: закрытые коды semantic validation сохраняются
+в существующем безопасном `error.message`, публичный `error.code` остаётся `validation_failed`.
+UI продолжает выбирать тексты по публичному коду. Проверки — синтетические mapper fixtures,
+локальный fake provider с отдельной PostgreSQL и UI tests; реальная модель не вызывается.
+Потеря диагностики воспроизводится отдельно от неизвестной причины исходного ответа.
+
 - **Language/Version**: TypeScript 6.0.3, React 19.2.8, Node 24; Python 3.14.7.
 - **Primary Dependencies**: Vite 8, TanStack Query, Orval, Radix, FastAPI, existing runtime adapters.
 - **Storage**: PostgreSQL, POSIX artifacts; изменение схемы не запланировано.

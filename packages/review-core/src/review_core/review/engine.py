@@ -8,7 +8,11 @@ from uuid import uuid4
 
 from review_core.ports.models import GenerationRequest, JsonValue, ModelProfileSnapshot
 from review_core.review.prompt import build_review_generation_request
-from review_core.review.validation import resolve_unique_quote_offset, validate_report
+from review_core.review.validation import (
+    ReviewSemanticValidationError,
+    resolve_unique_quote_offset,
+    validate_report,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,8 +44,7 @@ class MappingContext:
 
     def __post_init__(self) -> None:
         if not all(
-            value.strip()
-            for value in (self.run_id, self.report_id, self.created_at, self.primary_source_id)
+            value.strip() for value in (self.run_id, self.report_id, self.created_at, self.primary_source_id)
         ):
             raise ValueError("mapping context identity is required")
         if not self.target_fragment_ids:
@@ -52,35 +55,33 @@ class MappingContext:
             raise ValueError("mapping context fragment key does not match its identity")
 
 
-def _require_exact_fields(value: Mapping[str, Any], fields: set[str], *, label: str) -> None:
+def _require_exact_fields(value: Mapping[str, Any], fields: set[str]) -> None:
     if set(value) != fields:
-        raise ValueError(f"compact {label} fields do not match the model-output contract")
+        raise ReviewSemanticValidationError("compact_fields_invalid")
 
 
 def _validate_compact_shape(value: Mapping[str, Any]) -> None:
-    _require_exact_fields(value, {"summary", "coverage", "findings", "limitations"}, label="output")
+    _require_exact_fields(value, {"summary", "coverage", "findings", "limitations"})
     coverage = value.get("coverage")
     findings = value.get("findings")
     if not isinstance(coverage, Mapping) or not isinstance(findings, list):
-        raise ValueError("compact output has an invalid coverage or findings shape")
+        raise ReviewSemanticValidationError("compact_output_shape_invalid")
     _require_exact_fields(
         coverage,
         {"reviewed_fragment_ids", "unreviewed", "source_gaps"},
-        label="coverage",
     )
     if not all(isinstance(coverage.get(key), list) for key in coverage):
-        raise ValueError("compact coverage fields must be arrays")
+        raise ReviewSemanticValidationError("compact_coverage_shape_invalid")
     for item in coverage["unreviewed"]:
         if not isinstance(item, Mapping):
-            raise ValueError("compact unreviewed entry must be an object")
-        _require_exact_fields(item, {"fragment_id", "reason"}, label="unreviewed entry")
+            raise ReviewSemanticValidationError("compact_unreviewed_shape_invalid")
+        _require_exact_fields(item, {"fragment_id", "reason"})
     for item in coverage["source_gaps"]:
         if not isinstance(item, Mapping):
-            raise ValueError("compact source gap must be an object")
+            raise ReviewSemanticValidationError("compact_source_gap_shape_invalid")
         _require_exact_fields(
             item,
             {"source_id", "fragment_id", "code", "reason"},
-            label="source gap",
         )
     finding_fields = {
         "kind",
@@ -94,18 +95,18 @@ def _validate_compact_shape(value: Mapping[str, Any]) -> None:
     }
     for finding in findings:
         if not isinstance(finding, Mapping):
-            raise ValueError("compact finding must be an object")
-        _require_exact_fields(finding, finding_fields, label="finding")
+            raise ReviewSemanticValidationError("compact_finding_shape_invalid")
+        _require_exact_fields(finding, finding_fields)
         priority = finding["priority"]
         if not isinstance(priority, Mapping):
-            raise ValueError("compact priority must be an object")
-        _require_exact_fields(priority, {"level", "rationale"}, label="priority")
+            raise ReviewSemanticValidationError("compact_priority_shape_invalid")
+        _require_exact_fields(priority, {"level", "rationale"})
         if not isinstance(finding["anchors"], list) or not isinstance(finding["scope"], list):
-            raise ValueError("compact finding anchors and scope must be arrays")
+            raise ReviewSemanticValidationError("compact_finding_basis_shape_invalid")
         for anchor in finding["anchors"]:
             if not isinstance(anchor, Mapping):
-                raise ValueError("compact anchor must be an object")
-            _require_exact_fields(anchor, {"source_id", "fragment_id", "quote"}, label="anchor")
+                raise ReviewSemanticValidationError("compact_anchor_shape_invalid")
+            _require_exact_fields(anchor, {"source_id", "fragment_id", "quote"})
 
 
 def build_unbound_coverage(
@@ -202,12 +203,12 @@ class ReviewEngine:
                 fragment_id = compact_anchor["fragment_id"]
                 fragment = context.fragments.get(fragment_id)
                 if fragment is None:
-                    raise ValueError("anchor references an unknown fragment")
+                    raise ReviewSemanticValidationError("anchor_fragment_unknown")
                 if compact_anchor["source_id"] != fragment.source_id:
-                    raise ValueError("anchor source identity mismatch")
+                    raise ReviewSemanticValidationError("anchor_source_mismatch")
                 quote = compact_anchor["quote"]
                 if not isinstance(quote, str) or not quote:
-                    raise ValueError("anchor quote is required")
+                    raise ReviewSemanticValidationError("anchor_quote_invalid")
                 start = resolve_unique_quote_offset(fragment.text, quote)
                 anchors.append(
                     {

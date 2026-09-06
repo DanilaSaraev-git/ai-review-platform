@@ -4,6 +4,7 @@ import logging
 
 import pytest
 from review_core.review.prompt import build_generation_request
+from review_runtime.ml_runtime import LLMReviewRuntime, _SemanticValidationFailed
 from review_runtime.models.config import EndpointPolicy
 from review_runtime.security.logging import SafeLogFilter, safe_fields
 
@@ -53,3 +54,18 @@ def test_safe_fields_drop_prompt_response_and_secret_payloads() -> None:
     )
 
     assert fields == {"request_id": "request-1", "code": "model_unavailable"}
+
+
+@pytest.mark.parametrize("purpose", ["review", "dialogue"])
+@pytest.mark.parametrize("with_cause", [False, True])
+def test_unknown_semantic_failure_does_not_expose_exception_text(purpose: str, with_cause: bool) -> None:
+    error = _SemanticValidationFailed("synthetic-private-wrapper")
+    if with_cause:
+        error.__cause__ = ValueError("synthetic-private-provider-content")
+    mapper = LLMReviewRuntime._failure if purpose == "review" else LLMReviewRuntime._dialogue_failure
+
+    failure = mapper(error)
+
+    assert failure.code == "validation_failed"
+    assert failure.safe_message == "The model response evidence failed validation."
+    assert failure.retryable is False

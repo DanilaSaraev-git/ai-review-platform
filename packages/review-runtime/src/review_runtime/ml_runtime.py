@@ -40,6 +40,7 @@ from review_core.ports.models import (
 )
 from review_core.review.engine import MappingContext, ReviewEngine, ReviewFragment
 from review_core.review.prompt import PromptBudgetExceeded
+from review_core.review.validation import ReviewSemanticValidationError
 
 from review_runtime.composition import ModelRuntime
 from review_runtime.config.model_profiles import ModelProfile, profile_config_digest
@@ -73,6 +74,14 @@ class _ModelOutputInvalid(ValueError):
 
 class _SemanticValidationFailed(ValueError):
     pass
+
+
+def _semantic_failure(error: _SemanticValidationFailed) -> ExecutionFailure:
+    cause = error.__cause__
+    message = "The model response evidence failed validation."
+    if isinstance(cause, ReviewSemanticValidationError):
+        message = f"The model response evidence failed validation ({cause.code})."
+    return ExecutionFailure("validation_failed", message, False)
 
 
 class _ReviewOperationStorage(
@@ -670,9 +679,7 @@ class LLMReviewRuntime:
                 error.retryable,
             )
         if isinstance(error, _SemanticValidationFailed):
-            return ExecutionFailure(
-                "validation_failed", "The model response evidence failed validation.", False
-            )
+            return _semantic_failure(error)
         if isinstance(error, (_ModelOutputInvalid, ValueError, json.JSONDecodeError)):
             return ExecutionFailure(
                 "model_output_invalid", "The model response failed validation.", False
@@ -950,9 +957,7 @@ class LLMReviewRuntime:
             code = public_model_error_code(error, purpose="review")
             return ExecutionFailure(code, "The model request could not be completed.", error.retryable)
         if isinstance(error, _SemanticValidationFailed):
-            return ExecutionFailure(
-                "validation_failed", "The model response evidence failed validation.", False
-            )
+            return _semantic_failure(error)
         if isinstance(error, (_ModelOutputInvalid, ValueError)):
             return ExecutionFailure(
                 "model_output_invalid", "The model response failed validation.", False
