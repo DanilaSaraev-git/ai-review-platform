@@ -47,7 +47,7 @@ def test_pdf_has_cyrillic_current_decision_and_escaped_input() -> None:
         text = "\n".join(page.extract_text() or "" for page in pdf.pages)
     assert "Синтетический поток заказов" in text
     assert "Нужно уточнить время <запуска> & часовой пояс" in text
-    assert "Подтверждено" in text
+    assert "Принято к доработке" in text
     assert "2026-09-06T11:00:00Z" in text
     assert value == before
 
