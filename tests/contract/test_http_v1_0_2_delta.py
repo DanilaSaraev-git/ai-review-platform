@@ -73,6 +73,7 @@ def test_only_allowlisted_contract_files_changed_from_v1_0_1() -> None:
         "contracts/review-platform/v1/swagger/swagger-ui-bundle.js.LICENSE.txt",
         "contracts/review-platform/v1/examples/http/README.md",
         "contracts/review-platform/v1/examples/http/compare-review-cycle.json",
+        "contracts/review-platform/v1/examples/http/create-dialogue-turn.attachments.json",
         "contracts/review-platform/v1/examples/http/document-families.json",
         "contracts/review-platform/v1/examples/http/document-family-version.json",
         "contracts/review-platform/v1/examples/http/document-family-versions.json",
@@ -83,6 +84,7 @@ def test_only_allowlisted_contract_files_changed_from_v1_0_1() -> None:
         "contracts/review-platform/v1/examples/http/review-cycle.partial.json",
         "contracts/review-platform/v1/examples/http/review-cycle.persisting.json",
         "contracts/review-platform/v1/examples/http/review-cycle.unavailable.json",
+        "contracts/review-platform/v1/examples/http/review-completion.json",
     }
     assert set(changed.splitlines()) <= allowed
 
