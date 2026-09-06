@@ -22,6 +22,8 @@
 
 Доменная терминология: [docs/domain-glossary.md](docs/domain-glossary.md). Архитектурный baseline: [docs/architecture/target-product.md](docs/architecture/target-product.md). Публичный контракт: [contracts/review-platform/v1/README.md](contracts/review-platform/v1/README.md). Настройка model runtime: [docs/operations/configuration.md](docs/operations/configuration.md).
 
+Опциональный гостевой доступ без регистрации описан в [SpecKit 008](specs/008-guest-access/spec.md), [плане](specs/008-guest-access/plan.md), [задачах](specs/008-guest-access/tasks.md) и [evidence](specs/008-guest-access/evidence.md). [Guest-v1](contracts/review-platform/guest-v1/README.md) сохраняет форматы данных trusted v1 и отдельно задаёт cookie, изоляцию и лимиты хранения; [ADR-0002](docs/adr/0002-optional-guest-workspaces.md) уточняет границу deployment. Статус реального выпуска ведётся в evidence.
+
 ## Локальная разработка
 
 Из корня технического checkout выполните `./dev start`, затем откройте [http://localhost:5173](http://localhost:5173). Web работает с Vite HMR, API — с `uvicorn --reload`, PostgreSQL хранит данные в отдельном локальном volume. `./dev stop` останавливает этот стенд и сохраняет документы и отчёты; `./dev status` и `./dev logs` показывают состояние и журналы.

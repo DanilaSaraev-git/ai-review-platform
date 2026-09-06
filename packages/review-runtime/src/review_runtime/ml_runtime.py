@@ -279,6 +279,7 @@ class LLMReviewRuntime:
         model_profile: ModelProfile,
         skill: ResolvedSkill,
         root: Path,
+        model_call_semaphore: Any = None,
     ) -> None:
         self.platform = platform
         self.model_runtime = model_runtime
@@ -309,8 +310,10 @@ class LLMReviewRuntime:
         self.dialogue_engine = DialogueEngine()
         import anyio
 
-        self._model_call_semaphore = anyio.Semaphore(
-            self.platform.runtime_policy.budgets.max_parallel_model_calls
+        self._model_call_semaphore = (
+            model_call_semaphore
+            if model_call_semaphore is not None
+            else anyio.Semaphore(self.platform.runtime_policy.budgets.max_parallel_model_calls)
         )
         self._recording_adapter = _ConcurrencyLimitedAdapter(
             _RecordingAdapter(
@@ -334,6 +337,28 @@ class LLMReviewRuntime:
         )
         self._dialogue_task_group: Any = None
         self._dialogue_events: dict[str, Any] = {}
+
+    def for_platform(self, platform: PostgresReviewPlatform) -> LLMReviewRuntime:
+        """Bind a separate execution owner to a namespace, borrowing model resources."""
+        return LLMReviewRuntime(
+            platform=platform,
+            model_runtime=ModelRuntime(adapter=self.model_runtime.adapter),
+            model_profile=self.model_profile,
+            skill=self.skill,
+            root=self.root,
+            model_call_semaphore=self._model_call_semaphore,
+        )
+
+    @property
+    def has_pending_work(self) -> bool:
+        return self._coordinator.has_pending_work or bool(self._dialogue_events)
+
+    async def wait_idle(self) -> None:
+        """Keep detached review/dialogue work alive after its HTTP waiter leaves."""
+        while self.has_pending_work:
+            await self._coordinator.wait_idle()
+            for event in tuple(self._dialogue_events.values()):
+                await event.wait()
 
     async def __aenter__(self) -> LLMReviewRuntime:
         await self.model_runtime.__aenter__()

@@ -60,6 +60,25 @@ class Actor(Base):
     )
 
 
+class GuestSession(Base):
+    __tablename__ = "guest_sessions"
+    token_sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    deployment_id: Mapped[str] = mapped_column(String(36), ForeignKey("deployments.id"))
+    organization_id: Mapped[str] = mapped_column(String(36))
+    workspace_id: Mapped[str] = mapped_column(String(36))
+    actor_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id", "actor_id"],
+            ["actors.organization_id", "actors.workspace_id", "actors.id"],
+        ),
+        UniqueConstraint("deployment_id", "organization_id", "workspace_id"),
+    )
+
+
 class Artifact(Base):
     __tablename__ = "artifacts"
     organization_id: Mapped[str] = mapped_column(primary_key=True)

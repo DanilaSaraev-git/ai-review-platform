@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
@@ -1006,6 +1006,33 @@ class PostgresReviewPlatform:
             report_validator=self.report_validator,
             dialogue_policy=self.dialogue_policy,
         )
+
+    def for_guest(self, workspace_id: str, actor_id: str) -> PostgresReviewPlatform:
+        """Create an independent namespace facade without taking deployment ownership."""
+        guest_workspace_id, guest_actor_id = UUID(workspace_id), UUID(actor_id)
+        if str(guest_workspace_id) == self.workspace_id:
+            raise ValueError("guest workspace cannot be the configured private workspace")
+        settings = self.settings.model_copy(
+            update={
+                "workspace_id": guest_workspace_id,
+                "workspace_name": "Мои документы",
+                "actor_id": guest_actor_id,
+                "actor_display_name": "Гость",
+            }
+        )
+        return PostgresReviewPlatform(
+            self.executor,
+            settings,
+            model_profiles=tuple(self.configured_model_profiles.values()),
+            resolved_skill=self.resolved_skill,
+            runtime_policy=self.runtime_policy,
+            semantic_execution_available=self.semantic_execution_available,
+            composition=self.composition,
+        )
+
+    def reconcile_interrupted(self) -> None:
+        """Reconcile this namespace while the caller holds deployment ownership at startup."""
+        self._reconcile_interrupted()
 
     def startup(self) -> None:
         """Own one deployment process and fail interrupted work without regenerating it."""
@@ -2316,7 +2343,7 @@ class PostgresReviewPlatform:
             connection.close()
 
     def report(self, workspace_id: str, run_id: str) -> tuple[bytes, str]:
-        self._workspace(workspace_id)
+        self.get_run(workspace_id, run_id)
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT r.etag,a.store_key FROM review_reports r JOIN artifacts a ON a.organization_id=r.organization_id AND a.workspace_id=r.workspace_id AND a.id=r.artifact_id WHERE r.organization_id=%s AND r.workspace_id=%s AND r.run_id=%s",

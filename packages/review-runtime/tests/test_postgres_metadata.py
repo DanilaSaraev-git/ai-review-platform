@@ -7,6 +7,7 @@ def test_metadata_covers_every_durable_entity_group() -> None:
         "organizations",
         "workspaces",
         "actors",
+        "guest_sessions",
         "artifacts",
         "document_versions",
         "document_extractions",
