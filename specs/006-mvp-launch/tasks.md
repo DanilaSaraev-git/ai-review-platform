@@ -98,4 +98,4 @@ SpecKit baseline → visual → backend semantics → functional web → deploym
 Пользователь выбрал DeepSeek, запретил пробные генерации и поручил сразу запустить сервер.
 
 - [X] T038 Добавить профиль DeepSeek V4 Flash, общий Yandex auth для generation/probe и сохранение ключа вне Git; проверить конфигурацию и offline transport без внешних генераций.
-- [ ] T039 Выпустить обновление на базе текущего production release, сохранить предыдущие model files, включить профиль Яндекса и проверить только GET каталога и инфраструктурную readiness.
+- [X] T039 Выпустить обновление на базе текущего production release, сохранить предыдущие model files, включить профиль Яндекса и проверить только GET каталога и инфраструктурную readiness.

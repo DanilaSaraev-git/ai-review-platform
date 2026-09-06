@@ -1,7 +1,7 @@
 # Evidence: 006 MVP launch
 
 Статус: MVP реализован и развёрнут. Дата: 2026-09-05/06. Baseline: `2a61354`.
-Рабочий release: `5a3dae85d5dc6f3d5538969b3ddee810de5c5b02`.
+Рабочий release: `8913a73e2ff7beef407e6b745d1d84216625a600`.
 Адрес: [https://135.106.195.62](https://135.106.195.62). Доступ защищён общим gateway;
 credentials переданы владельцу через приватный локальный файл вне репозитория.
 
@@ -16,8 +16,10 @@ credentials переданы владельцу через приватный л
 ## Границы готовности
 
 Web, runtime, protected gateway, restore, фактический rollback, restart и timers проверены.
-Kimi K2 подключена через Hugging Face/Novita; реальный синтетический review→dialogue smoke
-на публичном серверном API прошёл. Профиль и порядок эксплуатации описаны в
+Подключена DeepSeek V4 Flash через Yandex AI Studio; объявленный GET probe подтвердил
+доступность модели. Генерации и прогоны документов с новым провайдером не выполнялись
+по прямому поручению пользователя. Исторический smoke Kimi ниже относится к прежней
+конфигурации и не подтверждает совместимость ответов DeepSeek. Профиль и порядок эксплуатации описаны в
 [руководстве оператора](../../docs/operations/deployment.md).
 Предметное качество LLM и оценка дизайна пользователем не проверялись. MVP рассчитан на одну
 доверенную группу с общим workspace/actor. Постоянное автоматическое внешнее хранилище
@@ -329,3 +331,42 @@ nginx 1.29.4 отдавал module worker `.mjs` как `application/octet-strea
 отклонял загрузку и не рисовал PDF. Причина подтверждена browser console и отдельным
 контейнером с фактическим worker asset. Добавлена явная MIME-карта
 `application/javascript mjs`; `nginx -t` и проверка Content-Type проходят.
+
+## DeepSeek через Yandex AI Studio — фактическое подключение, 2026-09-06
+
+По поручению пользователя T038–T039 выполнены без пробных генераций и запусков документов.
+Из точного предыдущего production commit `33d94299150259a853bf47566fb77c59655ac4b8`
+собран и установлен release `8913a73e2ff7beef407e6b745d1d84216625a600`.
+Current/previous указывают на эти версии; promotion выполнил predeploy backup, сборку,
+миграции и проверку инфраструктуры. Постоянные volumes сохранены.
+Копия `20260906T115450Z` сохранена также в приватном локальном каталоге владельца
+вне VPS и Git; SHA-256 dump/archive и permissions 0700/0600 проверены.
+Отдельный restore drill для этого набора не выполнялся.
+
+Активен профиль `yandex-deepseek-v4-flash` 1.0.0 с моделью
+`gpt://<folder_id>/deepseek-v4-flash/latest`. В фактическом ответе GET каталога Яндекса
+присутствует суффикс `/latest`; профиль использует именно этот идентификатор.
+Одинаковая авторизация `Api-Key` и `OpenAI-Project` применяется в generation adapter
+и негенеративном probe. Ключ и конкретный каталог сохраняются вне Git; временная копия
+ключа в `/root` после успешного включения удалена.
+
+Перед переключением старые profile, API key и model env сохранены в приватный каталог
+`/opt/ai-review-state/model-backups/20260906T115706Z-before-yandex` с режимами 0700/0600.
+Порядок возврата старой модели описан в [руководстве оператора](../../docs/operations/deployment.md).
+
+Проверки текущего изменения:
+
+- 31 offline transport/availability test, Ruff и mypy изменённых runtime modules — passed.
+- Рендер профиля, canonical `ModelProfile` validation, shell syntax и проверка patch — passed.
+- GET `/v1/models` с российского сервера вернул HTTP 200 и точный выбранный ID;
+  штатный `model-enable` сохранил `available` в 2026-09-06 11:57:41 UTC.
+- Полный deployment gate после включения: gateway, TLS, origin policy, private services
+  и model mode — PASS; API, proxy, gateway и PostgreSQL healthy.
+- Backup, certificate renewal и model probe timers активны. Внешний HTTPS без credentials
+  вернул ожидаемый 401 с системной проверкой сертификата; использован прямой интерфейс Mac.
+
+Лимит ответа в профиле — 16 384 токена, включая reasoning по контракту провайдера;
+это заданный бюджет приложения, не заявленный максимум модели. Сохранён режим `plain_json`
+с проверкой ответа приложением. Генерация JSON, review/dialogue compatibility и предметное
+качество DeepSeek ещё не проверены. Закреплённый checkpoint за `latest` неизвестен.
+Грант 4 000 ₽ указан пользователем; баланс и фактические списания в этой работе не проверялись.
