@@ -79,6 +79,22 @@ class GuestSession(Base):
     )
 
 
+class GuestUploadReservation(Base):
+    __tablename__ = "guest_upload_reservations"
+    organization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(36))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    lease_key: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("size_bytes > 0", name="guest_reservation_positive_size"),
+        ForeignKeyConstraint(
+            ["organization_id", "workspace_id"], ["workspaces.organization_id", "workspaces.id"]
+        ),
+    )
+
+
 class Artifact(Base):
     __tablename__ = "artifacts"
     organization_id: Mapped[str] = mapped_column(primary_key=True)

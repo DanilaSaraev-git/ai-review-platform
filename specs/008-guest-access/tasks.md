@@ -9,7 +9,7 @@
 - [X] T003 Подключить session bootstrap, same-origin проверки и request-scoped platform/runtime ко всем предметным API routes в `apps/api/`.
 - [X] T004 Реализовать `PostgresReviewPlatform.for_guest`, registry с single-flight/idle cleanup, общий model client/semaphore и reconciliation зарегистрированных пространств.
 - [X] T005 Вернуть 404 для foreign/unknown report ID; сохранить 409 для собственного неопубликованного отчёта.
-- [X] T006 Добавить `guest_storage.py`: личные и общие квоты загрузок, резерв диска, сериализацию конкурентного сохранения.
+- [X] T006 Добавить `guest_storage.py`: личные и общие квоты загрузок, резерв диска. Уточнение от 2026-09-06: короткое резервирование вместо сериализации разбора и сохранения, миграция `0005`, освобождение при ошибке и потере соединения.
 - [X] T007 Настроить guest toggle gateway/API, приватный `/demo` и fail-closed проверку согласованности режимов в `deploy/compose/`.
 - [X] T008 Добавить lifecycle unit tests и real PostgreSQL/gateway integration сценарии двух гостей в соответствующие test suites.
 - [X] T009 Оформить ADR, глоссарий, AGENTS, README, spec/plan/tasks/evidence; связать опциональный guest-v1 с trusted default.
