@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { Button, Callout, Spinner } from '@/components/ui';
 import { useWorkspaceRun } from '@/features/review-report/components/ReviewWorkspaceLayout';
 import { RunStatePanel } from './components/RunStatePanel';
+import { CancelRunControl } from './components/CancelRunControl';
+import { isDemoMode } from '@/app/demo-mode';
 
 /** Run state occupies the right panel while the full document remains readable. */
 export function RunPage() {
-  const { runState: { run, progress, isLoading, error, retry } } = useWorkspaceRun();
+  const { workspaceId, runState: { run, progress, isLoading, error, retry } } = useWorkspaceRun();
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   useEffect(() => {
     const online = () => setIsOffline(false);
@@ -33,7 +35,9 @@ export function RunPage() {
         <span className={index === stage ? 'font-medium text-ink' : 'text-ink-muted'}>{label}</span>
       </li>)}
     </ol> : null}
-    <div className="px-5 pb-5"><RunStatePanel run={run} progress={progress} isOffline={isOffline} /></div>
+    <div className="px-5 pb-5"><RunStatePanel run={run} progress={progress} isOffline={isOffline} />
+      {!isDemoMode ? <CancelRunControl key={run.id} workspaceId={workspaceId} run={run} isOffline={isOffline} /> : null}
+    </div>
   </div>;
 }
 
