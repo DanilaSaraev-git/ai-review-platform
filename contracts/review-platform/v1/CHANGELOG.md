@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-06 — unified review cycle
+
+- Добавлен POST review-cycle/complete с expected_revision. Завершение требует полного анализа и разрешённых вопросов; actor/time и digest состояния сохраняются отдельно от отчёта в optional completion. Изменение решений делает завершение неактуальным.
+- CreateDialogueTurn и DialogueTurn поддерживают optional attachment_document_ids (до 10 уникальных документов своего workspace). Исходники входят в контекст диалога, сохраняются при retry и не меняют опубликованный отчёт.
+- Старые запросы и snapshots без новых полей остаются допустимыми. Guest-v1 и static OpenAPI обновлены из канонического контракта.
+
 ## 2026-09-06 — v1.1.0 document review cycle
 
 - Добавлены ресурсы `document-families`: карточка документа, список версий и запусков, разрешение прежнего `document_id` в семейство. `document_id` по-прежнему обозначает неизменяемую версию; прошлые загрузки не объединяются по имени.

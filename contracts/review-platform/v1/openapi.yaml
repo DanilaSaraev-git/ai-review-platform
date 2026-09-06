@@ -625,6 +625,33 @@ paths:
                 $ref: '#/components/schemas/ReviewCycle'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/workspaces/{workspaceId}/review-runs/{runId}/review-cycle/complete:
+    parameters:
+    - $ref: '#/components/parameters/WorkspaceId'
+    - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Document review cycle]
+      operationId: completeReviewCycle
+      summary: Explicitly complete a fully reviewed cycle; later decision changes invalidate completion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompareReviewCycle'
+      responses:
+        '200':
+          description: Completed cycle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewCycle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /v1/workspaces/{workspaceId}/review-runs/{runId}/review-cycle/compare:
     parameters:
     - $ref: '#/components/parameters/WorkspaceId'
@@ -1439,6 +1466,11 @@ components:
         state: {enum: [queued, generating, completed, failed]}
         actor:
           $ref: "#/components/schemas/Actor"
+        attachment_document_ids:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: {type: string, format: uuid}
         member_message: {type: string, minLength: 1, maxLength: 8000}
         created_at: {type: string, format: date-time}
         assistant_response:
@@ -1501,6 +1533,12 @@ components:
       additionalProperties: false
       required: [message, expected_revision]
       properties:
+        attachment_document_ids:
+          description: Immutable documents in this workspace, supplied as additional dialogue sources; retained on retry.
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: {type: string, format: uuid}
         message: {type: string, minLength: 1, maxLength: 8000}
         expected_revision: {type: integer, minimum: 0}
 
@@ -1788,6 +1826,10 @@ components:
           - ready
           - unavailable
         revision: *id004
+        completion:
+          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/ReviewCompletion'
         compared_at: *id005
         entries:
           type: array
@@ -1805,6 +1847,15 @@ components:
         decisions, manual links or fix confirmations. Unavailable comparison does not
         make a completed report unavailable. Incomplete or changed conditions cannot establish
         disappearance; not_detected never means resolved.
+    ReviewCompletion:
+      type: object
+      additionalProperties: false
+      required: [completed_at, actor, state_digest]
+      properties:
+        completed_at: {type: string, format: date-time}
+        actor:
+          $ref: '#/components/schemas/Actor'
+        state_digest: {type: string}
     CompareReviewCycle:
       type: object
       additionalProperties: false
