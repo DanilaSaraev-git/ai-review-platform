@@ -17,11 +17,10 @@ export function FindingPage() {
   const { workspaceId } = useWorkspaceRun();
   const { report, isLoading, isUnavailable, isNotFound, error, retry } = useReviewReport(workspaceId, runId);
   const { byFindingId, error: statesError, retry: retryStates } = useFindingStates(workspaceId, runId);
-  const locationResolution = (location.state as { proposedResolution?: string } | null)?.proposedResolution ?? null;
-  const [prefilledResolution, setPrefilledResolution] = useState<string | null>(locationResolution);
+  const [prefilledResolution, setPrefilledResolution] = useState<string | null>(null);
   const isDialogue = location.pathname.endsWith('/dialogue');
 
-  useEffect(() => { setPrefilledResolution(locationResolution); }, [findingId, locationResolution]);
+  useEffect(() => { setPrefilledResolution(null); }, [findingId]);
 
   if (isNotFound) return <NotFoundPage detail="Такой проверки нет. Возможно, ссылка устарела или идентификатор указан неверно." />;
   if (isUnavailable) return <div className="p-5"><Callout tone="warn" title="Отчёта пока нет">Проверка не завершилась успешно, поэтому замечаний нет.</Callout></div>;
@@ -68,8 +67,10 @@ export function FindingPage() {
       <div id={`dialogue-panel-${finding.id}`} role="tabpanel" aria-labelledby={`dialogue-tab-${finding.id}`} tabIndex={0} hidden={!isDialogue}>
         <DialoguePanel key={`dialogue-${finding.id}`} workspaceId={workspaceId} runId={runId} findingId={finding.id}
           onUseResolution={(text) => {
+            // Both tabs stay mounted. Keep the transfer local so a reload cannot
+            // replay it from browser history over the saved human decision.
             setPrefilledResolution(text);
-            void navigate(`/runs/${runId}/report/findings/${finding.id}`, { state: { proposedResolution: text } });
+            void navigate(`/runs/${runId}/report/findings/${finding.id}`);
           }} />
       </div>
       <div id={`decision-panel-${finding.id}`} role="tabpanel" aria-labelledby={`decision-tab-${finding.id}`} tabIndex={0} hidden={isDialogue}>

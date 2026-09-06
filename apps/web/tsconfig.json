@@ -27,5 +27,5 @@
       "@contracts/*": ["../../contracts/review-platform/v1/examples/http/*"]
     }
   },
-  "include": ["src", "e2e", "*.config.ts"]
+  "include": ["src", "e2e", "e2e-demo", "*.config.ts"]
 }

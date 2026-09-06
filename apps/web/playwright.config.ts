@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Тот же набор спецификаций выполняется против реального backend,
 // если VITE_MSW_SCENARIO пуст, а VITE_API_BASE_URL указывает на API.
 const scenario = process.env.VITE_MSW_SCENARIO ?? 'happy-path';
-const port = Number(process.env.VITE_E2E_PORT ?? '5175');
+const port = Number(process.env.VITE_E2E_PORT ?? process.env.PLAYWRIGHT_PORT ?? '5175');
 const baseURL = `http://localhost:${port}`;
 
 export default defineConfig({

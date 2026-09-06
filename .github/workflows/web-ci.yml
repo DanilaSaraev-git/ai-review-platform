@@ -63,5 +63,8 @@ jobs:
       - name: Сквозные проверки против MSW
         run: npm run test:e2e
 
+      - name: Production-сборка деморежима на синтетических данных
+        run: npm run test:e2e:demo
+
       - name: Сборка
         run: npm run build

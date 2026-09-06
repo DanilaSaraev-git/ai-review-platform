@@ -4,9 +4,10 @@ import type { Document, PublicLimits } from '@/api/generated/model';
 import { isPayloadTooLarge, isProblem } from '@/api/errors';
 import { Button, StatusBadge } from '@/components/ui';
 import { Icon } from '@/components/ui/Icon';
+import { isDemoMode } from '@/app/demo-mode';
 import { EXTRACTION_STATE_TEXT } from '@/lib/error-messages';
 import { formatBytes, formatMediaType } from '@/lib/format';
-import { SUPPORTED_EXTENSIONS, validateUpload } from '../lib/validate-upload';
+import { SUPPORTED_EXTENSIONS, SUPPORTED_FORMATS_TEXT, validateUpload } from '../lib/validate-upload';
 
 /**
  * Загрузка одного основного документа на проверку (FR-005).
@@ -29,6 +30,7 @@ export function DocumentUpload({
   hint?: string;
 }) {
   const [localError, setLocalError] = useState<string | null>(null);
+  const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useUploadDocument();
@@ -49,7 +51,10 @@ export function DocumentUpload({
       return;
     }
     try {
-      const uploaded = await upload.mutateAsync({ workspaceId, data: { file } });
+      // Demo only uses the selection as a trigger. The file bytes stay in the browser.
+      const uploadFile = isDemoMode ? new File([], file.name, { type: file.type }) : file;
+      const uploaded = await upload.mutateAsync({ workspaceId, data: { file: uploadFile } });
+      setSelectedFilename(file.name);
       onUploaded(uploaded);
     } catch {
       // Причина показывается в поле формы из состояния мутации.
@@ -103,6 +108,15 @@ export function DocumentUpload({
           {document ? 'Заменить документ' : 'Выбрать документ'}
         </Button>
       </div>
+      {hint !== 'PDF, Markdown или TXT.' ? (
+        <p className="mt-2 text-xs text-ink-muted">Поддерживаются {SUPPORTED_FORMATS_TEXT}.</p>
+      ) : null}
+      {isDemoMode && selectedFilename ? (
+        <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+          Выбран файл «{selectedFilename}». Он запускает демосценарий; его содержимое не отправляется и не анализируется.
+          Показан документ подготовленного примера.
+        </p>
+      ) : null}
       {localError ?? serverError ? (
         <p id={`${id}-error`} role="alert" className="mt-2 text-xs text-accent">
           {localError ?? serverError}

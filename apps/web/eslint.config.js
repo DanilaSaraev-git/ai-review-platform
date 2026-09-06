@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     // Сгенерированный клиент не проверяется: он не правится руками (принцип II).
-    ignores: ['dist/**', 'build/**', 'coverage/**', 'node_modules/**', 'src/api/generated/**', 'playwright-report/**', 'test-results/**'],
+    ignores: ['dist/**', 'dist-demo/**', 'build/**', 'coverage/**', 'node_modules/**', 'src/api/generated/**', 'playwright-report/**', 'test-results/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

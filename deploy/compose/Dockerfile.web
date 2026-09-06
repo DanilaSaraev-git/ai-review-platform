@@ -7,7 +7,9 @@ RUN npm ci
 COPY apps/web/ ./
 COPY contracts/review-platform/v1 /app/contracts/review-platform/v1
 RUN npm run api:generate && npm run build
+RUN VITE_MSW_SCENARIO=demo VITE_API_BASE_URL=/demo/api npm run build -- --base=/demo/ --outDir=dist-demo
 
 FROM nginx:1.29.4-alpine
 COPY deploy/compose/nginx.web.conf /etc/nginx/nginx.conf
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+COPY --from=builder /app/apps/web/dist-demo /usr/share/nginx/html/demo
