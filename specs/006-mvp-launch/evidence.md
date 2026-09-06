@@ -323,3 +323,9 @@ E2E покрывают произвольную загрузку, PDF и стр�
 `nginx -t`, production Compose и его объединение с external-model overlay прошли
 проверку; redirect `/demo` возвращает относительный путь. Материалы клиента в Git и
 Docker image не добавлялись. Эти проверки относятся к механике демо, а не качеству LLM.
+
+При проверке опубликованной сборки обнаружена существовавшая проблема PDF.js:
+nginx 1.29.4 отдавал module worker `.mjs` как `application/octet-stream`, браузер
+отклонял загрузку и не рисовал PDF. Причина подтверждена browser console и отдельным
+контейнером с фактическим worker asset. Добавлена явная MIME-карта
+`application/javascript mjs`; `nginx -t` и проверка Content-Type проходят.
