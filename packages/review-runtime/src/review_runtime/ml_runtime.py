@@ -413,8 +413,8 @@ class LLMReviewRuntime:
             body=body,
             idempotency_key=idempotency_key,
         )
-        terminal = await self._coordinator.run(operation)
-        return self.platform.get_run(workspace_id, terminal.resource_id).value
+        handle = await self._coordinator.submit(operation)
+        return self.platform.get_run(workspace_id, handle.resource_id).value
 
     async def create_dialogue_turn(
         self,

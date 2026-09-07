@@ -18,6 +18,7 @@ from review_runtime.config.model_profiles import ModelProfile, profile_config_di
 from review_runtime.config.settings import OperatorSettings
 
 from tests.integration.fake_model_provider import FakeModelProvider, ScriptedReply, chat_completion
+from tests.integration.run_helpers import wait_for_run_terminal, wait_for_run_terminal_async
 from tests.integration.test_ml_review_http import FIXTURES, _configure_ml, _request_review
 
 
@@ -113,7 +114,7 @@ def test_review_selects_each_exact_model_and_records_its_snapshot(
         for index, profile in enumerate(selected):
             response = _request_review(client, workspace_id, _reference(profile))
             assert response.status_code == 202, response.text
-            run = response.json()
+            run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
             assert run["state"] == "completed", response.text
             expected_snapshot = {**_reference(profile), "config_sha256": profile_config_digest(profile)}
             assert run["execution_snapshot"]["model_profile"] == expected_snapshot
@@ -144,7 +145,7 @@ def test_dialogue_and_same_turn_retry_remain_pinned_after_restart_and_default_ch
         workspace_id = app.state.platform.workspace_id
         response = _request_review(client, workspace_id, _reference(alpha))
         assert response.status_code == 202, response.text
-        run = response.json()
+        run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
         assert run["state"] == "completed", response.text
         report_url = f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         before = client.get(report_url)
@@ -194,7 +195,7 @@ def test_removed_model_blocks_review_dialogue_and_retry_without_fallback_or_repo
         workspace_id = app.state.platform.workspace_id
         response = _request_review(client, workspace_id, _reference(alpha))
         assert response.status_code == 202, response.text
-        run = response.json()
+        run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
         assert run["state"] == "completed", response.text
         report_url = f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         before = client.get(report_url)
@@ -256,13 +257,15 @@ def test_availability_and_authentication_failure_are_independent_per_model(
         assert provider.call_count == 0
         failed = _request_review(client, workspace_id, _reference(alpha))
         assert failed.status_code == 202, failed.text
-        assert failed.json()["state"] == "failed"
-        assert failed.json()["error"]["code"] == "model_unavailable"
-        assert "synthetic-secret" not in failed.text
+        failed_run = wait_for_run_terminal(client, workspace_id, failed.json()["id"])
+        assert failed_run["state"] == "failed"
+        assert failed_run["error"]["code"] == "model_unavailable"
+        assert "synthetic-secret" not in json.dumps(failed_run)
         _observe(app, beta)
         completed = _request_review(client, workspace_id, _reference(beta))
         assert completed.status_code == 202, completed.text
-        assert completed.json()["state"] == "completed", completed.text
+        completed_run = wait_for_run_terminal(client, workspace_id, completed.json()["id"])
+        assert completed_run["state"] == "completed", completed.text
         catalogue = client.get(f"/v1/workspaces/{workspace_id}/model-profiles").json()["items"]
         assert {item["id"]: item["availability"] for item in catalogue} == {
             alpha.id: "unavailable",
@@ -380,7 +383,10 @@ async def test_concurrency_budget_is_shared_across_distinct_model_profiles(
                 responses = await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
                 for response in responses:
                     assert response.status_code == 202, response.text
-                    assert response.json()["state"] == "completed", response.text
+                    run = await wait_for_run_terminal_async(
+                        client, workspace_id, response.json()["id"]
+                    )
+                    assert run["state"] == "completed", run
             finally:
                 for reply in replies:
                     assert reply.release is not None

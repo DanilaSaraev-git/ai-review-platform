@@ -10,6 +10,7 @@ import pytest
 from review_api.app import create_app
 
 from tests.integration.fake_model_provider import FakeModelProvider, ScriptedReply, chat_completion
+from tests.integration.run_helpers import wait_for_run_terminal_async
 from tests.integration.test_ml_review_http import FIXTURES, _configure_ml
 
 
@@ -82,4 +83,8 @@ async def test_model_calls_respect_the_runtime_concurrency_limit(
                 assert reply.release is not None
                 reply.release.set()
             responses = await asyncio.gather(*tasks)
-            assert [response.json()["state"] for response in responses] == ["completed"] * 3
+            runs = [
+                await wait_for_run_terminal_async(client, workspace_id, response.json()["id"])
+                for response in responses
+            ]
+            assert [run["state"] for run in runs] == ["completed"] * 3

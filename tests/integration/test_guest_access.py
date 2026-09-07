@@ -22,6 +22,7 @@ from review_runtime.config.settings import OperatorSettings
 from review_runtime.security.guest_storage import GuestStorageLimits
 
 from tests.integration.fake_model_provider import FakeModelProvider, ScriptedReply, chat_completion
+from tests.integration.run_helpers import wait_for_run_terminal_async
 from tests.integration.test_ml_review_http import FIXTURES, _configure_ml
 from tests.integration.test_mvp_review_http import create_run, upload
 
@@ -603,9 +604,10 @@ async def test_two_guests_share_the_model_concurrency_limit_and_keep_separate_re
                     reply.release.set()
                 responses = await asyncio.wait_for(asyncio.gather(*tasks), timeout=20)
             assert [response.status_code for response in responses] == [202] * 3
-            assert [response.json()["state"] for response in responses] == ["completed"] * 3
             for index, (client, workspace, _) in enumerate(requests):
                 run_id = responses[index].json()["id"]
+                run = await wait_for_run_terminal_async(client, workspace, run_id)
+                assert run["state"] == "completed"
                 report = await client.get(f"/v1/workspaces/{workspace}/review-runs/{run_id}/report")
                 assert report.status_code == 200, report.text
                 other_client = second if client is first else first

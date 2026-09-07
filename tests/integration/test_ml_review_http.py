@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from review_api.app import create_app
 
 from tests.integration.fake_model_provider import FakeModelProvider, ScriptedReply, chat_completion
+from tests.integration.run_helpers import wait_for_run_terminal
 
 ROOT = Path(__file__).parents[2]
 FIXTURES = ROOT / "tests/fixtures/ml-integration"
@@ -102,9 +103,10 @@ def test_ml_review_calls_fake_provider_once_and_publishes_immutable_report(
         workspace_id = app.state.platform.workspace_id
         response = _request_review(client, workspace_id, reference)
         assert response.status_code == 202, response.text
-        assert response.json()["state"] == "completed"
+        run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
+        assert run["state"] == "completed"
         report = client.get(
-            f"/v1/workspaces/{workspace_id}/review-runs/{response.json()['id']}/report"
+            f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         )
         assert report.status_code == 200
         assert report.json()["findings"][0]["title"] == "Refresh schedule is unspecified"
@@ -145,11 +147,12 @@ def test_ml_review_failure_never_publishes_report(
         workspace_id = app.state.platform.workspace_id
         response = _request_review(client, workspace_id, reference)
         assert response.status_code == 202, response.text
-        assert response.json()["state"] == "failed"
+        run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
+        assert run["state"] == "failed"
         expected = "context_limit" if outcome == "oversize" else "model_output_invalid"
-        assert response.json()["error"]["code"] == expected
+        assert run["error"]["code"] == expected
         report = client.get(
-            f"/v1/workspaces/{workspace_id}/review-runs/{response.json()['id']}/report"
+            f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         )
         assert report.status_code == 409
     assert provider.call_count == (0 if outcome == "oversize" else 1)
@@ -195,7 +198,7 @@ def test_semantic_failure_preserves_safe_reason_without_publishing_or_retrying(
         workspace_id = app.state.platform.workspace_id
         accepted = _request_review(client, workspace_id, reference)
         assert accepted.status_code == 202
-        run = accepted.json()
+        run = wait_for_run_terminal(client, workspace_id, accepted.json()["id"])
         assert run["state"] == "failed"
         assert run["error"] == expected_error
         assert private_marker not in accepted.text
@@ -237,7 +240,7 @@ def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_met
         workspace_id = app.state.platform.workspace_id
         response = _request_review(client, workspace_id, reference)
         assert response.status_code == 202, response.text
-        run = response.json()
+        run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
         assert run["state"] == "failed"
         assert run["error"] == {
             "code": "model_output_invalid",

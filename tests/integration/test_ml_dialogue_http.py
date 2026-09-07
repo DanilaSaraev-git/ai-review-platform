@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from review_api.app import create_app
 
 from tests.integration.fake_model_provider import FakeModelProvider, ScriptedReply, chat_completion
+from tests.integration.run_helpers import wait_for_run_terminal
 from tests.integration.test_ml_review_http import FIXTURES, _configure_ml, _request_review
 
 
@@ -41,7 +42,7 @@ def test_dialogue_preserves_review_locale_after_restart_without_changing_report(
         workspace_id = app.state.platform.workspace_id
         response = _request_review(client, workspace_id, reference, locale=locale)
         assert response.status_code == 202, response.text
-        run = response.json()
+        run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
         assert run["state"] == "completed"
         report_url = f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         before = client.get(report_url)
@@ -117,7 +118,8 @@ def test_external_dialogue_failure_retries_same_turn_and_preserves_report(
     )
     with TestClient(app) as client:
         workspace_id = app.state.platform.workspace_id
-        run = _request_review(client, workspace_id, reference).json()
+        accepted = _request_review(client, workspace_id, reference)
+        run = wait_for_run_terminal(client, workspace_id, accepted.json()["id"])
         report_url = f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         before = client.get(report_url)
         finding_id = before.json()["findings"][0]["id"]
@@ -194,7 +196,8 @@ def test_external_dialogue_reports_incomplete_output_before_parsing_without_retr
     )
     with TestClient(app) as client:
         workspace_id = app.state.platform.workspace_id
-        run = _request_review(client, workspace_id, reference).json()
+        accepted = _request_review(client, workspace_id, reference)
+        run = wait_for_run_terminal(client, workspace_id, accepted.json()["id"])
         report_url = f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         before = client.get(report_url)
         finding_id = before.json()["findings"][0]["id"]

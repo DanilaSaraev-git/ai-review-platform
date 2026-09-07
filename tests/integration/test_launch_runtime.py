@@ -20,6 +20,7 @@ from tests.integration.fake_model_provider import (
     ScriptedReply,
     chat_completion,
 )
+from tests.integration.run_helpers import wait_for_run_terminal
 
 ROOT = Path(__file__).parents[2]
 
@@ -424,10 +425,11 @@ def test_unconfigured_deployment_can_select_probe_and_run_one_external_model(
             },
         )
         assert run.status_code == 202
-        assert run.json()["state"] == "completed"
+        completed_run = wait_for_run_terminal(client, workspace_id, run.json()["id"])
+        assert completed_run["state"] == "completed"
         assert generation.call_count == 1
         if skill_package == "skills/review-data-spec":
-            skill_snapshot = run.json()["execution_snapshot"]["skill"]
+            skill_snapshot = completed_run["execution_snapshot"]["skill"]
             assert skill_snapshot["id"] == operator_settings.skill_id
             assert skill_snapshot["version"] == "1.0.2"
             assert skill_snapshot["package_sha256"] != operator_settings.skill_package_sha256

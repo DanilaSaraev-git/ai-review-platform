@@ -11,6 +11,7 @@ import pytest
 from review_api.app import create_app
 
 from tests.integration.fake_model_provider import FakeModelProvider, ScriptedReply, chat_completion
+from tests.integration.run_helpers import wait_for_run_terminal_async
 from tests.integration.test_ml_review_http import FIXTURES, _configure_ml
 
 
@@ -33,6 +34,46 @@ def _body(document_id: str, profile: dict, reference: dict[str, str]) -> dict:  
         "model_profile": reference,
         "locale": "en-US",
     }
+
+
+@pytest.mark.asyncio
+async def test_create_run_returns_accepted_before_model_completes(
+    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path  # type: ignore[no-untyped-def]
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    reply = ScriptedReply(
+        chat_completion((FIXTURES / "review-response.json").read_text()),
+        release=asyncio.Event(),
+    )
+    provider = FakeModelProvider([reply])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference,
+        state="available",
+        reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    async with app.router.lifespan_context(app):
+        client, workspace_id, document_id, profile = await _prepared_client(app)
+        pending = asyncio.create_task(
+            client.post(
+                f"/v1/workspaces/{workspace_id}/review-runs",
+                headers={"Idempotency-Key": f"return-before-model-{uuid4().hex}"},
+                json=_body(document_id, profile, reference),
+            )
+        )
+        try:
+            await asyncio.wait_for(reply.entered.wait(), timeout=5)
+            response = await asyncio.wait_for(asyncio.shield(pending), timeout=0.2)
+            assert response.status_code == 202
+            assert response.json()["state"] in {"queued", "preparing", "reviewing"}
+            assert reply.release is not None
+            assert not reply.release.is_set()
+        finally:
+            assert reply.release is not None
+            reply.release.set()
+            await asyncio.wait_for(pending, timeout=5)
+            await client.aclose()
 
 
 @pytest.mark.asyncio
@@ -112,11 +153,13 @@ async def test_cancel_during_model_call_wins_over_late_result(
             cancelled = await client.post(f"{url}/{run_id}/cancel")
             assert cancelled.status_code == 202
             assert cancelled.json()["state"] == "cancelled"
-            assert reply.release is not None
-            reply.release.set()
             response = await pending
             assert response.status_code == 202
-            assert response.json()["state"] == "cancelled"
+            assert response.json()["state"] in {"queued", "preparing", "reviewing"}
+            assert reply.release is not None
+            reply.release.set()
+            terminal = await wait_for_run_terminal_async(client, workspace_id, run_id)
+            assert terminal["state"] == "cancelled"
             assert (await client.get(f"{url}/{run_id}/report")).status_code == 409
         finally:
             await client.aclose()
