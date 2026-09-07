@@ -139,9 +139,17 @@ def test_yandex_model_templates_follow_the_existing_profile_contract(name: str) 
     assert profile.max_output_tokens == 16384
 
 
-@pytest.mark.parametrize("name", ["yandex-gpt-oss20b", "yandex-qwen35b"])
-def test_smaller_yandex_models_use_provider_json_mode(name: str) -> None:
-    value = json.loads((ROOT / f"deploy/compose/config/model-profile.{name}.json").read_text())
+def test_gpt_oss_uses_provider_schema_enforcement() -> None:
+    value = json.loads(
+        (ROOT / "deploy/compose/config/model-profile.yandex-gpt-oss20b.json").read_text()
+    )
+
+    assert value["structured_output"] == "native_json_schema"
+    assert value["version"] == "1.0.2"
+
+
+def test_qwen_uses_provider_json_mode() -> None:
+    value = json.loads((ROOT / "deploy/compose/config/model-profile.yandex-qwen35b.json").read_text())
 
     assert value["structured_output"] == "native_json_object"
     assert value["version"] == "1.0.1"

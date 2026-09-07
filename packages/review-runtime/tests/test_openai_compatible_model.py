@@ -184,7 +184,12 @@ async def test_native_json_object_keeps_schema_in_instructions_and_gates_json_sy
 
 async def test_yandex_uses_mounted_api_key_and_folder_from_model_uri(tmp_path: Path) -> None:
     provider = FakeModelProvider([ScriptedReply(chat_completion("{}"))])
-    model_profile = profile(provider="yandex", model="gpt://synthetic-folder/deepseek-v4-flash/latest")
+    model_profile = profile(
+        provider="yandex",
+        model="gpt://synthetic-folder/gpt-oss-20b/latest",
+        capabilities=["text_generation", "native_structured_output"],
+        structured_output="native_json_schema",
+    )
     secret_file = tmp_path / "model-token"
     secret_file.write_text("synthetic-api-key\n", encoding="utf-8")
     async with httpx.AsyncClient(transport=provider.transport) as client:
@@ -200,7 +205,16 @@ async def test_yandex_uses_mounted_api_key_and_folder_from_model_uri(tmp_path: P
     assert sent.headers["authorization"] == "Api-Key synthetic-api-key"
     assert sent.headers["openai-project"] == "synthetic-folder"
     assert sent.headers["content-type"] == "application/json"
-    assert json.loads(sent.content)["model"] == model_profile.model
+    payload = json.loads(sent.content)
+    assert payload["model"] == model_profile.model
+    assert payload["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "review_response",
+            "strict": True,
+            "schema": {"type": "object", "required": ["findings"]},
+        },
+    }
 
 
 @pytest.mark.parametrize("model", ["deepseek-v4-flash", "gpt:///deepseek-v4-flash"])
