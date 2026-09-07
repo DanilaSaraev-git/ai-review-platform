@@ -85,6 +85,7 @@ def test_only_allowlisted_contract_files_changed_from_v1_0_1() -> None:
         "contracts/review-platform/v1/examples/http/review-cycle.persisting.json",
         "contracts/review-platform/v1/examples/http/review-cycle.unavailable.json",
         "contracts/review-platform/v1/examples/http/review-completion.json",
+        "contracts/review-platform/v1/examples/http/report.unlinked.json",
     }
     assert set(changed.splitlines()) <= allowed
 

@@ -208,6 +208,9 @@ class ReviewEngine:
                     fragment = context.fragments.get(fragment_id)
                     if fragment is None:
                         raise ReviewSemanticValidationError("anchor_fragment_unknown")
+                    if (recover_invalid_evidence and fragment.source_id == context.primary_source_id
+                            and fragment_id not in compact_coverage["reviewed_fragment_ids"]):
+                        raise ReviewSemanticValidationError("anchor_primary_unreviewed")
                     quote = compact_anchor["quote"]
                     if not isinstance(quote, str) or not quote:
                         raise ReviewSemanticValidationError("anchor_quote_invalid")
@@ -244,7 +247,14 @@ class ReviewEngine:
                     "question": compact_finding["question"],
                     "priority": deepcopy(compact_finding["priority"]),
                     "anchors": anchors,
-                    "scope": deepcopy(compact_finding["scope"]),
+                    "scope": [
+                        fragment_id for fragment_id in compact_finding["scope"]
+                        if not recover_invalid_evidence or (
+                            fragment_id in context.fragments
+                            and context.fragments[fragment_id].source_id == context.primary_source_id
+                            and fragment_id in compact_coverage["reviewed_fragment_ids"]
+                        )
+                    ],
                 }
             )
         summary = model_output["summary"]

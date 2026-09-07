@@ -261,3 +261,19 @@ def test_semantic_diagnostic_cannot_contain_an_unregistered_reason_or_message() 
     assert "CANARY_PRIVATE_TEXT" not in str(caught.value)
     with pytest.raises(TypeError):
         validation.ReviewSemanticValidationError("anchor_quote_not_found", "CANARY_PRIVATE_TEXT")
+
+
+@pytest.mark.parametrize("kind", ["ambiguity", "missing"])
+@pytest.mark.parametrize("keep_valid", [True, False])
+def test_invalid_scope_keeps_finding_without_warning(kind: str, keep_valid: bool) -> None:
+    output = compact()
+    finding = output["findings"][0]
+    finding.update(kind=kind, anchors=[], scope=["unknown", "c1"] + (["f2"] if keep_valid else []))
+    report = ReviewEngine().map_model_output(output, context=context(), recover_invalid_evidence=True)
+    assert len(report["findings"]) == 1
+    retained = report["findings"][0]
+    assert retained["scope"] == (["f2"] if keep_valid else [])
+    for key in ("title", "kind", "problem", "reason", "question", "priority"):
+        assert retained[key] == finding[key]
+    assert report["summary"] == output["summary"]
+    assert report["limitations"] == output["limitations"]

@@ -62,11 +62,11 @@ export function assertCompatible(baseline, candidate) {
       const current = structuredClone(candidate.components?.[section]?.[name]);
       if (!current) throw new Error(`components.${section}.${name} removed`);
       // v1.2 explicitly permits findings without a verified document link.
-      // Permit only removal of the non-missing anchor minimum; preserve every
-      // field and the mandatory scope for missing-information findings.
+      // Permit only removal of finding link cardinality constraints; preserve every
+      // field; only document-link cardinality is relaxed.
       if (section === "schemas" && name === "Finding") {
         const expected = structuredClone(original);
-        delete expected.allOf[0].else;
+        delete expected.allOf;
         if (!equal(expected, current)) throw new Error("Finding has an unapproved breaking shape change");
         current.allOf = original.allOf;
       }

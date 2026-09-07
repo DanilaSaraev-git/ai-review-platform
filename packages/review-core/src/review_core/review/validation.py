@@ -156,7 +156,7 @@ def validate_report(
         anchors = finding["anchors"]
         scope = finding["scope"]
         if finding["kind"] == "missing":
-            if anchors or not scope:
+            if anchors:
                 raise ReviewSemanticValidationError("missing_finding_scope_invalid")
         primary_basis = False
         for anchor in anchors:

@@ -204,12 +204,13 @@ def test_context_only_finding_is_rejected_without_primary_basis() -> None:
         ReviewEngine().map_model_output(compact, context=_context())
 
 
-def test_missing_finding_requires_reviewed_primary_scope() -> None:
+def test_missing_finding_can_remain_without_document_links() -> None:
     compact = _compact()
     compact["findings"][0] |= {"kind": "missing", "anchors": [], "scope": []}
 
-    with pytest.raises(ValueError, match="scope"):
-        ReviewEngine().map_model_output(compact, context=_context())
+    report = ReviewEngine().map_model_output(compact, context=_context())
+    assert report["findings"][0]["scope"] == []
+    assert report["findings"][0]["question"] == compact["findings"][0]["question"]
 
 
 def test_ambiguous_exact_quote_is_rejected() -> None:
