@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -125,6 +126,42 @@ def test_mapper_derives_anchor_source_from_the_known_fragment() -> None:
     report = ReviewEngine().map_model_output(output, context=context())
 
     assert report["findings"][0]["anchors"][0]["source_id"] == "source-main"
+
+
+def test_mapper_restores_pdf_whitespace_without_changing_evidence() -> None:
+    source = "Prefix. Retry\n  regularly\u00a0please. End."
+    mapping = context()
+    mapping = replace(mapping, fragments={
+        **mapping.fragments,
+        "f1": replace(mapping.fragments["f1"], text=source),
+    })
+    output = compact()
+    anchor(output)["quote"] = "Retry regularly please."
+
+    report = ReviewEngine().map_model_output(output, context=mapping)
+
+    evidence = anchor(report)
+    assert evidence["quote"] == "Retry\n  regularly\u00a0please."
+    assert source[evidence["quote_start"]:evidence["quote_end"]] == evidence["quote"]
+    assert anchor(output)["quote"] == "Retry regularly please."
+
+
+@pytest.mark.parametrize(("source", "quote", "code"), [
+    ("Retry\nnow. Retry\t now.", "Retry now.", "anchor_quote_ambiguous"),
+    ("Limit 100 requests.", "Limit 1000 requests.", "anchor_quote_not_found"),
+    ("Retry now.", "retry now.", "anchor_quote_not_found"),
+    ("Retry now.", "   ", "anchor_quote_invalid"),
+])
+def test_quote_recovery_rejects_ambiguous_or_changed_evidence(source: str, quote: str, code: str) -> None:
+    mapping = context()
+    mapping = replace(mapping, fragments={
+        **mapping.fragments, "f1": replace(mapping.fragments["f1"], text=source),
+    })
+    output = compact()
+    anchor(output)["quote"] = quote
+    with pytest.raises(validation.ReviewSemanticValidationError) as caught:
+        ReviewEngine().map_model_output(output, context=mapping)
+    assert caught.value.code == code
 
 
 @pytest.mark.parametrize(

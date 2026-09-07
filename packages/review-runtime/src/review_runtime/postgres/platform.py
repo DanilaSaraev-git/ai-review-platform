@@ -116,12 +116,15 @@ class PostgresReviewExecutionStorage:
         attempt_id = str(uuid4())
         with self.connect() as connection:
             owner = connection.execute(
-                """SELECT state FROM review_work_items
-                   WHERE organization_id=%s AND workspace_id=%s AND id=%s
-                   FOR UPDATE""",
+                """SELECT w.state, e.state AS execution_state FROM review_work_items w
+                   JOIN review_run_executions e
+                     ON (e.organization_id,e.workspace_id,e.id) =
+                        (w.organization_id,w.workspace_id,w.execution_id)
+                   WHERE w.organization_id=%s AND w.workspace_id=%s AND w.id=%s
+                   FOR UPDATE OF w""",
                 (self.organization_id, self.workspace_id, request.work_item_id),
             ).fetchone()
-            if owner is None or owner["state"] != "prepared":
+            if owner is None or owner["state"] != "prepared" or owner["execution_state"] != "running":
                 raise Conflict("execution_owner_conflict", "Review work item is not callable.")
             ordinal_row = connection.execute(
                 """SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal

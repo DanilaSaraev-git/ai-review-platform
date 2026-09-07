@@ -10,7 +10,7 @@ from review_core.ports.models import GenerationRequest, JsonValue, ModelProfileS
 from review_core.review.prompt import build_review_generation_request
 from review_core.review.validation import (
     ReviewSemanticValidationError,
-    resolve_unique_quote_offset,
+    resolve_unique_quote_span,
     validate_report,
 )
 
@@ -207,16 +207,16 @@ class ReviewEngine:
                 quote = compact_anchor["quote"]
                 if not isinstance(quote, str) or not quote:
                     raise ReviewSemanticValidationError("anchor_quote_invalid")
-                start = resolve_unique_quote_offset(fragment.text, quote)
+                start, end = resolve_unique_quote_span(fragment.text, quote)
                 anchors.append(
                     {
                         "source_id": fragment.source_id,
                         "document_id": fragment.document_id,
                         "source_name": fragment.source_name,
                         "fragment_id": fragment.id,
-                        "quote": quote,
+                        "quote": fragment.text[start:end],
                         "quote_start": start,
-                        "quote_end": start + len(quote),
+                        "quote_end": end,
                         "location": deepcopy(dict(fragment.location)),
                     }
                 )

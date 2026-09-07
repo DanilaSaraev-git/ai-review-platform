@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from types import MappingProxyType
 from typing import Any
 
@@ -62,6 +63,31 @@ def resolve_unique_quote_offset(text: str, quote: str) -> int:
     if text.find(quote, first + 1) >= 0:
         raise ReviewSemanticValidationError("anchor_quote_ambiguous")
     return first
+
+
+def resolve_unique_quote_span(text: str, quote: str) -> tuple[int, int]:
+    """Recover PDF whitespace only, returning offsets into the unchanged source.
+
+    Do not correct words, case, punctuation, numbers, or fragment identity.
+    A normalized match must still be unique; report validation stays exact.
+    """
+    if not quote.strip():
+        raise ReviewSemanticValidationError("anchor_quote_invalid")
+    try:
+        start = resolve_unique_quote_offset(text, quote)
+        return start, start + len(quote)
+    except ReviewSemanticValidationError as error:
+        if error.code != "anchor_quote_not_found":
+            raise
+
+    characters: list[str] = []
+    spans: list[tuple[int, int]] = []
+    for match in re.finditer(r"\s+|\S", text):
+        characters.append(" " if match.group().isspace() else match.group())
+        spans.append(match.span())
+    normalized_quote = re.sub(r"\s+", " ", quote.strip())
+    start = resolve_unique_quote_offset("".join(characters), normalized_quote)
+    return spans[start][0], spans[start + len(normalized_quote) - 1][1]
 
 
 def _validate_location(location: dict[str, Any]) -> None:

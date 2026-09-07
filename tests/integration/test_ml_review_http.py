@@ -120,6 +120,50 @@ def test_ml_review_calls_fake_provider_once_and_publishes_immutable_report(
     assert attempt == ("succeeded", "synthetic-provider", "unknown")
 
 
+@pytest.mark.parametrize("violation", ["quote", "fragment", "coverage", "json", "length"])
+@pytest.mark.parametrize("invalid_attempts", [1, 2])
+def test_review_recovers_invalid_response_before_publishing(
+    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path,
+    violation: str, invalid_attempts: int,
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    valid = (FIXTURES / "review-response.json").read_text()
+    invalid = json.loads(valid)
+    if violation == "quote":
+        invalid["findings"][0]["anchors"][0]["quote"] = "PRIVATE_MODEL_INSTRUCTION"
+    elif violation == "fragment":
+        invalid["findings"][0]["anchors"][0]["fragment_id"] = "wrong-fragment"
+    elif violation == "coverage":
+        invalid["coverage"]["reviewed_fragment_ids"] = []
+    provider = FakeModelProvider([
+        *[ScriptedReply(chat_completion(
+            "not-json" if violation == "json" else json.dumps(invalid),
+            finish_reason="length" if violation == "length" else "stop",
+        )) for _ in range(invalid_attempts)],
+        ScriptedReply(chat_completion(valid)),
+    ])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference, state="available", reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with TestClient(app) as client:
+        workspace_id = app.state.platform.workspace_id
+        response = _request_review(client, workspace_id, reference, locale="ru-RU")
+        assert response.status_code == 202, response.text
+        assert response.json()["state"] == "completed", response.text
+        report = client.get(
+            f"/v1/workspaces/{workspace_id}/review-runs/{response.json()['id']}/report"
+        )
+        assert report.status_code == 200
+        assert report.json()["findings"][0]["anchors"][0]["quote"] == "Refresh runs regularly."
+    assert provider.call_count == invalid_attempts + 1
+    retry_body = json.loads(provider.requests[1].content)
+    assert "PRIVATE_MODEL_INSTRUCTION" not in json.dumps(retry_body)
+    assert "ru-RU" in json.dumps(retry_body)
+    assert "Previous response rejected" in json.dumps(retry_body)
+
+
 @pytest.mark.parametrize("outcome", ["oversize", "invalid"])
 def test_ml_review_failure_never_publishes_report(
     monkeypatch: pytest.MonkeyPatch,
@@ -133,7 +177,7 @@ def test_ml_review_failure_never_publishes_report(
         tmp_path,
         max_input_bytes=64 if outcome == "oversize" else 524_288,
     )
-    provider = FakeModelProvider([ScriptedReply(chat_completion("not-json"))])
+    provider = FakeModelProvider([ScriptedReply(chat_completion("not-json")) for _ in range(3)])
     app = create_app(composition="ml", model_transport=provider.transport)
     app.state.platform.observe_model_profile(
         reference,
@@ -152,7 +196,7 @@ def test_ml_review_failure_never_publishes_report(
             f"/v1/workspaces/{workspace_id}/review-runs/{response.json()['id']}/report"
         )
         assert report.status_code == 409
-    assert provider.call_count == (0 if outcome == "oversize" else 1)
+    assert provider.call_count == (0 if outcome == "oversize" else 3)
 
 @pytest.mark.parametrize(
     ("violation", "diagnostic"),
@@ -162,7 +206,7 @@ def test_ml_review_failure_never_publishes_report(
         ("coverage", "coverage_partition_inexact"),
     ],
 )
-def test_semantic_failure_preserves_safe_reason_without_publishing_or_retrying(
+def test_semantic_failure_preserves_safe_reason_after_bounded_recovery_without_publishing(
     monkeypatch: pytest.MonkeyPatch,
     operator_settings,  # type: ignore[no-untyped-def]
     tmp_path: Path,
@@ -178,7 +222,9 @@ def test_semantic_failure_preserves_safe_reason_without_publishing_or_retrying(
         response["findings"][0]["anchors"][0]["fragment_id"] = private_marker
     else:
         response["coverage"]["reviewed_fragment_ids"] = []
-    provider = FakeModelProvider([ScriptedReply(chat_completion(json.dumps(response)))])
+    provider = FakeModelProvider([
+        ScriptedReply(chat_completion(json.dumps(response))) for _ in range(3)
+    ])
     app = create_app(composition="ml", model_transport=provider.transport)
     app.state.platform.observe_model_profile(
         reference,
@@ -206,7 +252,7 @@ def test_semantic_failure_preserves_safe_reason_without_publishing_or_retrying(
             "SELECT value->'error' FROM review_runs WHERE id=%s", (run["id"],)
         ).fetchone()
     assert saved == (expected_error,)
-    assert provider.call_count == 1
+    assert provider.call_count == 3
 
 @pytest.mark.parametrize("response_shape", ["valid_json", "truncated_json"])
 def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_metadata(
@@ -224,7 +270,7 @@ def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_met
             response_text,
             finish_reason="length",
             usage={"prompt_tokens": 3126, "completion_tokens": 4096},
-        ))
+        )) for _ in range(3)
     ])
     app = create_app(composition="ml", model_transport=provider.transport)
     app.state.platform.observe_model_profile(
@@ -248,7 +294,7 @@ def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_met
         assert client.get(
             f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         ).status_code == 409
-    assert provider.call_count == 1
+    assert provider.call_count == 3
     with psycopg.connect(app.state.platform.database_url) as connection:
         attempt = connection.execute(
             "SELECT state,value FROM model_attempts WHERE value#>>'{profile,id}'=%s",
