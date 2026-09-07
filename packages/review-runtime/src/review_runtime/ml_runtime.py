@@ -988,9 +988,10 @@ class LLMReviewRuntime:
         prepared = generated["prepared"]
         operation: ReviewOperation = prepared["operation"]
         try:
-            compact = self.skill_executor.validate_output(
-                "review", self.review_output.parse_and_validate(result.text)
-            )
+            # Same compact schema as the skill, with recoverable link metadata
+            # normalized before content validation. Canonical report validation
+            # still runs after mapping.
+            compact = self.review_output.parse_and_validate(result.text, recover_metadata=True)
         except ValueError as validation_error:
             raise _ModelOutputInvalid from validation_error
         usage = result.usage

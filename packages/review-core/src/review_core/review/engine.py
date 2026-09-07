@@ -55,6 +55,39 @@ class MappingContext:
             raise ValueError("mapping context fragment key does not match its identity")
 
 
+def _recover_coverage(coverage: dict[str, Any], context: MappingContext, locale: str) -> dict[str, Any]:
+    """Reconcile model bookkeeping against server-owned source IDs conservatively."""
+    targets = set(context.target_fragment_ids)
+    reason = ("Модель не указала результат проверки фрагмента."
+              if locale == "ru-RU" else "The model did not specify whether this fragment was reviewed.")
+    unreviewed = {item["fragment_id"]: item["reason"] for item in coverage["unreviewed"]
+                  if item["fragment_id"] in targets}
+    gaps = []
+    source_ids = {f.source_id for f in context.fragments.values()}
+    source_ids.update(source["source_id"] for source in context.provenance.get("sources", []))
+    for original in coverage["source_gaps"]:
+        gap = deepcopy(original)
+        fragment = context.fragments.get(gap["fragment_id"])
+        if fragment is not None:
+            gap["source_id"] = fragment.source_id
+            if fragment.id in targets:
+                unreviewed[fragment.id] = gap["reason"]
+                continue
+        elif gap["source_id"] in source_ids:
+            gap["fragment_id"] = None
+        else:
+            continue
+        if gap not in gaps:
+            gaps.append(gap)
+    reviewed = (set(coverage["reviewed_fragment_ids"]) & targets) - set(unreviewed)
+    return {
+        "reviewed_fragment_ids": [f for f in context.target_fragment_ids if f in reviewed],
+        "unreviewed": [{"fragment_id": f, "reason": unreviewed.get(f, reason)}
+                       for f in context.target_fragment_ids if f not in reviewed],
+        "source_gaps": gaps,
+    }
+
+
 def _require_exact_fields(value: Mapping[str, Any], fields: set[str]) -> None:
     if set(value) != fields:
         raise ReviewSemanticValidationError("compact_fields_invalid")
@@ -188,6 +221,8 @@ class ReviewEngine:
         _validate_compact_shape(model_output)
         id_factory = new_finding_id or (lambda: str(uuid4()))
         compact_coverage = model_output["coverage"]
+        if recover_invalid_evidence:
+            compact_coverage = _recover_coverage(compact_coverage, context, locale)
         gaps = [
             {
                 "source_id": context.primary_source_id,
@@ -232,7 +267,7 @@ class ReviewEngine:
                         "location": deepcopy(dict(fragment.location)),
                     }
                 )
-            if invalid_evidence and not any(
+            if (invalid_evidence or recover_invalid_evidence) and not any(
                 anchor["source_id"] == context.primary_source_id for anchor in anchors
             ):
                 anchors = []
