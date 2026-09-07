@@ -47,7 +47,7 @@
 - `codex/005-web-review-ui` — web v1;
 - `codex/mvp-launch-20260905` — упрощённый интерфейс и выпуск MVP.
 
-Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. Сейчас подключена DeepSeek V4 Flash через Yandex AI Studio; [конфигурация](docs/operations/configuration.md#deepseek-через-yandex-ai-studio) и [серверные результаты](specs/006-mvp-launch/evidence.md) отделены от предметной оценки. Chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
+Инженерная feature 004 интегрирована: review, dialogue, same-turn retry, immutable report, restart reconciliation, mounted-file secrets, direct CLI и opt-in Compose проверены на synthetic gate. На проде через Yandex AI Studio подключены GPT-OSS 20B (по умолчанию), Qwen3.6 35B и DeepSeek V4 Flash; [результаты подключения](docs/operations/deployment.md#дополнение-каталога-моделей--2026-09-07) отделены от предметной оценки. Chunking и auto-repair остаются в [backlog](specs/004-llm-review-integration/backlog.md).
 
 ## Цикл документа и PDF
 
