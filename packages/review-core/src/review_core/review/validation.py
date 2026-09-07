@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from types import MappingProxyType
 from typing import Any
 
@@ -44,10 +45,11 @@ _SEMANTIC_ERROR_MESSAGES = MappingProxyType(
 class ReviewSemanticValidationError(ValueError):
     """A content-free reason for rejecting review evidence or coverage."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, *, finding_index: int | None = None) -> None:
         if code not in _SEMANTIC_ERROR_MESSAGES:
             raise ValueError("unknown review semantic validation code")
         self._code = code
+        self.finding_index = finding_index
         super().__init__(_SEMANTIC_ERROR_MESSAGES[code])
 
     @property
@@ -62,6 +64,31 @@ def resolve_unique_quote_offset(text: str, quote: str) -> int:
     if text.find(quote, first + 1) >= 0:
         raise ReviewSemanticValidationError("anchor_quote_ambiguous")
     return first
+
+
+def resolve_unique_quote_span(text: str, quote: str) -> tuple[int, int]:
+    """Recover PDF whitespace only, returning offsets into the unchanged source.
+
+    Do not correct words, case, punctuation, numbers, or fragment identity.
+    A normalized match must still be unique; report validation stays exact.
+    """
+    if not quote.strip():
+        raise ReviewSemanticValidationError("anchor_quote_invalid")
+    try:
+        start = resolve_unique_quote_offset(text, quote)
+        return start, start + len(quote)
+    except ReviewSemanticValidationError as error:
+        if error.code != "anchor_quote_not_found":
+            raise
+
+    characters: list[str] = []
+    spans: list[tuple[int, int]] = []
+    for match in re.finditer(r"\s+|\S", text):
+        characters.append(" " if match.group().isspace() else match.group())
+        spans.append(match.span())
+    normalized_quote = re.sub(r"\s+", " ", quote.strip())
+    start = resolve_unique_quote_offset("".join(characters), normalized_quote)
+    return spans[start][0], spans[start + len(normalized_quote) - 1][1]
 
 
 def _validate_location(location: dict[str, Any]) -> None:
@@ -129,10 +156,8 @@ def validate_report(
         anchors = finding["anchors"]
         scope = finding["scope"]
         if finding["kind"] == "missing":
-            if anchors or not scope:
+            if anchors:
                 raise ReviewSemanticValidationError("missing_finding_scope_invalid")
-        elif not anchors:
-            raise ReviewSemanticValidationError("finding_anchor_required")
         primary_basis = False
         for anchor in anchors:
             fragment = fragments.get(anchor["fragment_id"])
@@ -156,5 +181,5 @@ def validate_report(
             if fragment is None or fragment["source_id"] != primary_source_id or fragment_id not in reviewed:
                 raise ReviewSemanticValidationError("finding_scope_invalid")
             primary_basis = True
-        if not primary_basis:
+        if not primary_basis and (anchors or scope):
             raise ReviewSemanticValidationError("finding_primary_basis_missing")

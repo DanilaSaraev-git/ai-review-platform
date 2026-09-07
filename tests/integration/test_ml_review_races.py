@@ -116,12 +116,13 @@ async def test_concurrent_same_key_has_one_execution_and_different_body_conflict
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_output", [False, True])
 async def test_cancel_during_model_call_wins_over_late_result(
-    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path, invalid_output: bool
 ) -> None:
     reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
     reply = ScriptedReply(
-        chat_completion((FIXTURES / "review-response.json").read_text()),
+        chat_completion("not-json" if invalid_output else (FIXTURES / "review-response.json").read_text()),
         release=asyncio.Event(),
     )
     provider = FakeModelProvider([reply])
@@ -161,5 +162,41 @@ async def test_cancel_during_model_call_wins_over_late_result(
             terminal = await wait_for_run_terminal_async(client, workspace_id, run_id)
             assert terminal["state"] == "cancelled"
             assert (await client.get(f"{url}/{run_id}/report")).status_code == 409
+            assert provider.call_count == 1
+        finally:
+            await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_recovery_uses_original_deadline_and_does_not_publish_late_output(
+    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    monkeypatch.setenv("REVIEW_REVIEW_DEADLINE_SECONDS", "1")
+    held_reply = ScriptedReply(
+        chat_completion((FIXTURES / "review-response.json").read_text()),
+        release=asyncio.Event(),
+    )
+    provider = FakeModelProvider([ScriptedReply(chat_completion("not-json")), held_reply])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference, state="available", reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    async with app.router.lifespan_context(app):
+        client, workspace_id, document_id, profile = await _prepared_client(app)
+        try:
+            url = f"/v1/workspaces/{workspace_id}/review-runs"
+            response = await asyncio.wait_for(client.post(
+                url, headers={"Idempotency-Key": f"recovery-deadline-{uuid4().hex}"},
+                json=_body(document_id, profile, reference),
+            ), timeout=5)
+            assert response.status_code == 202
+            run = await wait_for_run_terminal_async(client, workspace_id, response.json()["id"])
+            assert held_reply.entered.is_set()
+            assert provider.call_count == 2
+            assert run["state"] == "failed"
+            assert run["error"]["code"] == "model_unavailable"
+            assert (await client.get(f"{url}/{run['id']}/report")).status_code == 409
         finally:
             await client.aclose()

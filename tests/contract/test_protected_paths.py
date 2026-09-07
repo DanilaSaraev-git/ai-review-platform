@@ -6,6 +6,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
+# User-requested unlinked findings remain visible without a warning.
+APPROVED_UNLINKED_FINDING_WEB_PATHS = (
+    "apps/web/src/features/review-report/components/FindingList.test.tsx",
+)
 APPROVED_FEATURE_009_WEB_PATHS = (
     "apps/web/README.md",
     "apps/web/e2e/document-cycle.spec.ts",
@@ -58,7 +62,9 @@ APPROVED_FEATURE_009_WEB_PATHS = (
 
 def test_protected_paths_unchanged_from_approved_web_baseline() -> None:
     approved_args = [
-        argument for path in APPROVED_FEATURE_009_WEB_PATHS for argument in ("--allow-path", path)
+        argument
+        for path in (*APPROVED_FEATURE_009_WEB_PATHS, *APPROVED_UNLINKED_FINDING_WEB_PATHS)
+        for argument in ("--allow-path", path)
     ]
     result = subprocess.run(
         [

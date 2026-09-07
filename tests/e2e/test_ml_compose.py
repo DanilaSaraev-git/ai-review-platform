@@ -6,6 +6,8 @@ from pathlib import Path
 
 import httpx
 
+from tests.integration.run_helpers import wait_for_run_terminal
+
 ROOT = Path(__file__).parents[2]
 COMPOSE = [
     "-f",
@@ -88,6 +90,7 @@ def test_opt_in_compose_reaches_only_synthetic_provider_and_publishes_report() -
                     "locale": "en-US",
                 },
             ).raise_for_status().json()
+            run = wait_for_run_terminal(client, workspace, run["id"], timeout=30)
             assert run["state"] == "completed"
             report = client.get(
                 f"/v1/workspaces/{workspace}/review-runs/{run['id']}/report"

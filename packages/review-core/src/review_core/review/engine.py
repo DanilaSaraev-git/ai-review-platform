@@ -10,7 +10,7 @@ from review_core.ports.models import GenerationRequest, JsonValue, ModelProfileS
 from review_core.review.prompt import build_review_generation_request
 from review_core.review.validation import (
     ReviewSemanticValidationError,
-    resolve_unique_quote_offset,
+    resolve_unique_quote_span,
     validate_report,
 )
 
@@ -53,6 +53,39 @@ class MappingContext:
             raise ValueError("mapping context target fragments must be unique")
         if any(key != fragment.id for key, fragment in self.fragments.items()):
             raise ValueError("mapping context fragment key does not match its identity")
+
+
+def _recover_coverage(coverage: dict[str, Any], context: MappingContext, locale: str) -> dict[str, Any]:
+    """Reconcile model bookkeeping against server-owned source IDs conservatively."""
+    targets = set(context.target_fragment_ids)
+    reason = ("Модель не указала результат проверки фрагмента."
+              if locale == "ru-RU" else "The model did not specify whether this fragment was reviewed.")
+    unreviewed = {item["fragment_id"]: item["reason"] for item in coverage["unreviewed"]
+                  if item["fragment_id"] in targets}
+    gaps = []
+    source_ids = {f.source_id for f in context.fragments.values()}
+    source_ids.update(source["source_id"] for source in context.provenance.get("sources", []))
+    for original in coverage["source_gaps"]:
+        gap = deepcopy(original)
+        fragment = context.fragments.get(gap["fragment_id"])
+        if fragment is not None:
+            gap["source_id"] = fragment.source_id
+            if fragment.id in targets:
+                unreviewed[fragment.id] = gap["reason"]
+                continue
+        elif gap["source_id"] in source_ids:
+            gap["fragment_id"] = None
+        else:
+            continue
+        if gap not in gaps:
+            gaps.append(gap)
+    reviewed = (set(coverage["reviewed_fragment_ids"]) & targets) - set(unreviewed)
+    return {
+        "reviewed_fragment_ids": [f for f in context.target_fragment_ids if f in reviewed],
+        "unreviewed": [{"fragment_id": f, "reason": unreviewed.get(f, reason)}
+                       for f in context.target_fragment_ids if f not in reviewed],
+        "source_gaps": gaps,
+    }
 
 
 def _require_exact_fields(value: Mapping[str, Any], fields: set[str]) -> None:
@@ -180,12 +213,16 @@ class ReviewEngine:
         *,
         context: MappingContext,
         new_finding_id: Callable[[], str] | None = None,
+        recover_invalid_evidence: bool = False,
+        locale: str = "ru-RU",
     ) -> dict[str, Any]:
         """Map one schema-validated compact model result to a canonical immutable report."""
 
         _validate_compact_shape(model_output)
         id_factory = new_finding_id or (lambda: str(uuid4()))
         compact_coverage = model_output["coverage"]
+        if recover_invalid_evidence:
+            compact_coverage = _recover_coverage(compact_coverage, context, locale)
         gaps = [
             {
                 "source_id": context.primary_source_id,
@@ -199,31 +236,45 @@ class ReviewEngine:
         findings: list[dict[str, Any]] = []
         for ordinal, compact_finding in enumerate(model_output["findings"], start=1):
             anchors: list[dict[str, Any]] = []
+            invalid_evidence = False
             for compact_anchor in compact_finding["anchors"]:
-                fragment_id = compact_anchor["fragment_id"]
-                fragment = context.fragments.get(fragment_id)
-                if fragment is None:
-                    raise ReviewSemanticValidationError("anchor_fragment_unknown")
-                quote = compact_anchor["quote"]
-                if not isinstance(quote, str) or not quote:
-                    raise ReviewSemanticValidationError("anchor_quote_invalid")
-                start = resolve_unique_quote_offset(fragment.text, quote)
+                try:
+                    fragment_id = compact_anchor["fragment_id"]
+                    fragment = context.fragments.get(fragment_id)
+                    if fragment is None:
+                        raise ReviewSemanticValidationError("anchor_fragment_unknown")
+                    if (recover_invalid_evidence and fragment.source_id == context.primary_source_id
+                            and fragment_id not in compact_coverage["reviewed_fragment_ids"]):
+                        raise ReviewSemanticValidationError("anchor_primary_unreviewed")
+                    quote = compact_anchor["quote"]
+                    if not isinstance(quote, str) or not quote:
+                        raise ReviewSemanticValidationError("anchor_quote_invalid")
+                    start, end = resolve_unique_quote_span(fragment.text, quote)
+                except ReviewSemanticValidationError as error:
+                    if not recover_invalid_evidence:
+                        raise ReviewSemanticValidationError(error.code, finding_index=ordinal - 1) from error
+                    invalid_evidence = True
+                    continue
                 anchors.append(
                     {
                         "source_id": fragment.source_id,
                         "document_id": fragment.document_id,
                         "source_name": fragment.source_name,
                         "fragment_id": fragment.id,
-                        "quote": quote,
+                        "quote": fragment.text[start:end],
                         "quote_start": start,
-                        "quote_end": start + len(quote),
+                        "quote_end": end,
                         "location": deepcopy(dict(fragment.location)),
                     }
                 )
+            if (invalid_evidence or recover_invalid_evidence) and not any(
+                anchor["source_id"] == context.primary_source_id for anchor in anchors
+            ):
+                anchors = []
             findings.append(
                 {
                     "id": id_factory(),
-                    "ordinal": ordinal,
+                    "ordinal": len(findings) + 1,
                     "kind": compact_finding["kind"],
                     "title": compact_finding["title"],
                     "problem": compact_finding["problem"],
@@ -231,9 +282,18 @@ class ReviewEngine:
                     "question": compact_finding["question"],
                     "priority": deepcopy(compact_finding["priority"]),
                     "anchors": anchors,
-                    "scope": deepcopy(compact_finding["scope"]),
+                    "scope": [
+                        fragment_id for fragment_id in compact_finding["scope"]
+                        if not recover_invalid_evidence or (
+                            fragment_id in context.fragments
+                            and context.fragments[fragment_id].source_id == context.primary_source_id
+                            and fragment_id in compact_coverage["reviewed_fragment_ids"]
+                        )
+                    ],
                 }
             )
+        summary = model_output["summary"]
+        limitations = deepcopy(model_output["limitations"])
         coverage = {
             "status": "complete" if not gaps else "partial",
             "target_fragment_ids": list(context.target_fragment_ids),
@@ -244,10 +304,10 @@ class ReviewEngine:
             "id": context.report_id,
             "run_id": context.run_id,
             "created_at": context.created_at,
-            "summary": model_output["summary"],
+            "summary": summary,
             "coverage": coverage,
             "findings": findings,
-            "limitations": deepcopy(model_output["limitations"]),
+            "limitations": limitations,
             "provenance": deepcopy(dict(context.provenance)),
         }
         validate_report(

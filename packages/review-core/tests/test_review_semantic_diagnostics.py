@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -89,7 +90,6 @@ def anchor(value: dict[str, Any]) -> dict[str, Any]:
             "coverage_gap_source_mismatch",
         ),
         (lambda value: value["findings"][0].update(kind="missing"), "missing_finding_scope_invalid"),
-        (lambda value: value["findings"][0].update(anchors=[]), "finding_anchor_required"),
         (lambda value: value["findings"][0].update(scope=["c1"]), "finding_scope_invalid"),
         (
             lambda value: anchor(value).update(source_id="source-context", fragment_id="c1", quote="UTC"),
@@ -125,6 +125,63 @@ def test_mapper_derives_anchor_source_from_the_known_fragment() -> None:
     report = ReviewEngine().map_model_output(output, context=context())
 
     assert report["findings"][0]["anchors"][0]["source_id"] == "source-main"
+
+
+@pytest.mark.parametrize("keep_valid", [True, False])
+def test_invalid_quote_keeps_finding_without_link_or_warning(keep_valid: bool) -> None:
+    output = compact()
+    valid = deepcopy(output["findings"][0])
+    anchor(output)["quote"] = "invented quote ..."
+    if keep_valid:
+        output["findings"].append(valid)
+    report = ReviewEngine().map_model_output(output, context=context(), recover_invalid_evidence=True)
+    assert report["coverage"]["status"] == "complete"
+    assert len(report["findings"]) == 1 + int(keep_valid)
+    detached = report["findings"][0]
+    assert detached["anchors"] == []
+    for key in ("title", "kind", "problem", "reason", "question", "priority", "scope"):
+        assert detached[key] == output["findings"][0][key]
+    assert report["summary"] == output["summary"]
+    assert report["limitations"] == output["limitations"]
+    assert "invented quote" not in str(report)
+    if keep_valid:
+        assert report["findings"][1]["anchors"][0]["quote"] == "regularly"
+
+
+def test_mapper_restores_pdf_whitespace_without_changing_evidence() -> None:
+    source = "Prefix. Retry\n  regularly\u00a0please. End."
+    mapping = context()
+    mapping = replace(mapping, fragments={
+        **mapping.fragments,
+        "f1": replace(mapping.fragments["f1"], text=source),
+    })
+    output = compact()
+    anchor(output)["quote"] = "Retry regularly please."
+
+    report = ReviewEngine().map_model_output(output, context=mapping)
+
+    evidence = anchor(report)
+    assert evidence["quote"] == "Retry\n  regularly\u00a0please."
+    assert source[evidence["quote_start"]:evidence["quote_end"]] == evidence["quote"]
+    assert anchor(output)["quote"] == "Retry regularly please."
+
+
+@pytest.mark.parametrize(("source", "quote", "code"), [
+    ("Retry\nnow. Retry\t now.", "Retry now.", "anchor_quote_ambiguous"),
+    ("Limit 100 requests.", "Limit 1000 requests.", "anchor_quote_not_found"),
+    ("Retry now.", "retry now.", "anchor_quote_not_found"),
+    ("Retry now.", "   ", "anchor_quote_invalid"),
+])
+def test_quote_recovery_rejects_ambiguous_or_changed_evidence(source: str, quote: str, code: str) -> None:
+    mapping = context()
+    mapping = replace(mapping, fragments={
+        **mapping.fragments, "f1": replace(mapping.fragments["f1"], text=source),
+    })
+    output = compact()
+    anchor(output)["quote"] = quote
+    with pytest.raises(validation.ReviewSemanticValidationError) as caught:
+        ReviewEngine().map_model_output(output, context=mapping)
+    assert caught.value.code == code
 
 
 @pytest.mark.parametrize(
@@ -204,3 +261,19 @@ def test_semantic_diagnostic_cannot_contain_an_unregistered_reason_or_message() 
     assert "CANARY_PRIVATE_TEXT" not in str(caught.value)
     with pytest.raises(TypeError):
         validation.ReviewSemanticValidationError("anchor_quote_not_found", "CANARY_PRIVATE_TEXT")
+
+
+@pytest.mark.parametrize("kind", ["ambiguity", "missing"])
+@pytest.mark.parametrize("keep_valid", [True, False])
+def test_invalid_scope_keeps_finding_without_warning(kind: str, keep_valid: bool) -> None:
+    output = compact()
+    finding = output["findings"][0]
+    finding.update(kind=kind, anchors=[], scope=["unknown", "c1"] + (["f2"] if keep_valid else []))
+    report = ReviewEngine().map_model_output(output, context=context(), recover_invalid_evidence=True)
+    assert len(report["findings"]) == 1
+    retained = report["findings"][0]
+    assert retained["scope"] == (["f2"] if keep_valid else [])
+    for key in ("title", "kind", "problem", "reason", "question", "priority"):
+        assert retained[key] == finding[key]
+    assert report["summary"] == output["summary"]
+    assert report["limitations"] == output["limitations"]

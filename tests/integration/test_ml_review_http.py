@@ -122,6 +122,55 @@ def test_ml_review_calls_fake_provider_once_and_publishes_immutable_report(
     assert attempt == ("succeeded", "synthetic-provider", "unknown")
 
 
+@pytest.mark.parametrize("violation", ["json", "length"])
+@pytest.mark.parametrize("invalid_attempts", [1, 2])
+def test_review_recovers_invalid_response_before_publishing(
+    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path,
+    violation: str, invalid_attempts: int,
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    valid = (FIXTURES / "review-response.json").read_text()
+    invalid = json.loads(valid)
+    if violation == "quote":
+        invalid["findings"][0]["anchors"][0]["quote"] = "PRIVATE_MODEL_INSTRUCTION"
+    elif violation == "fragment":
+        invalid["findings"][0]["anchors"][0]["fragment_id"] = "wrong-fragment"
+    elif violation == "coverage":
+        invalid["coverage"]["reviewed_fragment_ids"] = []
+    provider = FakeModelProvider([
+        *[ScriptedReply(chat_completion(
+            "not-json" if violation == "json" else json.dumps(invalid),
+            finish_reason="length" if violation == "length" else "stop",
+        )) for _ in range(invalid_attempts)],
+        ScriptedReply(chat_completion(valid)),
+    ])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference, state="available", reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with TestClient(app) as client:
+        workspace_id = app.state.platform.workspace_id
+        response = _request_review(client, workspace_id, reference, locale="ru-RU")
+        assert response.status_code == 202, response.text
+        run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
+        assert run["state"] == "completed", run
+        report = client.get(
+            f"/v1/workspaces/{workspace_id}/review-runs/{response.json()['id']}/report"
+        )
+        assert report.status_code == 200
+        assert report.json()["findings"][0]["anchors"][0]["quote"] == "Refresh runs regularly."
+    assert provider.call_count == invalid_attempts + 1
+    retry_body = json.loads(provider.requests[1].content)
+    assert "PRIVATE_MODEL_INSTRUCTION" not in retry_body["messages"][0]["content"]
+    assert "previous_response" in retry_body["messages"][1]["content"]
+    if violation == "quote":
+        assert "findings[0].anchors" in retry_body["messages"][0]["content"]
+        assert "PRIVATE_MODEL_INSTRUCTION" in retry_body["messages"][1]["content"]
+    assert "ru-RU" in json.dumps(retry_body)
+    assert "Previous response rejected" in json.dumps(retry_body)
+
+
 @pytest.mark.parametrize("outcome", ["oversize", "invalid"])
 def test_ml_review_failure_never_publishes_report(
     monkeypatch: pytest.MonkeyPatch,
@@ -135,7 +184,7 @@ def test_ml_review_failure_never_publishes_report(
         tmp_path,
         max_input_bytes=64 if outcome == "oversize" else 524_288,
     )
-    provider = FakeModelProvider([ScriptedReply(chat_completion("not-json"))])
+    provider = FakeModelProvider([ScriptedReply(chat_completion("not-json")) for _ in range(3)])
     app = create_app(composition="ml", model_transport=provider.transport)
     app.state.platform.observe_model_profile(
         reference,
@@ -155,60 +204,110 @@ def test_ml_review_failure_never_publishes_report(
             f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         )
         assert report.status_code == 409
-    assert provider.call_count == (0 if outcome == "oversize" else 1)
+    assert provider.call_count == (0 if outcome == "oversize" else 3)
 
-@pytest.mark.parametrize(
-    ("violation", "diagnostic"),
-    [
-        ("quote", "anchor_quote_not_found"),
-        ("fragment", "anchor_fragment_unknown"),
-        ("coverage", "coverage_partition_inexact"),
-    ],
-)
-def test_semantic_failure_preserves_safe_reason_without_publishing_or_retrying(
-    monkeypatch: pytest.MonkeyPatch,
-    operator_settings,  # type: ignore[no-untyped-def]
-    tmp_path: Path,
-    violation: str,
-    diagnostic: str,
+@pytest.mark.parametrize("violation", [
+    "coverage_missing", "coverage_duplicate", "coverage_unknown", "coverage_overlap",
+    "missing_with_anchor", "missing_without_scope", "null_links", "unknown_scope",
+    "extra_fields", "fenced_json", "malformed_coverage", "combined",
+])
+def test_review_metadata_errors_preserve_all_findings_without_retry(
+    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path, violation: str,
 ) -> None:
     reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
-    response = json.loads((FIXTURES / "review-response.json").read_text())
-    private_marker = "synthetic-private-content-not-for-diagnostics"
-    if violation == "quote":
-        response["findings"][0]["anchors"][0]["quote"] = private_marker
-    elif violation == "fragment":
-        response["findings"][0]["anchors"][0]["fragment_id"] = private_marker
-    else:
-        response["coverage"]["reviewed_fragment_ids"] = []
-    provider = FakeModelProvider([ScriptedReply(chat_completion(json.dumps(response)))])
+    output = json.loads((FIXTURES / "review-response.json").read_text())
+    finding = output["findings"][0]
+    fragment_id = output["coverage"]["reviewed_fragment_ids"][0]
+    if violation == "combined":
+        finding["kind"] = "missing"
+        output["coverage"] = {"reviewed_fragment_ids": ["unknown", "unknown"],
+                              "unreviewed": [None], "source_gaps": []}
+    elif violation == "coverage_missing":
+        del output["coverage"]
+    elif violation == "malformed_coverage":
+        output["coverage"] = {"reviewed_fragment_ids": [None, 123, {}],
+                              "unreviewed": [None, {}], "source_gaps": [{"reason": "Skipped"}]}
+    elif violation == "coverage_duplicate":
+        output["coverage"]["reviewed_fragment_ids"].append(fragment_id)
+    elif violation == "coverage_unknown":
+        output["coverage"]["reviewed_fragment_ids"] = ["unknown"]
+    elif violation == "coverage_overlap":
+        output["coverage"]["unreviewed"] = [{"fragment_id": fragment_id, "reason": "Skipped"}]
+    elif violation == "missing_with_anchor":
+        finding["kind"] = "missing"
+    elif violation == "missing_without_scope":
+        finding.update(kind="missing", anchors=[], scope=[])
+    elif violation == "null_links":
+        finding.update(anchors=None, scope=None)
+    elif violation == "unknown_scope":
+        finding.update(anchors=[], scope=["unknown"])
+    elif violation == "extra_fields":
+        finding["model_note"] = "synthetic extra field"
+    text = json.dumps(output)
+    if violation == "fenced_json":
+        text = "```json\n" + text + "\n```"
+    provider = FakeModelProvider([ScriptedReply(chat_completion(text))])
     app = create_app(composition="ml", model_transport=provider.transport)
     app.state.platform.observe_model_profile(
-        reference,
-        state="available",
-        reason_code=None,
+        reference, state="available", reason_code=None,
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
-    expected_error = {
-        "code": "validation_failed",
-        "message": f"The model response evidence failed validation ({diagnostic}).",
-        "retryable": False,
-    }
     with TestClient(app) as client:
         workspace_id = app.state.platform.workspace_id
-        accepted = _request_review(client, workspace_id, reference)
-        assert accepted.status_code == 202
+        accepted = _request_review(client, workspace_id, reference, locale="ru-RU")
         run = wait_for_run_terminal(client, workspace_id, accepted.json()["id"])
-        assert run["state"] == "failed"
-        assert run["error"] == expected_error
-        assert private_marker not in accepted.text
-        report = client.get(f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report")
-        assert report.status_code == 409
-    with psycopg.connect(app.state.platform.database_url) as connection:
-        saved = connection.execute(
-            "SELECT value->'error' FROM review_runs WHERE id=%s", (run["id"],)
-        ).fetchone()
-    assert saved == (expected_error,)
+        assert run["state"] == "completed", run
+        report = client.get(
+            f"/v1/workspaces/{workspace_id}/review-runs/{accepted.json()['id']}/report"
+        ).json()
+        assert len(report["findings"]) == len(output["findings"])
+        for key in ("title", "kind", "problem", "reason", "question", "priority"):
+            assert report["findings"][0][key] == finding[key]
+        assert report["summary"] == output["summary"]
+        assert report["limitations"] == output["limitations"]
+        if violation in {
+            "coverage_missing", "coverage_unknown", "coverage_overlap", "malformed_coverage", "combined",
+        }:
+            assert report["coverage"]["status"] == "partial"
+            assert report["coverage"]["reviewed_fragment_ids"] == []
+            assert report["coverage"]["gaps"][0]["fragment_id"] == fragment_id
+    assert provider.call_count == 1
+
+
+@pytest.mark.parametrize("quote", ["invented quote ...", "regularly regularly"])
+def test_bad_evidence_is_detached_without_losing_the_finding(
+    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path, quote: str
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    output = json.loads((FIXTURES / "review-response.json").read_text())
+    output["findings"][0]["anchors"][0]["quote"] = quote
+    provider = FakeModelProvider([ScriptedReply(chat_completion(json.dumps(output)))])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference, state="available", reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with TestClient(app) as client:
+        workspace_id = app.state.platform.workspace_id
+        response = _request_review(client, workspace_id, reference, locale="ru-RU")
+        run = wait_for_run_terminal(client, workspace_id, response.json()["id"])
+        assert run["state"] == "completed", run
+        report = client.get(
+            f"/v1/workspaces/{workspace_id}/review-runs/{response.json()['id']}/report"
+        )
+        assert report.status_code == 200
+        assert report.json()["coverage"]["status"] == "complete"
+        assert len(report.json()["findings"]) == 1
+        assert report.json()["findings"][0]["anchors"] == []
+        assert report.json()["findings"][0]["problem"] == output["findings"][0]["problem"]
+        assert report.json()["summary"] == output["summary"]
+        assert report.json()["limitations"] == output["limitations"]
+        assert quote not in report.text
+        finding_id = report.json()["findings"][0]["id"]
+        run_id = response.json()["id"]
+        assert client.get(
+            f"/v1/workspaces/{workspace_id}/review-runs/{run_id}/findings/{finding_id}/dialogue"
+        ).status_code == 200
     assert provider.call_count == 1
 
 @pytest.mark.parametrize("response_shape", ["valid_json", "truncated_json"])
@@ -227,7 +326,7 @@ def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_met
             response_text,
             finish_reason="length",
             usage={"prompt_tokens": 3126, "completion_tokens": 4096},
-        ))
+        )) for _ in range(3)
     ])
     app = create_app(composition="ml", model_transport=provider.transport)
     app.state.platform.observe_model_profile(
@@ -251,7 +350,7 @@ def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_met
         assert client.get(
             f"/v1/workspaces/{workspace_id}/review-runs/{run['id']}/report"
         ).status_code == 409
-    assert provider.call_count == 1
+    assert provider.call_count == 3
     with psycopg.connect(app.state.platform.database_url) as connection:
         attempt = connection.execute(
             "SELECT state,value FROM model_attempts WHERE value#>>'{profile,id}'=%s",

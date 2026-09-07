@@ -10,6 +10,14 @@ const states = new Map<string, FindingState>(
 );
 
 describe('FindingList (FR-019, FR-023)', () => {
+  it('сохраняет замечание без привязки и не добавляет предупреждение', () => {
+    const finding = { ...fixtures.report.findings[0]!, anchors: [] };
+    renderWithProviders(<FindingList findings={[finding]} states={states} runId={fixtures.runId} />);
+    expect(screen.getByText(finding.problem)).toBeInTheDocument();
+    expect(screen.getByText(finding.question)).toBeInTheDocument();
+    expect(screen.queryByText('Связь с документом не подтверждена')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: new RegExp(finding.title, 'u') })).toBeInTheDocument();
+  });
   it('показывает пустой отчёт как содержательный результат, а не ошибку', () => {
     renderWithProviders(<FindingList findings={[]} states={states} runId={fixtures.runId} />);
 

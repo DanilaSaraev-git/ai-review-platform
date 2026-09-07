@@ -115,7 +115,7 @@ for (const schemaName of [
   ajv.compile(schema);
 }
 
-if (openapi.info.version !== "1.1.0") throw new Error("OpenAPI version must be 1.1.0");
+if (openapi.info.version !== "1.2.0") throw new Error("OpenAPI version must be 1.2.0");
 if (openapi.security?.length !== 0 || openapi.components?.securitySchemes) {
   throw new Error("No-auth v1 must not publish security schemes");
 }

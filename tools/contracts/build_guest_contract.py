@@ -14,7 +14,7 @@ def guest_contract() -> dict:
     schema = yaml.safe_load((ROOT / "contracts/review-platform/v1/openapi.yaml").read_text())
     schema["info"].update(
         title="Review Platform Guest API",
-        version="1.1.0",
+        version="1.2.0",
         description=(
             "Guest deployment of the trusted-v1 payload contract. GET /v1/bootstrap creates or "
             "restores an isolated browser workspace using an opaque HttpOnly Secure SameSite=Lax "
