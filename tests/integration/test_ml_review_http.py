@@ -120,7 +120,7 @@ def test_ml_review_calls_fake_provider_once_and_publishes_immutable_report(
     assert attempt == ("succeeded", "synthetic-provider", "unknown")
 
 
-@pytest.mark.parametrize("violation", ["quote", "fragment", "coverage", "json", "length"])
+@pytest.mark.parametrize("violation", ["coverage", "json", "length"])
 @pytest.mark.parametrize("invalid_attempts", [1, 2])
 def test_review_recovers_invalid_response_before_publishing(
     monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path,
@@ -159,7 +159,11 @@ def test_review_recovers_invalid_response_before_publishing(
         assert report.json()["findings"][0]["anchors"][0]["quote"] == "Refresh runs regularly."
     assert provider.call_count == invalid_attempts + 1
     retry_body = json.loads(provider.requests[1].content)
-    assert "PRIVATE_MODEL_INSTRUCTION" not in json.dumps(retry_body)
+    assert "PRIVATE_MODEL_INSTRUCTION" not in retry_body["messages"][0]["content"]
+    assert "previous_response" in retry_body["messages"][1]["content"]
+    if violation == "quote":
+        assert "findings[0].anchors" in retry_body["messages"][0]["content"]
+        assert "PRIVATE_MODEL_INSTRUCTION" in retry_body["messages"][1]["content"]
     assert "ru-RU" in json.dumps(retry_body)
     assert "Previous response rejected" in json.dumps(retry_body)
 
@@ -201,8 +205,6 @@ def test_ml_review_failure_never_publishes_report(
 @pytest.mark.parametrize(
     ("violation", "diagnostic"),
     [
-        ("quote", "anchor_quote_not_found"),
-        ("fragment", "anchor_fragment_unknown"),
         ("coverage", "coverage_partition_inexact"),
     ],
 )
@@ -253,6 +255,42 @@ def test_semantic_failure_preserves_safe_reason_after_bounded_recovery_without_p
         ).fetchone()
     assert saved == (expected_error,)
     assert provider.call_count == 3
+
+
+@pytest.mark.parametrize("quote", ["invented quote ...", "regularly regularly"])
+def test_bad_evidence_is_detached_without_losing_the_finding(
+    monkeypatch: pytest.MonkeyPatch, operator_settings, tmp_path: Path, quote: str
+) -> None:
+    reference = _configure_ml(monkeypatch, operator_settings, tmp_path)
+    output = json.loads((FIXTURES / "review-response.json").read_text())
+    output["findings"][0]["anchors"][0]["quote"] = quote
+    provider = FakeModelProvider([ScriptedReply(chat_completion(json.dumps(output)))])
+    app = create_app(composition="ml", model_transport=provider.transport)
+    app.state.platform.observe_model_profile(
+        reference, state="available", reason_code=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with TestClient(app) as client:
+        workspace_id = app.state.platform.workspace_id
+        response = _request_review(client, workspace_id, reference, locale="ru-RU")
+        assert response.json()["state"] == "completed", response.text
+        report = client.get(
+            f"/v1/workspaces/{workspace_id}/review-runs/{response.json()['id']}/report"
+        )
+        assert report.status_code == 200
+        assert report.json()["coverage"]["status"] == "complete"
+        assert len(report.json()["findings"]) == 1
+        assert report.json()["findings"][0]["anchors"] == []
+        assert report.json()["findings"][0]["problem"] == output["findings"][0]["problem"]
+        assert report.json()["summary"] == output["summary"]
+        assert report.json()["limitations"] == output["limitations"]
+        assert quote not in report.text
+        finding_id = report.json()["findings"][0]["id"]
+        run_id = response.json()["id"]
+        assert client.get(
+            f"/v1/workspaces/{workspace_id}/review-runs/{run_id}/findings/{finding_id}/dialogue"
+        ).status_code == 200
+    assert provider.call_count == 1
 
 @pytest.mark.parametrize("response_shape", ["valid_json", "truncated_json"])
 def test_ml_review_rejects_output_limit_before_parsing_and_preserves_attempt_metadata(

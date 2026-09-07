@@ -15,6 +15,6 @@ async def test_served_openapi_is_canonical_and_no_auth() -> None:
     assert root_response.json() == schema
     assert docs_response.status_code == 200
     assert 'url: "../v1/openapi.json"' in docs_response.text
-    assert schema["info"]["version"] == "1.1.0"
+    assert schema["info"]["version"] == "1.2.0"
     assert schema["security"] == []
     assert "securitySchemes" not in schema.get("components", {})

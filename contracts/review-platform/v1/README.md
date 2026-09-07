@@ -1,6 +1,6 @@
 # Review Platform contracts v1
 
-Статус: проверяемый additive baseline `v1.1.0` для параллельной реализации web, backend и навыков. Контракты описывают выбранные интерфейсы, но не подтверждают продуктовую ценность.
+Статус: проверяемый additive baseline `v1.2.0` для параллельной реализации web, backend и навыков. Контракты описывают выбранные интерфейсы, но не подтверждают продуктовую ценность.
 
 ## Web ↔ Backend
 
@@ -85,3 +85,11 @@ System profile является deployment-scoped release data, а не workspac
 - Configured-workspace namespace mismatch, stale revision, duplicate idempotency и immutable-report cases являются обязательными негативными тестами.
 
 GitHub-порядок, владельцы каталогов и merge sequence описаны в [parallel-development.md](../../../docs/architecture/parallel-development.md).
+
+## Замечания без привязки
+
+В v1.2.0 `Finding.anchors` может быть пустым и для замечаний о присутствующем тексте.
+Неверная цитата удаляет привязку, но сохраняет замечание, его вопрос и приоритет.
+Интерфейс не показывает неподтверждённую цитату и не добавляет метку об отсутствии связи.
+Пример: [отчёт без привязки](examples/http/report.unlinked.json). У `missing` по-прежнему
+обязательна область проверки `scope`. Отсутствие привязки не является решением человека.

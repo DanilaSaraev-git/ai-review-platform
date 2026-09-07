@@ -46,7 +46,7 @@ def test_every_guest_workspace_operation_requires_cookie_and_documents_auth_erro
 
 def test_guest_contract_reuses_trusted_payloads_and_keeps_the_trusted_boundary_unchanged() -> None:
     guest, trusted = _load("guest-v1"), _load("v1")
-    assert trusted["info"]["version"] == "1.1.0"
+    assert trusted["info"]["version"] == "1.2.0"
     assert trusted["security"] == []
     assert "securitySchemes" not in trusted["components"]
     assert guest["components"]["schemas"] == trusted["components"]["schemas"]

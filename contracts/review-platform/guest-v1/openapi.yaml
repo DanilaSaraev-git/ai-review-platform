@@ -2,7 +2,7 @@
 openapi: 3.1.0
 info:
   title: Review Platform Guest API
-  version: 1.1.0
+  version: 1.2.0
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -2002,6 +2002,8 @@ components:
         priority:
           $ref: '#/components/schemas/Priority'
         anchors:
+          description: Verified document links; may be empty when a finding has no
+            resolvable quote.
           type: array
           items:
             $ref: '#/components/schemas/EvidenceAnchor'
@@ -2022,10 +2024,6 @@ components:
         then:
           properties:
             scope:
-              minItems: 1
-        else:
-          properties:
-            anchors:
               minItems: 1
     Priority:
       type: object

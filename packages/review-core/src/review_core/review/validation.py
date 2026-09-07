@@ -45,10 +45,11 @@ _SEMANTIC_ERROR_MESSAGES = MappingProxyType(
 class ReviewSemanticValidationError(ValueError):
     """A content-free reason for rejecting review evidence or coverage."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, *, finding_index: int | None = None) -> None:
         if code not in _SEMANTIC_ERROR_MESSAGES:
             raise ValueError("unknown review semantic validation code")
         self._code = code
+        self.finding_index = finding_index
         super().__init__(_SEMANTIC_ERROR_MESSAGES[code])
 
     @property
@@ -157,8 +158,6 @@ def validate_report(
         if finding["kind"] == "missing":
             if anchors or not scope:
                 raise ReviewSemanticValidationError("missing_finding_scope_invalid")
-        elif not anchors:
-            raise ReviewSemanticValidationError("finding_anchor_required")
         primary_basis = False
         for anchor in anchors:
             fragment = fragments.get(anchor["fragment_id"])
@@ -182,5 +181,5 @@ def validate_report(
             if fragment is None or fragment["source_id"] != primary_source_id or fragment_id not in reviewed:
                 raise ReviewSemanticValidationError("finding_scope_invalid")
             primary_basis = True
-        if not primary_basis:
+        if not primary_basis and (anchors or scope):
             raise ReviewSemanticValidationError("finding_primary_basis_missing")

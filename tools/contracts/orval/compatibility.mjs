@@ -31,7 +31,7 @@ const allowedResponses = new Map([
 ]);
 
 export function assertCompatible(baseline, candidate) {
-  if (candidate.info?.version !== "1.1.0") throw new Error("candidate info.version is not 1.1.0");
+  if (candidate.info?.version !== "1.2.0") throw new Error("candidate info.version is not 1.2.0");
   for (const [route, baselinePath] of Object.entries(baseline.paths)) {
     const candidatePath = candidate.paths[route];
     if (!candidatePath) throw new Error(`${route}: original path removed`);
@@ -61,6 +61,15 @@ export function assertCompatible(baseline, candidate) {
     for (const [name, original] of Object.entries(baseline.components?.[section] ?? {})) {
       const current = structuredClone(candidate.components?.[section]?.[name]);
       if (!current) throw new Error(`components.${section}.${name} removed`);
+      // v1.2 explicitly permits findings without a verified document link.
+      // Permit only removal of the non-missing anchor minimum; preserve every
+      // field and the mandatory scope for missing-information findings.
+      if (section === "schemas" && name === "Finding") {
+        const expected = structuredClone(original);
+        delete expected.allOf[0].else;
+        if (!equal(expected, current)) throw new Error("Finding has an unapproved breaking shape change");
+        current.allOf = original.allOf;
+      }
       // Explicitly allow only the approved optional DTO additions.
       // In particular, document IDs, report bytes, required fields and existing
       // status enums must keep their original meaning and shape.
@@ -94,5 +103,5 @@ if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
     : execFileSync("git", ["show", "review-platform-contract-v1.0.1:contracts/review-platform/v1/openapi.yaml"], { cwd: root, encoding: "utf8" });
   const candidatePath = process.argv[3] ?? path.join(root, "contracts/review-platform/v1/openapi.yaml");
   assertCompatible(parseUnique(baselineSource, "baseline"), parseUnique(fs.readFileSync(candidatePath, "utf8"), "candidate"));
-  console.log("v1.1.0 preserves the original HTTP contract and adds the document cycle: ok");
+  console.log("v1.2.0 matches the approved HTTP changes, including optional finding links: ok");
 }

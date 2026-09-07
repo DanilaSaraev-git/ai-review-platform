@@ -180,6 +180,8 @@ class ReviewEngine:
         *,
         context: MappingContext,
         new_finding_id: Callable[[], str] | None = None,
+        recover_invalid_evidence: bool = False,
+        locale: str = "ru-RU",
     ) -> dict[str, Any]:
         """Map one schema-validated compact model result to a canonical immutable report."""
 
@@ -199,15 +201,22 @@ class ReviewEngine:
         findings: list[dict[str, Any]] = []
         for ordinal, compact_finding in enumerate(model_output["findings"], start=1):
             anchors: list[dict[str, Any]] = []
+            invalid_evidence = False
             for compact_anchor in compact_finding["anchors"]:
-                fragment_id = compact_anchor["fragment_id"]
-                fragment = context.fragments.get(fragment_id)
-                if fragment is None:
-                    raise ReviewSemanticValidationError("anchor_fragment_unknown")
-                quote = compact_anchor["quote"]
-                if not isinstance(quote, str) or not quote:
-                    raise ReviewSemanticValidationError("anchor_quote_invalid")
-                start, end = resolve_unique_quote_span(fragment.text, quote)
+                try:
+                    fragment_id = compact_anchor["fragment_id"]
+                    fragment = context.fragments.get(fragment_id)
+                    if fragment is None:
+                        raise ReviewSemanticValidationError("anchor_fragment_unknown")
+                    quote = compact_anchor["quote"]
+                    if not isinstance(quote, str) or not quote:
+                        raise ReviewSemanticValidationError("anchor_quote_invalid")
+                    start, end = resolve_unique_quote_span(fragment.text, quote)
+                except ReviewSemanticValidationError as error:
+                    if not recover_invalid_evidence:
+                        raise ReviewSemanticValidationError(error.code, finding_index=ordinal - 1) from error
+                    invalid_evidence = True
+                    continue
                 anchors.append(
                     {
                         "source_id": fragment.source_id,
@@ -220,10 +229,14 @@ class ReviewEngine:
                         "location": deepcopy(dict(fragment.location)),
                     }
                 )
+            if invalid_evidence and not any(
+                anchor["source_id"] == context.primary_source_id for anchor in anchors
+            ):
+                anchors = []
             findings.append(
                 {
                     "id": id_factory(),
-                    "ordinal": ordinal,
+                    "ordinal": len(findings) + 1,
                     "kind": compact_finding["kind"],
                     "title": compact_finding["title"],
                     "problem": compact_finding["problem"],
@@ -234,6 +247,8 @@ class ReviewEngine:
                     "scope": deepcopy(compact_finding["scope"]),
                 }
             )
+        summary = model_output["summary"]
+        limitations = deepcopy(model_output["limitations"])
         coverage = {
             "status": "complete" if not gaps else "partial",
             "target_fragment_ids": list(context.target_fragment_ids),
@@ -244,10 +259,10 @@ class ReviewEngine:
             "id": context.report_id,
             "run_id": context.run_id,
             "created_at": context.created_at,
-            "summary": model_output["summary"],
+            "summary": summary,
             "coverage": coverage,
             "findings": findings,
-            "limitations": deepcopy(model_output["limitations"]),
+            "limitations": limitations,
             "provenance": deepcopy(dict(context.provenance)),
         }
         validate_report(

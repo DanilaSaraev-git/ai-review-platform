@@ -17,7 +17,7 @@ def _operation_block(text: str, operation_id: str) -> str:
 
 def test_v1_1_preserves_additive_http_v1_0_2_delta() -> None:
     text = OPENAPI.read_text()
-    assert re.search(r"^\s*version: 1\.1\.0$", text, re.MULTILINE)
+    assert re.search(r"^\s*version: 1\.2\.0$", text, re.MULTILINE)
     for operation, status in (
         ("listDocuments", '"400"'),
         ("listReviewRuns", '"400"'),

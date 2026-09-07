@@ -90,7 +90,6 @@ def anchor(value: dict[str, Any]) -> dict[str, Any]:
             "coverage_gap_source_mismatch",
         ),
         (lambda value: value["findings"][0].update(kind="missing"), "missing_finding_scope_invalid"),
-        (lambda value: value["findings"][0].update(anchors=[]), "finding_anchor_required"),
         (lambda value: value["findings"][0].update(scope=["c1"]), "finding_scope_invalid"),
         (
             lambda value: anchor(value).update(source_id="source-context", fragment_id="c1", quote="UTC"),
@@ -126,6 +125,27 @@ def test_mapper_derives_anchor_source_from_the_known_fragment() -> None:
     report = ReviewEngine().map_model_output(output, context=context())
 
     assert report["findings"][0]["anchors"][0]["source_id"] == "source-main"
+
+
+@pytest.mark.parametrize("keep_valid", [True, False])
+def test_invalid_quote_keeps_finding_without_link_or_warning(keep_valid: bool) -> None:
+    output = compact()
+    valid = deepcopy(output["findings"][0])
+    anchor(output)["quote"] = "invented quote ..."
+    if keep_valid:
+        output["findings"].append(valid)
+    report = ReviewEngine().map_model_output(output, context=context(), recover_invalid_evidence=True)
+    assert report["coverage"]["status"] == "complete"
+    assert len(report["findings"]) == 1 + int(keep_valid)
+    detached = report["findings"][0]
+    assert detached["anchors"] == []
+    for key in ("title", "kind", "problem", "reason", "question", "priority", "scope"):
+        assert detached[key] == output["findings"][0][key]
+    assert report["summary"] == output["summary"]
+    assert report["limitations"] == output["limitations"]
+    assert "invented quote" not in str(report)
+    if keep_valid:
+        assert report["findings"][1]["anchors"][0]["quote"] == "regularly"
 
 
 def test_mapper_restores_pdf_whitespace_without_changing_evidence() -> None:
